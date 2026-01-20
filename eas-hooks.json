@@ -1,0 +1,5 @@
+{
+  "hooks": {
+    "prebuild": "bash ./scripts/patch-android-manifests.sh && bash ./scripts/patch-appcomponentfactory.sh"
+  }
+}

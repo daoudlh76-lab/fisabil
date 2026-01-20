@@ -1,0 +1,13 @@
+# Supabase
+.env.local
+.env.*.local
+*.local
+
+# Supabase Docker
+supabase/.env
+supabase/.env.local
+supabase/docker.env
+
+# Local DB
+supabase/.postgresql
+supabase/.tmp

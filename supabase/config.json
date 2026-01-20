@@ -1,0 +1,16 @@
+{
+  "functions": [
+    {
+      "name": "extract-vocab",
+      "verify_jwt": false
+    },
+    {
+      "name": "add-diacritics",
+      "verify_jwt": false
+    },
+    {
+      "name": "tutor-chat",
+      "verify_jwt": false
+    }
+  ]
+}
