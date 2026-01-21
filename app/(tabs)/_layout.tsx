@@ -1,41 +1,38 @@
 import { useLanguage } from "@/hooks/use-language";
 import { useAuth } from "@/hooks/use-auth";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Tabs, Redirect } from "expo-router";
-import React from "react";
+import { Tabs, useRouter, useSegments } from "expo-router";
+import React, { useEffect } from "react";
+import { ActivityIndicator, View } from "react-native";
 
 export default function TabsLayout() {
-  const { t, language, setLanguage } = useLanguage();
+  const { t } = useLanguage();
   const { session, loading } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
 
-  // Si pas de session, afficher seulement la page login
-  if (!loading && !session) {
+  // Redirection basée sur l'état d'authentification
+  useEffect(() => {
+    if (loading) return;
+
+    const currentRoute = segments[1]; // Le segment après "(tabs)"
+    const isOnLoginPage = currentRoute === 'login';
+
+    if (!session && !isOnLoginPage) {
+      // Pas connecté et pas sur login -> rediriger vers login
+      router.replace('/(tabs)/login');
+    } else if (session && isOnLoginPage) {
+      // Connecté mais sur login -> rediriger vers index
+      router.replace('/(tabs)');
+    }
+  }, [session, loading, segments]);
+
+  // Afficher un loader pendant la vérification de session
+  if (loading) {
     return (
-      <Tabs
-        screenOptions={{
-          headerShown: true,
-          tabBarStyle: { display: 'none' },
-        }}
-      >
-        <Tabs.Screen
-          name="login"
-          options={{
-            title: t("nav.login"),
-            headerShown: true,
-          }}
-        />
-        {/* Cacher tous les autres onglets */}
-        <Tabs.Screen name="index" options={{ href: null }} />
-        <Tabs.Screen name="tutor/index" options={{ href: null }} />
-        <Tabs.Screen name="library/index" options={{ href: null }} />
-        <Tabs.Screen name="library/[id]" options={{ href: null }} />
-        <Tabs.Screen name="revision/index" options={{ href: null }} />
-        <Tabs.Screen name="revision/dictation" options={{ href: null }} />
-        <Tabs.Screen name="revision/vocab" options={{ href: null }} />
-        <Tabs.Screen name="playlist" options={{ href: null }} />
-        <Tabs.Screen name="settings" options={{ href: null }} />
-        <Tabs.Screen name="explore" options={{ href: null }} />
-      </Tabs>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F8FA' }}>
+        <ActivityIndicator size="large" color="#2E7D32" />
+      </View>
     );
   }
 
@@ -44,7 +41,8 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: true,
         tabBarActiveTintColor: "#2E7D32",
-        // headerRight supprimé (bouton globe)
+        // Cacher la barre d'onglets si pas connecté
+        tabBarStyle: session ? undefined : { display: 'none' },
       }}
     >
       {/* Scanner = index.tsx */}
@@ -55,6 +53,8 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => (
             <Ionicons name="camera" size={24} color={color} />
           ),
+          // Cacher cet onglet si pas connecté
+          href: session ? '/(tabs)' : null,
         }}
       />
 
@@ -66,6 +66,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => (
             <Ionicons name="library" size={24} color={color} />
           ),
+          href: session ? '/(tabs)/library' : null,
         }}
       />
 
@@ -85,10 +86,11 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => (
             <Ionicons name="book" size={24} color={color} />
           ),
+          href: session ? '/(tabs)/revision' : null,
         }}
       />
 
-      {/* Cacher les anciennes pages dictation et vocab (maintenant dans revision/index) */}
+      {/* Cacher les anciennes pages dictation et vocab */}
       <Tabs.Screen
         name="revision/dictation"
         options={{
@@ -110,10 +112,11 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons name="playlist-music" size={24} color={color} />
           ),
+          href: session ? '/(tabs)/playlist' : null,
         }}
       />
 
-      {/* Tuteur = tutor/index.tsx (avant-dernière position) */}
+      {/* Tuteur = tutor/index.tsx */}
       <Tabs.Screen
         name="tutor/index"
         options={{
@@ -121,6 +124,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => (
             <Ionicons name="chatbubbles" size={24} color={color} />
           ),
+          href: session ? '/(tabs)/tutor' : null,
         }}
       />
 
@@ -132,14 +136,17 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons name="cog" size={24} color={color} />
           ),
+          href: session ? '/(tabs)/settings' : null,
         }}
       />
 
-      {/* Cacher login quand connecté */}
+      {/* Page login - visible uniquement si pas connecté */}
       <Tabs.Screen
         name="login"
         options={{
-          href: null,
+          title: t("nav.login") || "Connexion",
+          headerShown: false,
+          href: session ? null : '/(tabs)/login',
         }}
       />
 

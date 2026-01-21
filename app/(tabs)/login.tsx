@@ -123,7 +123,6 @@ export default function LoginScreen() {
               onPress={() => setSelectedGender('male')}
               disabled={loading}
             >
-              <Text style={styles.genderIcon}>{"👨"}</Text>
               <Text style={[
                 styles.genderText,
                 selectedGender === 'male' && styles.genderTextActive,
@@ -139,7 +138,6 @@ export default function LoginScreen() {
               onPress={() => setSelectedGender('female')}
               disabled={loading}
             >
-              <Text style={styles.genderIcon}>{"👩"}</Text>
               <Text style={[
                 styles.genderText,
                 selectedGender === 'female' && styles.genderTextActive,
@@ -199,8 +197,7 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   genderButtonActive: { borderColor: "#2F6B3D", backgroundColor: "#E8F5E9" },
-  genderIcon: { fontSize: 32, marginBottom: 8 },
-  genderText: { fontSize: 14, fontWeight: "600", color: "#666" },
+  genderText: { fontSize: 16, fontWeight: "600", color: "#666" },
   genderTextActive: { color: "#2F6B3D" },
   genderHint: { fontSize: 12, color: "#999", textAlign: "center", marginTop: 8, fontStyle: "italic" },
 });
