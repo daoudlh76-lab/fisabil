@@ -1,33 +1,16 @@
 import { useLanguage } from "@/hooks/use-language";
 import { useAuth } from "@/hooks/use-auth";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Tabs, useRouter, useSegments } from "expo-router";
-import React, { useEffect } from "react";
+import { Tabs } from "expo-router";
+import React from "react";
 import { ActivityIndicator, View } from "react-native";
 
 export default function TabsLayout() {
   const { t } = useLanguage();
   const { session, loading } = useAuth();
-  const router = useRouter();
-  const segments = useSegments();
-
-  // Redirection basée sur l'état d'authentification
-  useEffect(() => {
-    if (loading) return;
-
-    const currentRoute = segments[1]; // Le segment après "(tabs)"
-    const isOnLoginPage = currentRoute === 'login';
-
-    if (!session && !isOnLoginPage) {
-      // Pas connecté et pas sur login -> rediriger vers login
-      router.replace('/(tabs)/login');
-    } else if (session && isOnLoginPage) {
-      // Connecté mais sur login -> rediriger vers index
-      router.replace('/(tabs)');
-    }
-  }, [session, loading, segments]);
 
   // Afficher un loader pendant la vérification de session
+  // La redirection est gérée par useAuth
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F8FA' }}>

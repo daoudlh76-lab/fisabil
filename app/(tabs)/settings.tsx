@@ -1,5 +1,6 @@
 import { useSubscription } from '@/hooks/use-subscription';
 import { useLanguage } from '@/hooks/use-language';
+import { supabase } from '@/src/lib/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
@@ -49,11 +50,14 @@ export default function SettingsScreen() {
     setLogoutModalVisible(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setLogoutModalVisible(false);
-    Alert.alert(`✅ ${t('settings.logout')}`, t('settings.logoutSuccess'), [
-      { text: 'OK', onPress: () => {} },
-    ]);
+    try {
+      await supabase.auth.signOut();
+      // La redirection vers login est automatique via useAuth dans _layout.tsx
+    } catch (error) {
+      Alert.alert(t('settings.error'), t('settings.logoutError'));
+    }
   };
 
   return (

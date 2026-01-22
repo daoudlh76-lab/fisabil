@@ -85,48 +85,70 @@ serve(async (req) => {
 
     const targetLanguage = languageNames[ui_lang] || "French";
     
-    const systemPrompt = `You are an expert Arabic language teacher. Analyze the given Arabic text and extract vocabulary, verbs, and particles. 
-    
-IMPORTANT: 
-- All Arabic words MUST include full diacritical marks (tashkeel/harakat: fatha, kasra, damma, sukun, shadda, tanwin, etc.)
-- Translations must be in ${targetLanguage}
-- Return ONLY valid JSON, no markdown, no code blocks, no explanations
+    const systemPrompt = `You are an expert Arabic linguist teacher. Your task is COMPLETE vocabulary extraction with DECOMPOSITION of compound words.
 
-Return a JSON object with this exact structure:
+## CRITICAL: DECOMPOSE COMPOUND WORDS
+Arabic words often combine particles, articles, nouns, verbs, and pronouns. You MUST decompose them:
+
+### Examples of decomposition:
+- بِالْكِتَابِ → بِ (particule: with) + الْ (particule: the) + كِتَابٌ (vocabulaire: book)
+- كِتَابُهُ → كِتَابٌ (vocabulaire: book) + ـهُ (vocabulaire/pronom: his)
+- وَالْمَدْرَسَةِ → وَ (particule: and) + الْ (particule: the) + مَدْرَسَةٌ (vocabulaire: school)
+- فَذَهَبُوا → فَ (particule: then) + ذَهَبَ (verbe: to go) + ـوا (pronom suffixe: they)
+- سَيَكْتُبُونَ → سَ (particule: will) + يَكْتُبُ (verbe: to write) + ـونَ (pronom suffixe: they)
+- لِلْعِلْمِ → لِ (particule: for) + الْ (particule: the) + عِلْمٌ (vocabulaire: knowledge)
+
+### Prefixes to extract as particles:
+- وَ، فَ (conjunctions)
+- بِ، لِ، كَ (prepositions)
+- الْ، أَلْ (definite article)
+- سَ، سَوْفَ (future markers)
+- أَ، هَلْ (question markers)
+
+### Suffixes to note in "remarque" field:
+- Pronoun suffixes: ـي، ـكَ، ـكِ، ـهُ، ـهَا، ـنَا، ـكُمْ، ـهُمْ، ـهُنَّ
+- Add them to vocabulaire with type "pronom suffixe" in remarque
+
+## EXTRACTION RULES:
+1. **DECOMPOSE** every compound word into its base components
+2. **VOCABULAIRE**: Only the BASE noun/adjective without prefixes (keep tashkeel appropriate for isolated form)
+3. **VERBES**: Only the BASE verb root (3rd person masculine singular past)
+4. **PARTICULES**: ALL prefixes, prepositions, conjunctions, articles extracted separately
+
+5. **FULL TASHKEEL REQUIRED** on ALL Arabic
+
+6. **NO DUPLICATES** - Each unique base word appears ONCE
+
+7. **OUTPUT**: Return ONLY valid JSON, no markdown
+
+## JSON STRUCTURE:
 {
-  "vocabulaire": [
-    {
-      "mot_ar": "Arabic word with full diacritics",
-      "traduction": "translation in ${targetLanguage}",
-      "singulier": "singular form with diacritics or null",
-      "pluriel": "plural form with diacritics or null",
-      "contraire": "opposite word with diacritics or null",
-      "remarque": "grammatical note in ${targetLanguage} or null"
-    }
-  ],
-  "verbes": [
-    {
-      "verbe_ar": "Arabic verb with diacritics",
-      "traduction": "translation in ${targetLanguage}",
-      "passe_3ms": "past tense 3rd person masculine singular with diacritics",
-      "present_3ms": "present tense 3rd person masculine singular with diacritics",
-      "imperatif": "imperative form with diacritics",
-      "remarque": "grammatical note in ${targetLanguage} or null"
-    }
-  ],
-  "particules": [
-    {
-      "particule_ar": "Arabic particle with diacritics",
-      "type": "type in ${targetLanguage} (preposition, conjunction, etc.)",
-      "traduction": "translation in ${targetLanguage}",
-      "exemple": "example sentence with diacritics or null"
-    }
-  ]
+  "vocabulaire": [{"mot_ar":"base word with tashkeel", "traduction":"${targetLanguage}", "singulier":"or null", "pluriel":"or null", "contraire":"or null", "remarque":"note if originally had suffix like ـهُ"}],
+  "verbes": [{"verbe_ar":"infinitive/masdar", "traduction":"${targetLanguage}", "passe_3ms":"past 3ms", "present_3ms":"present 3ms", "imperatif":"imperative", "remarque":"or null"}],
+  "particules": [{"particule_ar":"particle with tashkeel", "type":"type in ${targetLanguage}", "traduction":"meaning", "exemple":"example usage or null"}]
 }`;
 
-    const userPrompt = `Analyze this Arabic text and extract all vocabulary, verbs, and particles. Make sure to add full diacritical marks to ALL Arabic words:
+    const userPrompt = `TASK: Extract and DECOMPOSE all vocabulary from this Arabic text.
 
-${scan.content}`;
+CRITICAL STEPS:
+1. For each word, identify if it's compound (has prefixes like وَ، فَ، بِ، لِ، الْ، سَ or suffixes like ـهُ، ـهَا، ـهُمْ)
+2. DECOMPOSE compound words: extract prefixes as separate particles, base word as vocabulaire/verbe
+3. Extract ALL components - do not skip any particle or base word
+4. Add full tashkeel to every Arabic word
+
+TEXT TO ANALYZE:
+"""
+${scan.content}
+"""
+
+DECOMPOSITION EXAMPLES to follow:
+- "بِالْحَقِّ" → بِ (particle) + الْ (particle) + حَقٌّ (noun)
+- "قَالُوا" → قَالَ (verb) with suffix ـوا noted
+- "رَبُّهُمْ" → رَبٌّ (noun) with suffix ـهُمْ noted
+- "فَأَخَذَ" → فَ (particle) + أَخَذَ (verb)
+- "وَلِلنَّاسِ" → وَ (particle) + لِ (particle) + الْ (particle) + نَاسٌ (noun)
+
+Return complete JSON with all decomposed components.`;
 
     console.log("📡 Calling OpenAI GPT-4 for vocabulary extraction...");
 

@@ -13,15 +13,16 @@ import {
 } from "react-native";
 import { useRealtimeTutor } from "@/hooks/use-realtime-tutor";
 import { useLanguage } from "@/hooks/use-language";
-import { useSpeechNative } from "@/hooks/use-speech-native";
-
 
 export default function TutorPage() {
   const { language, t } = useLanguage();
   const {
     isConnected,
+    isListening,
     isSpeaking,
+    isPaused,
     transcript,
+    userTranscript,
     messages,
     error,
     userTexts,
@@ -29,17 +30,10 @@ export default function TutorPage() {
     disconnect,
     sendTextMessage,
     interrupt,
+    togglePause,
     clearMessages,
-  } = useRealtimeTutor(language);
-
-  // Reconnaissance vocale native
-  const {
-    isListening,
-    transcript: voiceTranscript,
-    error: voiceError,
     startListening,
-    stopListening,
-  } = useSpeechNative();
+  } = useRealtimeTutor(language);
 
   const [inputText, setInputText] = useState("");
   const [connecting, setConnecting] = useState(false);
@@ -48,15 +42,7 @@ export default function TutorPage() {
   // Scroll auto
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
-  }, [messages, transcript]);
-
-  // Quand une transcription vocale est reçue, envoyer automatiquement
-  useEffect(() => {
-    if (voiceTranscript && isConnected && !isSpeaking) {
-      setInputText(voiceTranscript);
-      sendTextMessage(voiceTranscript);
-    }
-  }, [voiceTranscript, isConnected, isSpeaking, sendTextMessage]);
+  }, [messages, transcript, userTranscript]);
 
   const handleSendText = () => {
     if (inputText.trim()) {
@@ -65,12 +51,12 @@ export default function TutorPage() {
     }
   };
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (isConnected) {
       disconnect();
     } else {
       setConnecting(true);
-      connect();
+      await connect();
       setConnecting(false);
     }
   };
@@ -80,19 +66,48 @@ export default function TutorPage() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      {/* Info textes */}
+      {/* Barre d'info avec contrôles */}
       <View style={styles.infoBar}>
         <Text style={styles.infoText}>
           {"📚 "}{userTexts.length} {t("realtimeTutor.textsAvailable")}
         </Text>
-        {isSpeaking && (
-          <Pressable style={styles.interruptButton} onPress={interrupt}>
-            <Text style={styles.interruptButtonText}>
-              ⏸️ {t("realtimeTutor.interrupt")}
-            </Text>
-          </Pressable>
-        )}
+        <View style={styles.controlsRow}>
+          {isConnected && (
+            <Pressable
+              style={[styles.controlButton, isPaused ? styles.resumeButton : styles.pauseButton]}
+              onPress={togglePause}
+            >
+              <Text style={styles.controlButtonText}>
+                {isPaused ? "▶️ Reprendre" : "⏸️ Pause"}
+              </Text>
+            </Pressable>
+          )}
+          {isSpeaking && (
+            <Pressable style={styles.interruptButton} onPress={interrupt}>
+              <Text style={styles.interruptButtonText}>
+                ⏹️ {t("realtimeTutor.interrupt")}
+              </Text>
+            </Pressable>
+          )}
+        </View>
       </View>
+
+      {/* Indicateur d'état en haut */}
+      {isConnected && (
+        <View style={[
+          styles.statusBar,
+          isListening ? styles.statusListening :
+          isSpeaking ? styles.statusSpeaking :
+          isPaused ? styles.statusPaused : styles.statusReady
+        ]}>
+          <Text style={styles.statusText}>
+            {isPaused ? "⏸️ En pause" :
+             isListening ? "🎤 Parlez en arabe..." :
+             isSpeaking ? "🔊 Le tuteur parle..." :
+             "✅ Prêt à écouter"}
+          </Text>
+        </View>
+      )}
 
       {/* Messages */}
       <ScrollView
@@ -164,7 +179,19 @@ export default function TutorPage() {
           </View>
         ))}
 
-        {/* Transcription en cours */}
+        {/* Ce que l'utilisateur est en train de dire */}
+        {userTranscript && (
+          <View style={[styles.messageWrapper, styles.userMessageWrapper]}>
+            <View style={[styles.messageBubble, styles.userMessage, styles.transcriptBubble]}>
+              <Text style={styles.userTranscriptText}>
+                {userTranscript}
+                <Text style={styles.typingIndicator}>{" ..."}</Text>
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Transcription du tuteur en cours */}
         {transcript && (
           <View style={[styles.messageWrapper, styles.tutorMessageWrapper]}>
             <View style={[styles.messageBubble, styles.tutorMessage, styles.transcriptBubble]}>
@@ -176,13 +203,6 @@ export default function TutorPage() {
           </View>
         )}
 
-        {/* Indicateur d'écoute */}
-        {isListening && (
-          <View style={styles.listeningIndicator}>
-            <Text style={styles.listeningText}>{"🎤 " + t("realtimeTutor.youAreSpeaking")}</Text>
-          </View>
-        )}
-
         {error && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{"⚠️ " + error}</Text>
@@ -190,50 +210,67 @@ export default function TutorPage() {
         )}
       </ScrollView>
 
-      {/* Input Area (texte + micro) */}
+      {/* Boutons de contrôle quand connecté */}
       {isConnected && (
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder={t("realtimeTutor.inputPlaceholder")}
-            placeholderTextColor="#999"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-          />
+        <View style={styles.bottomControls}>
+          {/* Bouton micro principal - pour démarrer manuellement l'écoute si nécessaire */}
           <Pressable
-            style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-            onPress={handleSendText}
-            disabled={!inputText.trim()}
-          >
-            <Text style={styles.sendButtonText}>{"📤"}</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.sendButton, isListening && styles.sendButtonDisabled, { marginLeft: 8 }]}
-            onPress={isListening ? stopListening : startListening}
+            style={[
+              styles.mainMicButton,
+              isListening && styles.mainMicButtonActive,
+              isPaused && styles.mainMicButtonPaused,
+            ]}
+            onPress={() => {
+              if (isPaused) {
+                togglePause();
+              } else if (!isListening && !isSpeaking) {
+                startListening();
+              }
+            }}
             disabled={isSpeaking}
           >
-            <Text style={styles.sendButtonText}>{isListening ? "⏹️" : "🎤"}</Text>
+            <Text style={styles.mainMicButtonIcon}>
+              {isPaused ? "▶️" : isListening ? "🎤" : "🎙️"}
+            </Text>
+            <Text style={styles.mainMicButtonText}>
+              {isPaused ? "Reprendre" : isListening ? "Écoute..." : "Parler"}
+            </Text>
           </Pressable>
+
+          {/* Zone de texte fallback */}
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder={t("realtimeTutor.inputPlaceholder") || "Ou tapez votre message..."}
+              placeholderTextColor="#999"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+            />
+            <Pressable
+              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              onPress={handleSendText}
+              disabled={!inputText.trim()}
+            >
+              <Text style={styles.sendButtonText}>{"📤"}</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
-      {/* Hint + erreurs micro */}
-      <Text style={styles.helpHint}>
-        {isConnected 
-          ? t("realtimeTutor.speakDirectly")
-          : t("realtimeTutor.pressStartHint")}
-      </Text>
-      {voiceError && (
-        <Text style={[styles.helpHint, { color: '#D32F2F' }]}>{"🎤 " + voiceError}</Text>
-      )}
-
-      {/* Clear Button */}
-      {messages.length > 0 && (
-        <Pressable style={styles.clearButton} onPress={clearMessages}>
-          <Text style={styles.clearButtonText}>{t("tutor.clear")}</Text>
-        </Pressable>
-      )}
+      {/* Boutons d'action en bas */}
+      <View style={styles.actionBar}>
+        {isConnected && (
+          <Pressable style={styles.disconnectButton} onPress={disconnect}>
+            <Text style={styles.disconnectButtonText}>🔴 Déconnecter</Text>
+          </Pressable>
+        )}
+        {messages.length > 0 && (
+          <Pressable style={styles.clearButton} onPress={clearMessages}>
+            <Text style={styles.clearButtonText}>{t("tutor.clear")}</Text>
+          </Pressable>
+        )}
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -242,47 +279,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: 50,
-    backgroundColor: "#1B5E20",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFF",
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#A5D6A7",
-    marginTop: 2,
-  },
-  headerButtons: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  connectButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#4CAF50",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  disconnectButton: {
-    backgroundColor: "#D32F2F",
-  },
-  connectingButton: {
-    backgroundColor: "#FF9800",
-  },
-  connectButtonText: {
-    fontSize: 20,
-    color: "#FFF",
   },
   infoBar: {
     flexDirection: "row",
@@ -296,16 +292,57 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#2E7D32",
   },
+  controlsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  controlButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  pauseButton: {
+    backgroundColor: "#FF9800",
+  },
+  resumeButton: {
+    backgroundColor: "#4CAF50",
+  },
+  controlButtonText: {
+    fontSize: 12,
+    color: "#FFF",
+    fontWeight: "600",
+  },
   interruptButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#FF9800",
+    backgroundColor: "#D32F2F",
     borderRadius: 16,
   },
   interruptButtonText: {
     fontSize: 12,
     color: "#FFF",
     fontWeight: "600",
+  },
+  statusBar: {
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  statusListening: {
+    backgroundColor: "#E3F2FD",
+  },
+  statusSpeaking: {
+    backgroundColor: "#FFF3E0",
+  },
+  statusPaused: {
+    backgroundColor: "#FFEBEE",
+  },
+  statusReady: {
+    backgroundColor: "#E8F5E9",
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
   },
   messagesContainer: {
     flex: 1,
@@ -367,9 +404,9 @@ const styles = StyleSheet.create({
     borderColor: "#E0E0E0",
   },
   transcriptBubble: {
-    borderColor: "#4CAF50",
     borderWidth: 2,
     borderStyle: "dashed",
+    opacity: 0.8,
   },
   messageText: {
     fontSize: 16,
@@ -386,18 +423,14 @@ const styles = StyleSheet.create({
     color: "#666",
     fontStyle: "italic",
   },
+  userTranscriptText: {
+    fontSize: 16,
+    color: "#FFF",
+    fontStyle: "italic",
+  },
   typingIndicator: {
     color: "#4CAF50",
     fontWeight: "bold",
-  },
-  listeningIndicator: {
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  listeningText: {
-    fontSize: 14,
-    color: "#4CAF50",
-    fontWeight: "600",
   },
   errorContainer: {
     padding: 12,
@@ -409,14 +442,39 @@ const styles = StyleSheet.create({
     color: "#D32F2F",
     fontSize: 12,
   },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  bottomControls: {
     backgroundColor: "#FFF",
     borderTopWidth: 1,
     borderTopColor: "#E0E0E0",
+    padding: 12,
+  },
+  mainMicButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#4CAF50",
+    paddingVertical: 16,
+    borderRadius: 30,
+    marginBottom: 12,
+    gap: 8,
+  },
+  mainMicButtonActive: {
+    backgroundColor: "#1976D2",
+  },
+  mainMicButtonPaused: {
+    backgroundColor: "#9E9E9E",
+  },
+  mainMicButtonIcon: {
+    fontSize: 24,
+  },
+  mainMicButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FFF",
+  },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   input: {
     flex: 1,
@@ -443,26 +501,35 @@ const styles = StyleSheet.create({
   sendButtonText: {
     fontSize: 18,
   },
-  helpHint: {
-    fontSize: 11,
-    color: "#666",
-    textAlign: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    fontStyle: "italic",
-    backgroundColor: "#f5f5f5",
-  },
-  clearButton: {
+  actionBar: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginHorizontal: 12,
-    marginBottom: 12,
+    backgroundColor: "#F5F5F5",
+  },
+  disconnectButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     backgroundColor: "#FFEBEE",
     borderRadius: 8,
-    alignItems: "center",
+  },
+  disconnectButtonText: {
+    color: "#D32F2F",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  clearButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
   },
   clearButtonText: {
-    color: "#D32F2F",
+    color: "#666",
     fontSize: 12,
     fontWeight: "600",
   },

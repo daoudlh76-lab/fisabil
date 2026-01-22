@@ -77,8 +77,8 @@ export const getVoiceOptionsForGender = (gender: Gender) => {
 
 // Pour OpenAI Realtime API
 export const getOpenAIVoiceForGender = (gender: Gender): string => {
-  // Voix disponibles: alloy, echo, fable, onyx, nova, shimmer
-  // alloy, onyx, echo = plus masculines
-  // nova, shimmer = plus féminines
-  return gender === 'female' ? 'nova' : 'onyx';
+  // Voix disponibles: alloy, ash, ballad, coral, sage, shimmer, verse, marin, cedar
+  // ash, verse, cedar = plus masculines
+  // shimmer, coral, sage = plus féminines
+  return gender === 'female' ? 'shimmer' : 'ash';
 };

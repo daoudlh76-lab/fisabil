@@ -18,7 +18,7 @@ try {
 // Hook factice pour quand le module n'est pas disponible
 const useNoopEvent = (_event: string, _callback: any) => {};
 
-export function useSpeechNative() {
+export function useSpeechNative(forceArabic: boolean = true) {
   const { language } = useLanguage();
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -116,16 +116,22 @@ export function useSpeechNative() {
       setError(null);
       setIsListening(true);
 
-      const langMap: Record<string, string> = {
-        ar: 'ar-SA',
-        fr: 'fr-FR',
-        en: 'en-US',
-        de: 'de-DE',
-        es: 'es-ES',
-        ru: 'ru-RU',
-        ms: 'ms-MY',
-      };
-      const voiceLang = langMap[language] || 'ar-SA';
+      // Si forceArabic est true, toujours utiliser l'arabe (pour le tuteur)
+      // Sinon, utiliser la langue de l'interface
+      let voiceLang = 'ar-SA';
+
+      if (!forceArabic) {
+        const langMap: Record<string, string> = {
+          ar: 'ar-SA',
+          fr: 'fr-FR',
+          en: 'en-US',
+          de: 'de-DE',
+          es: 'es-ES',
+          ru: 'ru-RU',
+          ms: 'ms-MY',
+        };
+        voiceLang = langMap[language] || 'ar-SA';
+      }
 
       console.log('🎤 Starting speech recognition with lang:', voiceLang);
 
