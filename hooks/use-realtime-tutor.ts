@@ -121,13 +121,14 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
 ## STUDENT'S TEXTS:
 ${textsContext}
 
-## IMPORTANT:
-- Keep responses concise (2-3 sentences max)
-- Speak clearly and at a moderate pace
+## IMPORTANT - SPEED IS CRITICAL:
+- Keep responses VERY SHORT (1-2 sentences max, under 30 words)
+- Respond IMMEDIATELY, don't overthink
 - Use simple Arabic for beginners
 - Only switch to ${targetLang} if explicitly asked
+- NO long explanations - be direct and concise
 
-Start by greeting the student warmly in Arabic.`;
+Start with a SHORT greeting in Arabic (max 10 words).`;
   }, [userTexts, uiLang]);
 
   // Fonction pour détecter si un texte contient de l'arabe
@@ -137,7 +138,7 @@ Start by greeting the student warmly in Arabic.`;
     return totalChars > 0 && (arabicChars / totalChars) > 0.3;
   };
 
-  // Transcrire l'audio avec l'API Whisper d'OpenAI
+  // Transcrire l'audio avec l'API Whisper d'OpenAI (avec timeout)
   const transcribeWithWhisper = useCallback(async (audioUri: string): Promise<string | null> => {
     try {
       if (!OPENAI_API_KEY) {
@@ -158,28 +159,46 @@ Start by greeting the student warmly in Arabic.`;
       formData.append('file', audioBlob as any);
       formData.append('model', 'whisper-1');
       formData.append('language', 'ar'); // Priorité à l'arabe
-      formData.append('prompt', 'Ceci est une phrase en arabe. بسم الله الرحمن الرحيم'); // Aide le modèle
+      formData.append('prompt', 'بسم الله'); // Prompt court pour plus de rapidité
 
       console.log("📤 Sending audio to Whisper API...");
+      const startTime = Date.now();
 
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: formData,
-      });
+      // Timeout de 10 secondes pour Whisper
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Whisper API error:", response.status, errorText);
-        return null;
+      try {
+        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          },
+          body: formData,
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("❌ Whisper API error:", response.status, errorText);
+          return null;
+        }
+
+        const result = await response.json();
+        const elapsed = Date.now() - startTime;
+        console.log(`✅ Whisper transcription (${elapsed}ms):`, result.text);
+
+        return result.text || null;
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        if (fetchErr.name === 'AbortError') {
+          console.error("❌ Whisper timeout (>10s)");
+          return null;
+        }
+        throw fetchErr;
       }
-
-      const result = await response.json();
-      console.log("✅ Whisper transcription result:", result);
-
-      return result.text || null;
     } catch (err) {
       console.error("❌ Whisper transcription error:", err);
       return null;
@@ -338,7 +357,7 @@ Start by greeting the student warmly in Arabic.`;
 
       console.log('🎤 Recording started successfully');
 
-      // Arrêter automatiquement après 8 secondes pour permettre au tuteur de répondre
+      // Arrêter automatiquement après 5 secondes pour une réponse plus rapide
       if (listeningTimeoutRef.current) {
         clearTimeout(listeningTimeoutRef.current);
       }
@@ -346,7 +365,7 @@ Start by greeting the student warmly in Arabic.`;
       listeningTimeoutRef.current = setTimeout(async () => {
         console.log('⏱️ Auto-stopping recording after timeout');
         await stopListening();
-      }, 8000);
+      }, 5000);
 
     } catch (err) {
       console.error('❌ Error starting recording:', err);
@@ -393,10 +412,13 @@ Start by greeting the student warmly in Arabic.`;
       },
     }));
 
-    // Demander une réponse
+    // Demander une réponse courte et rapide
     wsRef.current.send(JSON.stringify({
       type: 'response.create',
-      response: { modalities: ['text'] },
+      response: {
+        modalities: ['text'],
+        instructions: 'Respond in 1-2 SHORT sentences only. Be quick and direct.',
+      },
     }));
   }, []);
 
@@ -503,16 +525,16 @@ Start by greeting the student warmly in Arabic.`;
         };
         ws.send(JSON.stringify(sessionConfig));
 
-        // Message de bienvenue - l'écoute démarre après le TTS
+        // Message de bienvenue court - l'écoute démarre après le TTS
         setTimeout(() => {
           ws.send(JSON.stringify({
             type: 'response.create',
             response: {
               modalities: ['text'],
-              instructions: 'Greet the student warmly in Arabic. Ask how their Arabic studies are going.',
+              instructions: 'Say ONLY: "مرحباً! كيف حالك؟" (Hello! How are you?) - nothing more.',
             },
           }));
-        }, 500);
+        }, 300);
       };
 
       ws.onmessage = (event) => {
