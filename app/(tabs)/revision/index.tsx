@@ -119,8 +119,9 @@ export default function RevisionScreen() {
       let cardIndex = 0;
 
       for (const scan of scans) {
-        // Chercher le cache de vocabulaire pour ce scan (essayer plusieurs langues)
+        // Chercher le cache de vocabulaire pour ce scan - priorité à la langue UI actuelle
         const cacheKeys = [
+          `ai_vocab_${scan.id}_${language}`, // Langue actuelle en premier
           `ai_vocab_${scan.id}_fr`,
           `ai_vocab_${scan.id}_en`,
           `ai_vocab_${scan.id}_de`,
@@ -128,24 +129,36 @@ export default function RevisionScreen() {
           `ai_vocab_${scan.id}_ru`,
         ];
 
+        // Éliminer les doublons si la langue est déjà dans la liste
+        const uniqueKeys = [...new Set(cacheKeys)];
+
         let vocabData = null;
 
-        for (const cacheKey of cacheKeys) {
-          const { data: cached } = await supabase
+        for (const cacheKey of uniqueKeys) {
+          const { data: cached, error: cacheError } = await supabase
             .from('ai_cache')
             .select('payload')
             .eq('key', cacheKey)
             .maybeSingle();
 
+          if (cacheError) {
+            console.error('❌ Erreur cache:', cacheKey, cacheError);
+            continue;
+          }
+
           if (cached?.payload) {
             vocabData = cached.payload;
-            console.log('📦 Cache trouvé pour:', cacheKey);
+            console.log('📦 Cache trouvé pour:', cacheKey, 'avec', {
+              vocab: vocabData.vocabulaire?.length || 0,
+              verbes: vocabData.verbes?.length || 0,
+              particules: vocabData.particules?.length || 0,
+            });
             break;
           }
         }
 
         if (!vocabData) {
-          console.log('⚠️ Pas de cache vocabulaire pour scan:', scan.title);
+          console.log('⚠️ Pas de cache vocabulaire pour scan:', scan.title, '- vous devez extraire le vocabulaire depuis la bibliothèque');
           continue;
         }
 
@@ -219,7 +232,7 @@ export default function RevisionScreen() {
     } finally {
       setLoadingVocab(false);
     }
-  }, []);
+  }, [language]);
 
   // --- Charger les dictées depuis Supabase
   const loadDictations = useCallback(async () => {
@@ -603,6 +616,9 @@ export default function RevisionScreen() {
               <Text style={styles.emptyTitle}>📚 {t('revision.noVocab')}</Text>
               <Text style={styles.emptyText}>
                 {t('revision.extractVocabFirst')}
+              </Text>
+              <Text style={[styles.emptyText, { marginTop: 8, fontSize: 13 }]}>
+                {t('nav.library')} → {t('libraryDetail.words')} → 🔄
               </Text>
               <Pressable style={styles.refreshButton} onPress={loadVocabulary}>
                 <Text style={styles.refreshButtonText}>🔄 {t('revision.refresh')}</Text>
