@@ -85,70 +85,57 @@ export async function extractVocabulary(
 
   const targetLanguage = languageNames[uiLang] || 'French';
 
-  const systemPrompt = `You are an expert Arabic linguist teacher. Your task is COMPLETE vocabulary extraction with DECOMPOSITION of compound words.
+  const systemPrompt = `You are an expert Arabic linguist. Extract EVERY SINGLE WORD from the text - miss NOTHING.
 
-## CRITICAL: DECOMPOSE COMPOUND WORDS
-Arabic words often combine particles, articles, nouns, verbs, and pronouns. You MUST decompose them:
+## CRITICAL REQUIREMENT: EXTRACT ALL WORDS
+You MUST extract EVERY Arabic word from the text. Go through the text word by word and extract each one.
 
-### Examples of decomposition:
-- بِالْكِتَابِ → بِ (particule: with) + الْ (particule: the) + كِتَابٌ (vocabulaire: book)
-- كِتَابُهُ → كِتَابٌ (vocabulaire: book) + ـهُ (vocabulaire/pronom: his)
-- وَالْمَدْرَسَةِ → وَ (particule: and) + الْ (particule: the) + مَدْرَسَةٌ (vocabulaire: school)
-- فَذَهَبُوا → فَ (particule: then) + ذَهَبَ (verbe: to go) + ـوا (pronom suffixe: they)
-- سَيَكْتُبُونَ → سَ (particule: will) + يَكْتُبُ (verbe: to write) + ـونَ (pronom suffixe: they)
-- لِلْعِلْمِ → لِ (particule: for) + الْ (particule: the) + عِلْمٌ (vocabulaire: knowledge)
+## DECOMPOSE COMPOUND WORDS
+Arabic words combine particles + base words. Decompose them:
+- بِالْكِتَابِ → بِ (particle) + الْ (particle) + كِتَابٌ (noun)
+- وَقَالَ → وَ (particle) + قَالَ (verb)
+- رَبُّهُمْ → رَبٌّ (noun) + note suffix ـهُمْ in remarque
 
-### Prefixes to extract as particles:
-- وَ، فَ (conjunctions)
-- بِ، لِ، كَ (prepositions)
-- الْ، أَلْ (definite article)
-- سَ، سَوْفَ (future markers)
-- أَ، هَلْ (question markers)
+## PREFIXES TO EXTRACT AS PARTICLES:
+وَ، فَ، بِ، لِ، كَ، الْ، سَ، أَ، هَلْ
 
-### Suffixes to note in "remarque" field:
-- Pronoun suffixes: ـي، ـكَ، ـكِ، ـهُ، ـهَا، ـنَا، ـكُمْ، ـهُمْ، ـهُنَّ
-- Add them to vocabulaire with type "pronom suffixe" in remarque
+## WHAT TO EXTRACT:
+1. **vocabulaire**: ALL nouns, adjectives, adverbs (base form without prefixes)
+2. **verbes**: ALL verbs (past 3rd masc sing form as base)
+3. **particules**: ALL particles, prepositions, conjunctions, articles
 
-## EXTRACTION RULES:
-1. **DECOMPOSE** every compound word into its base components
-2. **VOCABULAIRE**: Only the BASE noun/adjective without prefixes (keep tashkeel appropriate for isolated form)
-3. **VERBES**: Only the BASE verb root (3rd person masculine singular past)
-4. **PARTICULES**: ALL prefixes, prepositions, conjunctions, articles extracted separately
+## RULES:
+- FULL TASHKEEL on all Arabic
+- NO duplicates (each unique word once)
+- Include EVERY word - proper nouns, numbers, everything
+- Return ONLY valid JSON, no markdown
 
-5. **FULL TASHKEEL REQUIRED** on ALL Arabic
-
-6. **NO DUPLICATES** - Each unique base word appears ONCE
-
-7. **OUTPUT**: Return ONLY valid JSON, no markdown
-
-## JSON STRUCTURE:
+## JSON FORMAT:
 {
-  "vocabulaire": [{"mot_ar":"base word with tashkeel", "traduction":"${targetLanguage}", "singulier":"or null", "pluriel":"or null", "contraire":"or null", "remarque":"note if originally had suffix like ـهُ"}],
-  "verbes": [{"verbe_ar":"infinitive/masdar", "traduction":"${targetLanguage}", "passe_3ms":"past 3ms", "present_3ms":"present 3ms", "imperatif":"imperative", "remarque":"or null"}],
-  "particules": [{"particule_ar":"particle with tashkeel", "type":"type in ${targetLanguage}", "traduction":"meaning", "exemple":"example usage or null"}]
+  "vocabulaire": [{"mot_ar":"word", "traduction":"${targetLanguage}", "singulier":null, "pluriel":null, "contraire":null, "remarque":null}],
+  "verbes": [{"verbe_ar":"masdar", "traduction":"${targetLanguage}", "passe_3ms":"past", "present_3ms":"present", "imperatif":"imperative", "remarque":null}],
+  "particules": [{"particule_ar":"particle", "type":"type", "traduction":"meaning", "exemple":null}]
 }`;
 
-  const userPrompt = `TASK: Extract and DECOMPOSE all vocabulary from this Arabic text.
+  // Compter approximativement les mots
+  const wordCount = arabicText.split(/\s+/).filter(w => w.length > 0).length;
 
-CRITICAL STEPS:
-1. For each word, identify if it's compound (has prefixes like وَ، فَ، بِ، لِ، الْ، سَ or suffixes like ـهُ، ـهَا، ـهُمْ)
-2. DECOMPOSE compound words: extract prefixes as separate particles, base word as vocabulaire/verbe
-3. Extract ALL components - do not skip any particle or base word
-4. Add full tashkeel to every Arabic word
+  const userPrompt = `Extract EVERY SINGLE WORD from this Arabic text. Miss NOTHING.
 
-TEXT TO ANALYZE:
+Go through word by word:
+1. Read each word
+2. If compound (has وَ، فَ، بِ، لِ، الْ prefix or ـهُ، ـهَا suffix), decompose it
+3. Add the base word to vocabulaire/verbes
+4. Add any prefix particles to particules
+5. Move to next word
+
+TEXT:
 """
 ${arabicText}
 """
 
-DECOMPOSITION EXAMPLES to follow:
-- "بِالْحَقِّ" → بِ (particle) + الْ (particle) + حَقٌّ (noun)
-- "قَالُوا" → قَالَ (verb) with suffix ـوا noted
-- "رَبُّهُمْ" → رَبٌّ (noun) with suffix ـهُمْ noted
-- "فَأَخَذَ" → فَ (particle) + أَخَذَ (verb)
-- "وَلِلنَّاسِ" → وَ (particle) + لِ (particle) + الْ (particle) + نَاسٌ (noun)
-
-Return complete JSON with all decomposed components.`;
+IMPORTANT: The text has approximately ${wordCount} words. Make sure you extract all of them.
+Return complete JSON.`;
 
   try {
     console.log('📡 Calling OpenAI GPT-4 for vocabulary extraction...');
@@ -178,8 +165,8 @@ Return complete JSON with all decomposed components.`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.2,
-        max_tokens: 8192,
+        temperature: 0.1,
+        max_tokens: 16384,
       }),
     });
 
