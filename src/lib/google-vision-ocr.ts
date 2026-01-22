@@ -38,7 +38,7 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
 
     console.log('📡 Envoi de la requête à OpenAI GPT-4 Vision...');
 
-    // Préparer la requête pour OpenAI
+    // Préparer la requête pour OpenAI - avec ajout automatique des voyelles
     const requestBody = {
       model: 'gpt-4o',
       messages: [
@@ -47,7 +47,20 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
           content: [
             {
               type: 'text',
-              text: 'Extract ALL the Arabic text from this image. Return ONLY the Arabic text, nothing else. Preserve the original formatting and line breaks. If there is no Arabic text, return an empty string.',
+              text: `Extract ALL the Arabic text from this image with FULL DIACRITICS (tashkeel/harakat).
+
+CRITICAL REQUIREMENTS:
+1. Extract EVERY Arabic word from the image - miss NOTHING
+2. If the text already has diacritics (vowel marks), PRESERVE them exactly
+3. If the text does NOT have diacritics, ADD FULL TASHKEEL to every word:
+   - Fatha (َ), Damma (ُ), Kasra (ِ)
+   - Sukun (ْ), Shadda (ّ)
+   - Tanween (ً ٌ ٍ)
+4. Preserve the original line breaks and formatting
+5. Return ONLY the Arabic text with diacritics, nothing else
+6. If there is no Arabic text, return an empty string
+
+Example: "الحمد لله رب العالمين" should become "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ"`,
             },
             {
               type: 'image_url',
@@ -58,7 +71,7 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
           ],
         },
       ],
-      max_tokens: 4096,
+      max_tokens: 8192,
     };
 
     const response = await fetch(OPENAI_API_URL, {

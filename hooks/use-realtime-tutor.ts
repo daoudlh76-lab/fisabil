@@ -249,11 +249,15 @@ Start by greeting the student warmly in Arabic.`;
             };
             setMessages(prev => [...prev, msg]);
 
-            // Lire le texte puis reprendre l'écoute
+            // Lire le texte puis reprendre l'écoute automatiquement
             speakText(responseText).then(() => {
-              if (shouldRestartListeningRef.current && !isPaused) {
-                startContinuousListening();
-              }
+              // Attendre un petit moment puis relancer l'écoute
+              setTimeout(() => {
+                if (shouldRestartListeningRef.current && !isPaused && isConnected) {
+                  console.log('🎤 Auto-restarting listening after TTS...');
+                  startContinuousListening();
+                }
+              }, 300);
             });
           }
 
@@ -267,7 +271,7 @@ Start by greeting the student warmly in Arabic.`;
         setError(event.error?.message || 'Erreur de connexion');
         break;
     }
-  }, [speakText, isPaused, startContinuousListening]);
+  }, [speakText, isPaused, startContinuousListening, isConnected]);
 
   // Envoyer ce que l'utilisateur a dit au WebSocket
   const sendUserSpeech = useCallback((text: string) => {
@@ -406,7 +410,7 @@ Start by greeting the student warmly in Arabic.`;
         };
         ws.send(JSON.stringify(sessionConfig));
 
-        // Message de bienvenue
+        // Message de bienvenue puis démarrer l'écoute automatiquement
         setTimeout(() => {
           ws.send(JSON.stringify({
             type: 'response.create',
@@ -416,6 +420,13 @@ Start by greeting the student warmly in Arabic.`;
             },
           }));
         }, 500);
+
+        // Démarrer l'écoute automatiquement après connexion (léger délai pour le message de bienvenue)
+        setTimeout(() => {
+          if (shouldRestartListeningRef.current) {
+            startContinuousListening();
+          }
+        }, 2000);
       };
 
       ws.onmessage = (event) => {
@@ -439,7 +450,7 @@ Start by greeting the student warmly in Arabic.`;
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
       setIsConnected(false);
     }
-  }, [buildSystemInstructions, gender, handleRealtimeEvent, stopListening]);
+  }, [buildSystemInstructions, gender, handleRealtimeEvent, stopListening, startContinuousListening]);
 
   // Envoyer un message texte (fallback clavier)
   const sendTextMessage = useCallback((text: string) => {
