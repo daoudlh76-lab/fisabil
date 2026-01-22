@@ -3,11 +3,13 @@ import * as Speech from "expo-speech";
 import { Audio } from "expo-audio";
 import * as FileSystem from "expo-file-system";
 import { useLanguage } from "./use-language";
+import { useVoicePreference } from "@/contexts/voice-preference-context";
 
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
 export function useSpeech() {
   const { language } = useLanguage();
+  const { gender } = useVoicePreference();
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -227,11 +229,14 @@ export function useSpeech() {
           speechLanguage = langMap[language] || "en-US";
         }
 
-        console.log("🔊 Speaking:", text.slice(0, 50) + "...", "in", speechLanguage);
+        // Ajuster le pitch selon le genre (voix plus grave pour homme, plus aiguë pour femme)
+        const pitch = gender === 'female' ? 1.15 : 0.85;
+
+        console.log("🔊 Speaking:", text.slice(0, 50) + "...", "in", speechLanguage, "pitch:", pitch);
 
         await Speech.speak(text, {
           language: speechLanguage,
-          pitch: 1.0,
+          pitch,
           rate: isArabicText(text) ? 0.8 : 0.85, // Un peu plus lent pour l'arabe
           onDone: () => {
             console.log("🔊 Speech finished");
@@ -254,7 +259,7 @@ export function useSpeech() {
         setError(errorMsg);
       }
     },
-    [language]
+    [language, gender]
   );
 
   // Arrêter la parole

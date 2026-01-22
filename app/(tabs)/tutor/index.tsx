@@ -19,6 +19,7 @@ export default function TutorPage() {
   const {
     isConnected,
     isListening,
+    isTranscribing,
     isSpeaking,
     isPaused,
     transcript,
@@ -33,6 +34,7 @@ export default function TutorPage() {
     togglePause,
     clearMessages,
     startListening,
+    stopListening,
   } = useRealtimeTutor(language);
 
   const [inputText, setInputText] = useState("");
@@ -96,12 +98,14 @@ export default function TutorPage() {
       {isConnected && (
         <View style={[
           styles.statusBar,
+          isTranscribing ? styles.statusTranscribing :
           isListening ? styles.statusListening :
           isSpeaking ? styles.statusSpeaking :
           isPaused ? styles.statusPaused : styles.statusReady
         ]}>
           <Text style={styles.statusText}>
             {isPaused ? "⏸️ En pause" :
+             isTranscribing ? "📝 Transcription..." :
              isListening ? "🎤 Parlez en arabe..." :
              isSpeaking ? "🔊 Le tuteur parle..." :
              "✅ Prêt à écouter"}
@@ -213,27 +217,31 @@ export default function TutorPage() {
       {/* Boutons de contrôle quand connecté */}
       {isConnected && (
         <View style={styles.bottomControls}>
-          {/* Bouton micro principal - pour démarrer manuellement l'écoute si nécessaire */}
+          {/* Bouton micro principal - pour démarrer/arrêter l'enregistrement */}
           <Pressable
             style={[
               styles.mainMicButton,
               isListening && styles.mainMicButtonActive,
+              isTranscribing && styles.mainMicButtonTranscribing,
               isPaused && styles.mainMicButtonPaused,
             ]}
             onPress={() => {
               if (isPaused) {
                 togglePause();
-              } else if (!isListening && !isSpeaking) {
+              } else if (isListening) {
+                // Arrêter l'enregistrement et transcrire
+                stopListening();
+              } else if (!isSpeaking && !isTranscribing) {
                 startListening();
               }
             }}
-            disabled={isSpeaking}
+            disabled={isSpeaking || isTranscribing}
           >
             <Text style={styles.mainMicButtonIcon}>
-              {isPaused ? "▶️" : isListening ? "🎤" : "🎙️"}
+              {isPaused ? "▶️" : isTranscribing ? "📝" : isListening ? "⏹️" : "🎙️"}
             </Text>
             <Text style={styles.mainMicButtonText}>
-              {isPaused ? "Reprendre" : isListening ? "Écoute..." : "Parler"}
+              {isPaused ? "Reprendre" : isTranscribing ? "Transcription..." : isListening ? "Arrêter" : "Parler"}
             </Text>
           </Pressable>
 
@@ -329,6 +337,9 @@ const styles = StyleSheet.create({
   },
   statusListening: {
     backgroundColor: "#E3F2FD",
+  },
+  statusTranscribing: {
+    backgroundColor: "#F3E5F5",
   },
   statusSpeaking: {
     backgroundColor: "#FFF3E0",
@@ -460,6 +471,9 @@ const styles = StyleSheet.create({
   },
   mainMicButtonActive: {
     backgroundColor: "#1976D2",
+  },
+  mainMicButtonTranscribing: {
+    backgroundColor: "#9C27B0",
   },
   mainMicButtonPaused: {
     backgroundColor: "#9E9E9E",

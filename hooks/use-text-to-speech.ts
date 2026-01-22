@@ -1,10 +1,14 @@
 import { useState, useCallback } from 'react';
 import * as Speech from 'expo-speech';
+import { useVoicePreference } from '@/contexts/voice-preference-context';
 
 export const useTextToSpeech = () => {
   const [isConverting, setIsConverting] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [conversionProgress, setConversionProgress] = useState(0);
+
+  // Préférence de voix (homme/femme)
+  const { gender } = useVoicePreference();
 
   // Fonction pour lire le texte à voix haute (synthèse vocale)
   const speakText = useCallback(
@@ -14,9 +18,12 @@ export const useTextToSpeech = () => {
         await Speech.stop();
         setIsSpeaking(true);
 
+        // Ajuster le pitch selon le genre (voix plus grave pour homme, plus aiguë pour femme)
+        const pitch = gender === 'female' ? 1.15 : 0.85;
+
         await Speech.speak(text, {
           language,
-          pitch: 1.0,
+          pitch,
           rate: 0.85,
           onDone: () => {
             setIsSpeaking(false);
@@ -32,7 +39,7 @@ export const useTextToSpeech = () => {
         setIsSpeaking(false);
       }
     },
-    []
+    [gender]
   );
 
   // Fonction pour arrêter la parole

@@ -85,56 +85,79 @@ export async function extractVocabulary(
 
   const targetLanguage = languageNames[uiLang] || 'French';
 
-  const systemPrompt = `You are an expert Arabic linguist. Extract EVERY SINGLE WORD from the text - miss NOTHING.
+  const systemPrompt = `You are an expert Arabic linguist and grammarian. Extract EVERY SINGLE WORD from the text with FULL TASHKEEL.
 
-## CRITICAL REQUIREMENT: EXTRACT ALL WORDS
-You MUST extract EVERY Arabic word from the text. Go through the text word by word and extract each one.
+## CRITICAL: ADD VOWELS IF MISSING
+The input text may or may not have diacritics (tashkeel). You MUST:
+1. If the word already has diacritics → preserve them
+2. If the word has NO diacritics → ADD FULL TASHKEEL based on Arabic grammar rules:
+   - Fatha (فَتْحَة), Damma (ضَمَّة), Kasra (كَسْرَة)
+   - Sukun (سُكُون), Shadda (شَدَّة)
+   - Tanween (تَنْوِين): ً ٌ ٍ
+
+Example: "الحمد لله رب العالمين" → Extract as "الْحَمْدُ"، "لِلَّهِ"، "رَبُّ"، "الْعَالَمِينَ"
 
 ## DECOMPOSE COMPOUND WORDS
-Arabic words combine particles + base words. Decompose them:
-- بِالْكِتَابِ → بِ (particle) + الْ (particle) + كِتَابٌ (noun)
-- وَقَالَ → وَ (particle) + قَالَ (verb)
-- رَبُّهُمْ → رَبٌّ (noun) + note suffix ـهُمْ in remarque
+- بالكتاب → بِ (particle) + الْ (particle) + كِتَابٌ (noun)
+- وقال → وَ (particle) + قَالَ (verb)
+- ربهم → رَبٌّ (noun) + note suffix ـهُمْ in remarque
 
 ## PREFIXES TO EXTRACT AS PARTICLES:
 وَ، فَ، بِ، لِ، كَ، الْ، سَ، أَ، هَلْ
 
 ## WHAT TO EXTRACT:
-1. **vocabulaire**: ALL nouns, adjectives, adverbs (base form without prefixes)
-2. **verbes**: ALL verbs (past 3rd masc sing form as base)
-3. **particules**: ALL particles, prepositions, conjunctions, articles
+1. **vocabulaire**: ALL nouns, adjectives, adverbs (base form with full tashkeel)
+2. **verbes**: ALL verbs (past 3rd masc sing with tashkeel)
+3. **particules**: ALL particles with tashkeel
+
+## SINGULIER/PLURIEL - CRITICAL:
+For EVERY noun in vocabulaire, you MUST provide:
+- **singulier**: The singular form WITH FULL TASHKEEL (e.g., "كِتَابٌ")
+- **pluriel**: The plural form WITH FULL TASHKEEL (e.g., "كُتُبٌ")
+- If the word in text is singular → mot_ar = singulier, provide pluriel
+- If the word in text is plural → mot_ar = pluriel, provide singulier
+Examples:
+- "الْعَالَمِينَ" (plural) → singulier: "عَالَمٌ", pluriel: "عَالَمُونَ / عَوَالِمُ"
+- "كِتَابٌ" (singular) → singulier: "كِتَابٌ", pluriel: "كُتُبٌ"
+- "رَجُلٌ" (singular) → singulier: "رَجُلٌ", pluriel: "رِجَالٌ"
 
 ## RULES:
-- FULL TASHKEEL on all Arabic
+- EVERY Arabic word in output MUST have FULL TASHKEEL
 - NO duplicates (each unique word once)
 - Include EVERY word - proper nouns, numbers, everything
+- ALWAYS fill singulier AND pluriel for nouns (never leave both as null)
 - Return ONLY valid JSON, no markdown
 
 ## JSON FORMAT:
 {
-  "vocabulaire": [{"mot_ar":"word", "traduction":"${targetLanguage}", "singulier":null, "pluriel":null, "contraire":null, "remarque":null}],
-  "verbes": [{"verbe_ar":"masdar", "traduction":"${targetLanguage}", "passe_3ms":"past", "present_3ms":"present", "imperatif":"imperative", "remarque":null}],
-  "particules": [{"particule_ar":"particle", "type":"type", "traduction":"meaning", "exemple":null}]
+  "vocabulaire": [{"mot_ar":"word WITH tashkeel", "traduction":"${targetLanguage} translation", "singulier":"singular WITH tashkeel", "pluriel":"plural WITH tashkeel", "contraire":"opposite or null", "remarque":"grammar note or null"}],
+  "verbes": [{"verbe_ar":"masdar WITH tashkeel", "traduction":"${targetLanguage} translation", "passe_3ms":"past WITH tashkeel", "present_3ms":"present WITH tashkeel", "imperatif":"imperative WITH tashkeel", "remarque":"grammar note or null"}],
+  "particules": [{"particule_ar":"particle WITH tashkeel", "type":"type", "traduction":"${targetLanguage} meaning", "exemple":"example sentence or null"}]
 }`;
 
   // Compter approximativement les mots
   const wordCount = arabicText.split(/\s+/).filter(w => w.length > 0).length;
 
-  const userPrompt = `Extract EVERY SINGLE WORD from this Arabic text. Miss NOTHING.
+  const userPrompt = `Extract EVERY SINGLE WORD from this Arabic text with FULL TASHKEEL (vowels).
 
-Go through word by word:
-1. Read each word
-2. If compound (has وَ، فَ، بِ، لِ، الْ prefix or ـهُ، ـهَا suffix), decompose it
-3. Add the base word to vocabulaire/verbes
-4. Add any prefix particles to particules
-5. Move to next word
+CRITICAL: If a word has no diacritics, ADD THEM according to Arabic grammar.
+
+Steps for each word:
+1. Read the word
+2. If it has no tashkeel → ADD full tashkeel based on grammar
+3. If compound (وَ، فَ، بِ، لِ، الْ prefix or ـهُ suffix) → decompose it
+4. Add base word (WITH tashkeel) to vocabulaire/verbes
+5. Add particles (WITH tashkeel) to particules
 
 TEXT:
 """
 ${arabicText}
 """
 
-IMPORTANT: The text has approximately ${wordCount} words. Make sure you extract all of them.
+IMPORTANT:
+- Text has ~${wordCount} words - extract ALL of them
+- EVERY Arabic word in output MUST have FULL TASHKEEL
+- Example: "كتاب" without vowels → output as "كِتَابٌ" with vowels
 Return complete JSON.`;
 
   try {

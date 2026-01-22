@@ -1,7 +1,7 @@
 /**
  * Hook pour le tuteur en temps réel avec l'API Realtime d'OpenAI
- * Mode conversation vocale avec VAD (Voice Activity Detection)
- * Utilise expo-speech-recognition pour capturer la voix de l'utilisateur
+ * Mode conversation vocale avec enregistrement audio + Whisper
+ * Utilise expo-av pour capturer la voix de l'utilisateur
  * et expo-speech pour lire les réponses du tuteur
  */
 
@@ -9,6 +9,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVoicePreference, getOpenAIVoiceForGender } from "@/contexts/voice-preference-context";
 import * as Speech from 'expo-speech';
+import { Audio } from 'expo-av';
 
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
@@ -34,20 +35,10 @@ interface RealtimeMessage {
   timestamp: number;
 }
 
-// Import conditionnel de expo-speech-recognition
-let ExpoSpeechRecognitionModule: any = null;
-let addSpeechRecognitionListener: ((event: string, callback: (data: any) => void) => { remove: () => void }) | null = null;
-try {
-  const speechRecognition = require('expo-speech-recognition');
-  ExpoSpeechRecognitionModule = speechRecognition.ExpoSpeechRecognitionModule;
-  addSpeechRecognitionListener = speechRecognition.addSpeechRecognitionListener;
-} catch (e) {
-  console.log('⚠️ expo-speech-recognition not available');
-}
-
 export function useRealtimeTutor(uiLang: string = 'fr') {
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [transcript, setTranscript] = useState<string>('');
@@ -63,9 +54,20 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
   const currentResponseRef = useRef<string>('');
   const isListeningRef = useRef(false);
   const shouldRestartListeningRef = useRef(false);
+  const isPausedRef = useRef(false);
+  const isConnectedRef = useRef(false);
+
+  // Refs pour l'enregistrement audio (expo-av)
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const listeningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ref pour éviter les doublons de messages
   const processedItemsRef = useRef<Set<string>>(new Set());
+
+  // Refs pour les fonctions stables (éviter les dépendances circulaires)
+  const startContinuousListeningRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const speakTextRef = useRef<(text: string) => Promise<void>>(() => Promise.resolve());
+  const sendUserSpeechRef = useRef<(text: string) => void>(() => {});
 
   // Charger les textes de l'utilisateur
   useEffect(() => {
@@ -135,9 +137,59 @@ Start by greeting the student warmly in Arabic.`;
     return totalChars > 0 && (arabicChars / totalChars) > 0.3;
   };
 
+  // Transcrire l'audio avec l'API Whisper d'OpenAI
+  const transcribeWithWhisper = useCallback(async (audioUri: string): Promise<string | null> => {
+    try {
+      if (!OPENAI_API_KEY) {
+        console.error("❌ OpenAI API key not configured");
+        return null;
+      }
+
+      // Créer un FormData avec le fichier audio
+      const formData = new FormData();
+
+      // Créer un blob à partir de l'URI
+      const audioBlob = {
+        uri: audioUri,
+        type: 'audio/m4a',
+        name: 'audio.m4a',
+      };
+
+      formData.append('file', audioBlob as any);
+      formData.append('model', 'whisper-1');
+      formData.append('language', 'ar'); // Priorité à l'arabe
+      formData.append('prompt', 'Ceci est une phrase en arabe. بسم الله الرحمن الرحيم'); // Aide le modèle
+
+      console.log("📤 Sending audio to Whisper API...");
+
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Whisper API error:", response.status, errorText);
+        return null;
+      }
+
+      const result = await response.json();
+      console.log("✅ Whisper transcription result:", result);
+
+      return result.text || null;
+    } catch (err) {
+      console.error("❌ Whisper transcription error:", err);
+      return null;
+    }
+  }, []);
+
   // Lire le texte avec TTS
   const speakText = useCallback((text: string): Promise<void> => {
     return new Promise((resolve) => {
+      console.log('🔊 TTS starting:', text.substring(0, 50) + '...');
       setIsSpeaking(true);
 
       const lang = isArabicText(text) ? 'ar-SA' :
@@ -152,11 +204,16 @@ Start by greeting the student warmly in Arabic.`;
         language: lang,
         rate: 0.9,
         pitch: pitch,
+        onStart: () => {
+          console.log('🔊 TTS onStart');
+        },
         onDone: () => {
+          console.log('🔊 TTS onDone - will restart listening');
           setIsSpeaking(false);
           resolve();
         },
-        onError: () => {
+        onError: (error) => {
+          console.error('🔊 TTS onError:', error);
           setIsSpeaking(false);
           resolve();
         },
@@ -164,52 +221,189 @@ Start by greeting the student warmly in Arabic.`;
     });
   }, [uiLang, gender]);
 
-  // Démarrer la reconnaissance vocale en continu
-  const startContinuousListening = useCallback(async () => {
-    if (!ExpoSpeechRecognitionModule || isListeningRef.current || isPaused) {
+  // Mettre à jour la ref speakText
+  useEffect(() => {
+    speakTextRef.current = speakText;
+  }, [speakText]);
+
+  // Arrêter l'enregistrement et transcrire
+  const stopListening = useCallback(async () => {
+    console.log('🎤 stopListening called');
+
+    if (listeningTimeoutRef.current) {
+      clearTimeout(listeningTimeoutRef.current);
+      listeningTimeoutRef.current = null;
+    }
+
+    if (!recordingRef.current) {
+      console.log('🎤 No recording to stop');
+      isListeningRef.current = false;
+      setIsListening(false);
       return;
     }
 
     try {
-      const status = await ExpoSpeechRecognitionModule.getPermissionsAsync();
-      if (!status.granted) {
-        const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-        if (!result.granted) {
-          setError('Permission micro refusée');
-          return;
-        }
+      console.log('🎤 Stopping recording...');
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+
+      isListeningRef.current = false;
+      setIsListening(false);
+
+      if (!uri) {
+        console.error('❌ No audio file recorded');
+        return;
       }
+
+      console.log('🎤 Recording stopped, URI:', uri);
+
+      // Transcrire l'audio
+      setIsTranscribing(true);
+      setUserTranscript('Transcription en cours...');
+
+      const transcribedText = await transcribeWithWhisper(uri);
+
+      setIsTranscribing(false);
+
+      if (transcribedText && transcribedText.trim()) {
+        console.log('📝 Transcription:', transcribedText);
+        setUserTranscript(transcribedText);
+
+        // Envoyer au tuteur
+        sendUserSpeechRef.current(transcribedText);
+      } else {
+        console.log('❌ Transcription empty or failed');
+        setUserTranscript('');
+      }
+    } catch (err) {
+      console.error('❌ Error stopping recording:', err);
+      isListeningRef.current = false;
+      setIsListening(false);
+      setIsTranscribing(false);
+    }
+  }, [transcribeWithWhisper]);
+
+  // Démarrer l'enregistrement audio
+  const startContinuousListening = useCallback(async () => {
+    console.log('🎤 startContinuousListening called');
+    console.log('🎤 State check:', {
+      isListening: isListeningRef.current,
+      isPaused: isPausedRef.current,
+      isConnected: isConnectedRef.current,
+      shouldRestart: shouldRestartListeningRef.current,
+    });
+
+    if (isListeningRef.current) {
+      console.log('🎤 Cannot start: already listening');
+      return;
+    }
+
+    if (isPausedRef.current) {
+      console.log('🎤 Cannot start: paused');
+      return;
+    }
+
+    if (!isConnectedRef.current) {
+      console.log('🎤 Cannot start: not connected');
+      return;
+    }
+
+    try {
+      console.log('🎤 Requesting audio permissions...');
+      const { status } = await Audio.requestPermissionsAsync();
+
+      if (status !== 'granted') {
+        console.error('❌ Audio permission denied');
+        setError('Permission micro refusée');
+        return;
+      }
+
+      console.log('🎤 Configuring audio mode...');
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      console.log('🎤 Creating recording...');
+      const recording = new Audio.Recording();
+      recordingRef.current = recording;
+
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
 
       isListeningRef.current = true;
       setIsListening(true);
       setUserTranscript('');
 
-      console.log('🎤 Starting continuous listening...');
+      console.log('🎤 Recording started successfully');
 
-      await ExpoSpeechRecognitionModule.start({
-        lang: 'ar-SA', // Toujours écouter en arabe pour le tuteur
-        interimResults: true,
-        continuous: true, // Mode continu
-      });
-    } catch (e) {
-      console.error('❌ Speech recognition error:', e);
+      // Arrêter automatiquement après 8 secondes pour permettre au tuteur de répondre
+      if (listeningTimeoutRef.current) {
+        clearTimeout(listeningTimeoutRef.current);
+      }
+
+      listeningTimeoutRef.current = setTimeout(async () => {
+        console.log('⏱️ Auto-stopping recording after timeout');
+        await stopListening();
+      }, 8000);
+
+    } catch (err) {
+      console.error('❌ Error starting recording:', err);
       isListeningRef.current = false;
       setIsListening(false);
+      setError('Erreur démarrage enregistrement');
     }
-  }, [isPaused]);
+  }, [stopListening]);
 
-  // Arrêter la reconnaissance vocale
-  const stopListening = useCallback(async () => {
-    if (!ExpoSpeechRecognitionModule) return;
+  // Mettre à jour la ref startContinuousListening
+  useEffect(() => {
+    startContinuousListeningRef.current = startContinuousListening;
+  }, [startContinuousListening]);
 
-    try {
-      await ExpoSpeechRecognitionModule.stop();
-    } catch (e) {
-      // Ignorer
+  // Envoyer ce que l'utilisateur a dit au WebSocket
+  const sendUserSpeech = useCallback((text: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !text.trim()) {
+      console.log('❌ Cannot send user speech: WebSocket not ready or empty text');
+      return;
     }
-    isListeningRef.current = false;
-    setIsListening(false);
+
+    console.log('📤 Sending user speech to tutor:', text);
+
+    // Ajouter le message utilisateur
+    const msgId = `user_${Date.now()}`;
+    if (!processedItemsRef.current.has(msgId)) {
+      processedItemsRef.current.add(msgId);
+      const userMsg: RealtimeMessage = {
+        id: msgId,
+        role: 'user',
+        text: text.trim(),
+        timestamp: Date.now(),
+      };
+      setMessages(prev => [...prev, userMsg]);
+    }
+
+    // Envoyer au WebSocket
+    wsRef.current.send(JSON.stringify({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: text.trim() }],
+      },
+    }));
+
+    // Demander une réponse
+    wsRef.current.send(JSON.stringify({
+      type: 'response.create',
+      response: { modalities: ['text'] },
+    }));
   }, []);
+
+  // Mettre à jour la ref sendUserSpeech
+  useEffect(() => {
+    sendUserSpeechRef.current = sendUserSpeech;
+  }, [sendUserSpeech]);
 
   // Gérer les événements Realtime
   const handleRealtimeEvent = useCallback((event: any) => {
@@ -250,14 +444,14 @@ Start by greeting the student warmly in Arabic.`;
             setMessages(prev => [...prev, msg]);
 
             // Lire le texte puis reprendre l'écoute automatiquement
-            speakText(responseText).then(() => {
+            speakTextRef.current(responseText).then(() => {
               // Attendre un petit moment puis relancer l'écoute
               setTimeout(() => {
-                if (shouldRestartListeningRef.current && !isPaused && isConnected) {
+                if (shouldRestartListeningRef.current && !isPausedRef.current && isConnectedRef.current) {
                   console.log('🎤 Auto-restarting listening after TTS...');
-                  startContinuousListening();
+                  startContinuousListeningRef.current();
                 }
-              }, 300);
+              }, 500);
             });
           }
 
@@ -271,109 +465,7 @@ Start by greeting the student warmly in Arabic.`;
         setError(event.error?.message || 'Erreur de connexion');
         break;
     }
-  }, [speakText, isPaused, startContinuousListening, isConnected]);
-
-  // Envoyer ce que l'utilisateur a dit au WebSocket
-  const sendUserSpeech = useCallback((text: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !text.trim()) {
-      return;
-    }
-
-    // Ajouter le message utilisateur
-    const msgId = `user_${Date.now()}`;
-    if (!processedItemsRef.current.has(msgId)) {
-      processedItemsRef.current.add(msgId);
-      const userMsg: RealtimeMessage = {
-        id: msgId,
-        role: 'user',
-        text: text.trim(),
-        timestamp: Date.now(),
-      };
-      setMessages(prev => [...prev, userMsg]);
-    }
-
-    // Envoyer au WebSocket
-    wsRef.current.send(JSON.stringify({
-      type: 'conversation.item.create',
-      item: {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: text.trim() }],
-      },
-    }));
-
-    // Demander une réponse
-    wsRef.current.send(JSON.stringify({
-      type: 'response.create',
-      response: { modalities: ['text'] },
-    }));
   }, []);
-
-  // Configurer les listeners de reconnaissance vocale
-  useEffect(() => {
-    if (!ExpoSpeechRecognitionModule || !addSpeechRecognitionListener) return;
-
-    let lastTranscript = '';
-
-    // Listener pour les résultats
-    const handleResult = (event: any) => {
-      if (event?.results?.[0]) {
-        const transcript = event.results[0].transcript;
-        setUserTranscript(transcript);
-        lastTranscript = transcript;
-
-        // Si c'est un résultat final, envoyer au tuteur
-        if (event.results[0].isFinal) {
-          console.log('🎤 Final transcript:', transcript);
-
-          // Arrêter l'écoute pendant que le tuteur répond
-          stopListening();
-          setUserTranscript('');
-
-          // Envoyer au tuteur
-          sendUserSpeech(transcript);
-        }
-      }
-    };
-
-    // Listener pour la fin
-    const handleEnd = () => {
-      console.log('🎤 Speech recognition ended');
-      isListeningRef.current = false;
-      setIsListening(false);
-
-      // Relancer si on a un transcript partiel non envoyé
-      if (lastTranscript && !isPaused) {
-        sendUserSpeech(lastTranscript);
-        lastTranscript = '';
-      }
-    };
-
-    // Listener pour les erreurs
-    const handleError = (event: any) => {
-      console.error('🎤 Speech error:', event);
-      isListeningRef.current = false;
-      setIsListening(false);
-
-      // Relancer automatiquement après une erreur (sauf si en pause)
-      if (shouldRestartListeningRef.current && !isPaused) {
-        setTimeout(() => {
-          startContinuousListening();
-        }, 1000);
-      }
-    };
-
-    // S'abonner aux événements avec la fonction importée
-    const unsubscribeResult = addSpeechRecognitionListener('result', handleResult);
-    const unsubscribeEnd = addSpeechRecognitionListener('end', handleEnd);
-    const unsubscribeError = addSpeechRecognitionListener('error', handleError);
-
-    return () => {
-      unsubscribeResult?.remove?.();
-      unsubscribeEnd?.remove?.();
-      unsubscribeError?.remove?.();
-    };
-  }, [stopListening, sendUserSpeech, isPaused, startContinuousListening]);
 
   // Connecter au tuteur
   const connect = useCallback(async () => {
@@ -395,6 +487,7 @@ Start by greeting the student warmly in Arabic.`;
       ws.onopen = () => {
         console.log('✅ WebSocket connected');
         setIsConnected(true);
+        isConnectedRef.current = true;
         shouldRestartListeningRef.current = true;
 
         // Configurer la session (mode texte uniquement)
@@ -410,7 +503,7 @@ Start by greeting the student warmly in Arabic.`;
         };
         ws.send(JSON.stringify(sessionConfig));
 
-        // Message de bienvenue puis démarrer l'écoute automatiquement
+        // Message de bienvenue - l'écoute démarre après le TTS
         setTimeout(() => {
           ws.send(JSON.stringify({
             type: 'response.create',
@@ -420,13 +513,6 @@ Start by greeting the student warmly in Arabic.`;
             },
           }));
         }, 500);
-
-        // Démarrer l'écoute automatiquement après connexion (léger délai pour le message de bienvenue)
-        setTimeout(() => {
-          if (shouldRestartListeningRef.current) {
-            startContinuousListening();
-          }
-        }, 2000);
       };
 
       ws.onmessage = (event) => {
@@ -442,6 +528,7 @@ Start by greeting the student warmly in Arabic.`;
       ws.onclose = () => {
         console.log('🔌 WebSocket closed');
         setIsConnected(false);
+        isConnectedRef.current = false;
         shouldRestartListeningRef.current = false;
         stopListening();
       };
@@ -449,8 +536,9 @@ Start by greeting the student warmly in Arabic.`;
       console.error('❌ Connection error:', err);
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
       setIsConnected(false);
+      isConnectedRef.current = false;
     }
-  }, [buildSystemInstructions, gender, handleRealtimeEvent, stopListening, startContinuousListening]);
+  }, [buildSystemInstructions, gender, handleRealtimeEvent, stopListening]);
 
   // Envoyer un message texte (fallback clavier)
   const sendTextMessage = useCallback((text: string) => {
@@ -486,17 +574,19 @@ Start by greeting the student warmly in Arabic.`;
     if (isPaused) {
       // Reprendre
       setIsPaused(false);
+      isPausedRef.current = false;
       shouldRestartListeningRef.current = true;
-      startContinuousListening();
+      startContinuousListeningRef.current();
     } else {
       // Mettre en pause
       setIsPaused(true);
+      isPausedRef.current = true;
       shouldRestartListeningRef.current = false;
       Speech.stop();
       setIsSpeaking(false);
       await stopListening();
     }
-  }, [isPaused, startContinuousListening, stopListening]);
+  }, [isPaused, stopListening]);
 
   // Interrompre le tuteur
   const interrupt = useCallback(() => {
@@ -511,16 +601,18 @@ Start by greeting the student warmly in Arabic.`;
     setTranscript('');
 
     // Reprendre l'écoute
-    if (!isPaused) {
-      startContinuousListening();
+    if (!isPausedRef.current && isConnectedRef.current) {
+      startContinuousListeningRef.current();
     }
-  }, [isPaused, startContinuousListening]);
+  }, []);
 
   // Déconnecter
   const disconnect = useCallback(async () => {
     console.log('🔌 Disconnecting...');
 
     shouldRestartListeningRef.current = false;
+    isConnectedRef.current = false;
+    isPausedRef.current = false;
     await stopListening();
     Speech.stop();
 
@@ -544,9 +636,17 @@ Start by greeting the student warmly in Arabic.`;
     return () => {
       shouldRestartListeningRef.current = false;
       Speech.stop();
-      if (ExpoSpeechRecognitionModule) {
-        ExpoSpeechRecognitionModule.stop().catch(() => {});
+
+      // Arrêter l'enregistrement si en cours
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
+        recordingRef.current = null;
       }
+
+      if (listeningTimeoutRef.current) {
+        clearTimeout(listeningTimeoutRef.current);
+      }
+
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -565,6 +665,7 @@ Start by greeting the student warmly in Arabic.`;
   return {
     isConnected,
     isListening,
+    isTranscribing,
     isSpeaking,
     isPaused,
     transcript,
