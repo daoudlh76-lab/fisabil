@@ -69,6 +69,7 @@ export default function RevisionScreen() {
   const { t, language } = useLanguage();
   const [tab, setTab] = useState<'dictation' | 'vocab'>('dictation');
   const [currentDictIdx, setCurrentDictIdx] = useState(0);
+  const [showAnswer, setShowAnswer] = useState(false);
   const [flipAnim] = useState(new Animated.Value(0));
   const [dictationItems, setDictationItems] = useState<DictationItem[]>(SAMPLE_DICTATIONS);
   const [loadingDictations, setLoadingDictations] = useState(true);
@@ -378,48 +379,9 @@ export default function RevisionScreen() {
     }
   };
 
-  const handleSubmit = () => {
-    if (!currentText.trim()) {
-      Alert.alert(t('playlist.error'), t('revision.writeHere'));
-      return;
-    }
-
-    if (!current) return;
-
-    const result = submitDictation(current.id, current.text);
-
-    if (result.isCorrect) {
-      Alert.alert(t('revision.perfect'), t('revision.dictationCorrect'), [
-        {
-          text: t('revision.next'),
-          onPress: () => {
-            if (currentDictIdx < dictationItems.length - 1) {
-              setCurrentDictIdx(currentDictIdx + 1);
-              setCurrentText('');
-            } else {
-              Alert.alert(t('revision.finished'), t('revision.allDictationsComplete'));
-              setCurrentDictIdx(0);
-              loadDictations(); // Recharger de nouvelles dictées
-            }
-          },
-        },
-      ]);
-    } else {
-      const errorMsg = result.errors
-        .slice(0, 3)
-        .map((e) => `${t('revision.position')} ${e.position}: "${e.expected}" ${t('revision.vs')} "${e.got}"`)
-        .join('\n');
-
-      Alert.alert(
-        `❌ ${result.errors.length} ${t('revision.errors')}`,
-        `${errorMsg}\n\n${t('revision.tryAgain')}!`
-      );
-    }
-  };
-
   const handleRefreshDictations = () => {
     setCurrentDictIdx(0);
-    setCurrentText('');
+    setShowAnswer(false);
     loadDictations();
   };
 
@@ -488,9 +450,17 @@ export default function RevisionScreen() {
                 </Pressable>
               </View>
 
-              <Text style={styles.instruction}>
-                {t('revision.listenAndWrite')}
-              </Text>
+              <View style={styles.instructionsContainer}>
+                <Text style={styles.instruction}>
+                  📝 {t('revision.listenCarefully')}
+                </Text>
+                <Text style={styles.instruction}>
+                  ✍️ {t('revision.writeOnPaper')}
+                </Text>
+                <Text style={styles.instruction}>
+                  👁️ {t('revision.checkYourAnswer')}
+                </Text>
+              </View>
 
               {/* Bouton principal de lecture */}
               <Pressable
@@ -564,38 +534,58 @@ export default function RevisionScreen() {
                 </View>
               )}
 
-              <TextInput
-                style={styles.input}
-                placeholder={t('revision.writeHere')}
-                value={currentText}
-                onChangeText={setCurrentText}
-                placeholderTextColor="#999"
-                multiline
-                textAlign="right"
-              />
-
               <View style={styles.buttonRow}>
-                <Pressable style={styles.submitButton} onPress={handleSubmit}>
-                  <Text style={styles.submitButtonText}>{t('revision.check')}</Text>
-                </Pressable>
-
                 <Pressable
-                  style={styles.skipButton}
-                  onPress={() => {
-                    setCurrentText('');
-                    Alert.alert(t('revision.answer'), `${t('revision.phraseWas')}\n\n${current.text}`);
-                  }}
+                  style={styles.showAnswerButton}
+                  onPress={() => setShowAnswer(!showAnswer)}
                 >
-                  <Text style={styles.skipButtonText}>{t('revision.showAnswer')}</Text>
+                  <Text style={styles.showAnswerButtonText}>
+                    {showAnswer ? '🔒 ' + t('revision.hideAnswer') : '👁️ ' + t('revision.showAnswer')}
+                  </Text>
                 </Pressable>
               </View>
+
+              {showAnswer && (
+                <View style={styles.answerCard}>
+                  <View style={styles.answerHeader}>
+                    <Text style={styles.answerHeaderText}>✅ {t('revision.correctAnswer')}</Text>
+                  </View>
+                  <Text style={styles.answerText}>{current.text}</Text>
+
+                  <Pressable
+                    style={styles.nextButton}
+                    onPress={() => {
+                      if (currentDictIdx < dictationItems.length - 1) {
+                        setCurrentDictIdx(currentDictIdx + 1);
+                        setShowAnswer(false);
+                      } else {
+                        Alert.alert(
+                          t('revision.finished'),
+                          t('revision.allDictationsComplete'),
+                          [
+                            {
+                              text: 'OK',
+                              onPress: () => {
+                                setCurrentDictIdx(0);
+                                setShowAnswer(false);
+                                loadDictations();
+                              },
+                            },
+                          ]
+                        );
+                      }
+                    }}
+                  >
+                    <Text style={styles.nextButtonText}>
+                      {currentDictIdx < dictationItems.length - 1 ? t('revision.next') : '🔄'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
 
               <View style={styles.stats}>
                 <Text style={styles.statsText}>
                   {currentDictIdx + 1} / {dictationItems.length}
-                </Text>
-                <Text style={styles.statsText}>
-                  ✅ {dictations.filter((d) => d.isCorrect).length} {t('revision.correctCount')}
                 </Text>
               </View>
             </>
@@ -731,7 +721,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     paddingBottom: 40,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'transparent',
   },
   header: {
     fontSize: 24,
@@ -784,11 +774,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: BLUE,
   },
-  instruction: {
-    fontSize: 16,
-    color: '#666',
+  instructionsContainer: {
+    backgroundColor: '#E3F2FD',
+    padding: 16,
+    borderRadius: 8,
     marginBottom: 16,
+    gap: 8,
+  },
+  instruction: {
+    fontSize: 15,
+    color: '#1976d2',
     textAlign: 'center',
+    fontWeight: '500',
   },
   speakButton: {
     backgroundColor: GREEN,
@@ -806,42 +803,57 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 16,
-    minHeight: 80,
-    textAlignVertical: 'top',
-    backgroundColor: '#fafafa',
-  },
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
   },
-  submitButton: {
-    flex: 1,
-    backgroundColor: BLUE,
-    paddingVertical: 12,
+  showAnswerButton: {
+    backgroundColor: GREEN,
+    paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
+    marginHorizontal: 20,
   },
-  submitButtonText: {
+  showAnswerButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
-  skipButton: {
-    flex: 1,
-    backgroundColor: '#f0f0f0',
+  answerCard: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  answerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  answerHeaderText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  answerText: {
+    fontSize: 20,
+    textAlign: 'right',
+    color: '#1B5E20',
+    lineHeight: 32,
+    fontWeight: '500',
+    marginBottom: 16,
+  },
+  nextButton: {
+    backgroundColor: GREEN,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
+    marginTop: 8,
   },
-  skipButtonText: {
-    color: '#333',
+  nextButtonText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
