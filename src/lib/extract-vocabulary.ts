@@ -1,10 +1,14 @@
 /**
  * Extraction de vocabulaire arabe via OpenAI GPT-4
  * Utilisé côté client pour extraire vocabulaire, verbes et particules d'un texte arabe
+ * Gère les textes longs en les divisant en segments
  */
 
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
+// Nombre maximum de mots par segment pour éviter les réponses tronquées
+const MAX_WORDS_PER_SEGMENT = 150;
 
 // Mapping des langues
 const languageNames: Record<string, string> = {
@@ -61,30 +65,73 @@ export function isVocabExtractionConfigured(): boolean {
 }
 
 /**
- * Extrait le vocabulaire, verbes et particules d'un texte arabe
- * @param arabicText - Le texte arabe à analyser
- * @param uiLang - La langue pour les traductions (fr, en, de, es, ru)
- * @param title - Le titre du texte (optionnel)
+ * Divise un texte en segments de taille maximale
  */
-export async function extractVocabulary(
-  arabicText: string,
-  uiLang: string = 'fr',
-  title?: string
-): Promise<ExtractVocabResult> {
-  // Vérifier la clé API
-  if (!OPENAI_API_KEY) {
-    console.error('❌ OpenAI API key not configured for vocabulary extraction');
-    return {
-      meta: { ui_lang: uiLang, source: 'error', model: 'none' },
-      vocabulaire: [],
-      verbes: [],
-      particules: [],
-      error: 'API_KEY_MISSING',
-    };
+function splitTextIntoSegments(text: string, maxWords: number): string[] {
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  const segments: string[] = [];
+
+  for (let i = 0; i < words.length; i += maxWords) {
+    segments.push(words.slice(i, i + maxWords).join(' '));
   }
 
-  const targetLanguage = languageNames[uiLang] || 'French';
+  return segments;
+}
 
+/**
+ * Fusionne les résultats de plusieurs extractions en évitant les doublons
+ */
+function mergeResults(results: ExtractVocabResult[]): ExtractVocabResult {
+  const seenVocab = new Set<string>();
+  const seenVerbs = new Set<string>();
+  const seenParticles = new Set<string>();
+
+  const merged: ExtractVocabResult = {
+    meta: results[0]?.meta || { ui_lang: 'fr', source: 'openai-client', model: 'gpt-4o' },
+    vocabulaire: [],
+    verbes: [],
+    particules: [],
+  };
+
+  for (const result of results) {
+    for (const item of result.vocabulaire || []) {
+      const key = item.mot_ar?.replace(/[\u064B-\u0652]/g, '') || ''; // Normaliser sans tashkeel pour comparaison
+      if (!seenVocab.has(key) && item.mot_ar) {
+        seenVocab.add(key);
+        merged.vocabulaire.push(item);
+      }
+    }
+
+    for (const item of result.verbes || []) {
+      const key = item.passe_3ms?.replace(/[\u064B-\u0652]/g, '') || item.verbe_ar || '';
+      if (!seenVerbs.has(key) && item.verbe_ar) {
+        seenVerbs.add(key);
+        merged.verbes.push(item);
+      }
+    }
+
+    for (const item of result.particules || []) {
+      const key = item.particule_ar?.replace(/[\u064B-\u0652]/g, '') || '';
+      if (!seenParticles.has(key) && item.particule_ar) {
+        seenParticles.add(key);
+        merged.particules.push(item);
+      }
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Extrait le vocabulaire d'un segment de texte (fonction interne)
+ */
+async function extractVocabularySegment(
+  arabicText: string,
+  uiLang: string,
+  targetLanguage: string,
+  segmentIndex: number,
+  totalSegments: number
+): Promise<ExtractVocabResult> {
   const systemPrompt = `You are an expert Arabic linguist and grammarian. Extract EVERY SINGLE WORD from the text with FULL TASHKEEL.
 
 ## CRITICAL: ADD VOWELS IF MISSING
@@ -121,11 +168,25 @@ Examples:
 - "كِتَابٌ" (singular) → singulier: "كِتَابٌ", pluriel: "كُتُبٌ"
 - "رَجُلٌ" (singular) → singulier: "رَجُلٌ", pluriel: "رِجَالٌ"
 
+## CONTRAIRE (ANTONYME) - REQUIRED:
+For EVERY word (noun, adjective) in vocabulaire, you MUST provide:
+- **contraire**: The opposite/antonym WITH FULL TASHKEEL
+- If no direct opposite exists, provide null
+Examples:
+- "كَبِيرٌ" (big) → contraire: "صَغِيرٌ"
+- "جَمِيلٌ" (beautiful) → contraire: "قَبِيحٌ"
+- "حَارٌّ" (hot) → contraire: "بَارِدٌ"
+- "نَهَارٌ" (day) → contraire: "لَيْلٌ"
+- "حَيَاةٌ" (life) → contraire: "مَوْتٌ"
+- "سَعِيدٌ" (happy) → contraire: "حَزِينٌ"
+- "خَيْرٌ" (good) → contraire: "شَرٌّ"
+
 ## RULES:
 - EVERY Arabic word in output MUST have FULL TASHKEEL
 - NO duplicates (each unique word once)
 - Include EVERY word - proper nouns, numbers, everything
 - ALWAYS fill singulier AND pluriel for nouns (never leave both as null)
+- ALWAYS provide contraire (opposite) when it exists, otherwise null
 - Return ONLY valid JSON, no markdown
 
 ## JSON FORMAT:
@@ -135,19 +196,11 @@ Examples:
   "particules": [{"particule_ar":"particle WITH tashkeel", "type":"type", "traduction":"${targetLanguage} meaning", "exemple":"example sentence or null"}]
 }`;
 
-  // Compter approximativement les mots
   const wordCount = arabicText.split(/\s+/).filter(w => w.length > 0).length;
 
-  const userPrompt = `Extract EVERY SINGLE WORD from this Arabic text with FULL TASHKEEL (vowels).
+  const userPrompt = `Extract EVERY SINGLE WORD from this Arabic text (segment ${segmentIndex + 1}/${totalSegments}) with FULL TASHKEEL.
 
 CRITICAL: If a word has no diacritics, ADD THEM according to Arabic grammar.
-
-Steps for each word:
-1. Read the word
-2. If it has no tashkeel → ADD full tashkeel based on grammar
-3. If compound (وَ، فَ، بِ، لِ، الْ prefix or ـهُ suffix) → decompose it
-4. Add base word (WITH tashkeel) to vocabulaire/verbes
-5. Add particles (WITH tashkeel) to particules
 
 TEXT:
 """
@@ -155,27 +208,11 @@ ${arabicText}
 """
 
 IMPORTANT:
-- Text has ~${wordCount} words - extract ALL of them
+- This segment has ~${wordCount} words - extract ALL of them
 - EVERY Arabic word in output MUST have FULL TASHKEEL
-- Example: "كتاب" without vowels → output as "كِتَابٌ" with vowels
-Return complete JSON.`;
+- Return complete JSON.`;
 
   try {
-    console.log('📡 Calling OpenAI GPT-4 for vocabulary extraction...');
-    console.log('📝 Input text length:', arabicText?.length || 0);
-    console.log('📝 First 100 chars:', arabicText?.substring(0, 100) || 'EMPTY');
-    
-    if (!arabicText || arabicText.trim().length === 0) {
-      console.error('❌ Empty arabic text provided');
-      return {
-        meta: { ui_lang: uiLang, source: 'error', model: 'none' },
-        vocabulaire: [],
-        verbes: [],
-        particules: [],
-        error: 'EMPTY_TEXT',
-      };
-    }
-
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
@@ -195,7 +232,7 @@ Return complete JSON.`;
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('❌ OpenAI API error:', errorData);
+      console.error(`❌ OpenAI API error for segment ${segmentIndex + 1}:`, errorData);
       return {
         meta: { ui_lang: uiLang, source: 'error', model: 'gpt-4o' },
         vocabulaire: [],
@@ -206,22 +243,14 @@ Return complete JSON.`;
     }
 
     const data = await response.json();
-    
-    console.log('📝 API Response keys:', Object.keys(data));
-    console.log('📝 Choices count:', data.choices?.length);
-    console.log('📝 Finish reason:', data.choices?.[0]?.finish_reason);
-    
+    const finishReason = data.choices?.[0]?.finish_reason;
+
+    console.log(`📝 Segment ${segmentIndex + 1}/${totalSegments} - Finish reason:`, finishReason);
+
     let content = data.choices?.[0]?.message?.content?.trim() || '';
 
-    console.log('✅ OpenAI response received, parsing JSON...');
-    console.log('📝 Raw content length:', content.length);
-    console.log('📝 Content starts with:', content.substring(0, 100));
-    console.log('📝 Content ends with:', content.substring(Math.max(0, content.length - 100)));
-    
-    // Si content est vide, retourner une erreur claire
     if (!content || content.length === 0) {
-      console.error('❌ OpenAI returned empty content');
-      console.error('📝 Full API response:', JSON.stringify(data, null, 2));
+      console.error(`❌ OpenAI returned empty content for segment ${segmentIndex + 1}`);
       return {
         meta: { ui_lang: uiLang, source: 'error', model: 'gpt-4o' },
         vocabulaire: [],
@@ -242,41 +271,36 @@ Return complete JSON.`;
       content = content.slice(0, -3);
     }
     content = content.trim();
-    
-    console.log('📝 After cleanup - ends with:', content.substring(Math.max(0, content.length - 50)));
 
-    // Vérifier si le JSON semble complet (doit se terminer par })
+    // Réparer le JSON si tronqué
     if (!content.endsWith('}')) {
-      console.warn('⚠️ JSON truncated! Trying to repair...');
-      
-      // Compter les accolades pour voir où on en est
+      console.warn(`⚠️ Segment ${segmentIndex + 1} JSON truncated, repairing...`);
+
       const openBraces = (content.match(/{/g) || []).length;
       const closeBraces = (content.match(/}/g) || []).length;
-      console.log('📝 Open braces:', openBraces, 'Close braces:', closeBraces);
-      
-      // Ajouter les accolades manquantes
-      const missing = openBraces - closeBraces;
-      if (missing > 0) {
-        // Trouver la dernière propriété valide et fermer proprement
-        const lastValidEnd = content.lastIndexOf('}');
-        if (lastValidEnd > 0) {
-          content = content.substring(0, lastValidEnd + 1);
-          // Ajouter les fermetures manquantes pour les tableaux et objets
-          content += ']}'.repeat(Math.min(missing, 3));
+      const openBrackets = (content.match(/\[/g) || []).length;
+      const closeBrackets = (content.match(/]/g) || []).length;
+
+      // Fermer les tableaux et objets ouverts
+      const missingBrackets = openBrackets - closeBrackets;
+      const missingBraces = openBraces - closeBraces;
+
+      if (missingBrackets > 0 || missingBraces > 0) {
+        // Trouver un point de coupure propre (après un objet complet)
+        const lastCompleteObject = content.lastIndexOf('},');
+        if (lastCompleteObject > 0) {
+          content = content.substring(0, lastCompleteObject + 1);
         }
+
+        // Ajouter les fermetures manquantes
+        content += ']'.repeat(Math.max(0, missingBrackets));
+        content += '}'.repeat(Math.max(0, missingBraces));
       }
     }
 
-    // Parser le JSON avec gestion d'erreur améliorée
-    let extractedData;
-    try {
-      extractedData = JSON.parse(content);
-    } catch (parseErr) {
-      console.error('❌ JSON parse failed, raw content:', content.substring(0, 500));
-      throw parseErr;
-    }
+    const extractedData = JSON.parse(content);
 
-    console.log('✅ Vocabulary extraction successful:', {
+    console.log(`✅ Segment ${segmentIndex + 1}/${totalSegments} extraction:`, {
       vocab: extractedData.vocabulaire?.length || 0,
       verbs: extractedData.verbes?.length || 0,
       particles: extractedData.particules?.length || 0,
@@ -285,7 +309,6 @@ Return complete JSON.`;
     return {
       meta: {
         ui_lang: uiLang,
-        title,
         source: 'openai-client',
         model: 'gpt-4o',
       },
@@ -294,7 +317,7 @@ Return complete JSON.`;
       particules: extractedData.particules || [],
     };
   } catch (error) {
-    console.error('❌ Vocabulary extraction error:', error);
+    console.error(`❌ Segment ${segmentIndex + 1} extraction error:`, error);
     return {
       meta: { ui_lang: uiLang, source: 'error', model: 'gpt-4o' },
       vocabulaire: [],
@@ -303,6 +326,89 @@ Return complete JSON.`;
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
+}
+
+/**
+ * Extrait le vocabulaire, verbes et particules d'un texte arabe
+ * Divise automatiquement les textes longs en segments pour une extraction complète
+ * @param arabicText - Le texte arabe à analyser
+ * @param uiLang - La langue pour les traductions (fr, en, de, es, ru)
+ * @param title - Le titre du texte (optionnel)
+ */
+export async function extractVocabulary(
+  arabicText: string,
+  uiLang: string = 'fr',
+  title?: string
+): Promise<ExtractVocabResult> {
+  // Vérifier la clé API
+  if (!OPENAI_API_KEY) {
+    console.error('❌ OpenAI API key not configured for vocabulary extraction');
+    return {
+      meta: { ui_lang: uiLang, source: 'error', model: 'none' },
+      vocabulaire: [],
+      verbes: [],
+      particules: [],
+      error: 'API_KEY_MISSING',
+    };
+  }
+
+  if (!arabicText || arabicText.trim().length === 0) {
+    console.error('❌ Empty arabic text provided');
+    return {
+      meta: { ui_lang: uiLang, source: 'error', model: 'none' },
+      vocabulaire: [],
+      verbes: [],
+      particules: [],
+      error: 'EMPTY_TEXT',
+    };
+  }
+
+  const targetLanguage = languageNames[uiLang] || 'French';
+  const wordCount = arabicText.split(/\s+/).filter(w => w.length > 0).length;
+
+  console.log('📡 Starting vocabulary extraction...');
+  console.log('📝 Total words:', wordCount);
+
+  // Diviser en segments si le texte est trop long
+  if (wordCount > MAX_WORDS_PER_SEGMENT) {
+    const segments = splitTextIntoSegments(arabicText, MAX_WORDS_PER_SEGMENT);
+    console.log(`📝 Text divided into ${segments.length} segments`);
+
+    const results: ExtractVocabResult[] = [];
+
+    for (let i = 0; i < segments.length; i++) {
+      console.log(`📡 Processing segment ${i + 1}/${segments.length}...`);
+      const result = await extractVocabularySegment(
+        segments[i],
+        uiLang,
+        targetLanguage,
+        i,
+        segments.length
+      );
+      results.push(result);
+
+      // Petite pause entre les segments pour éviter le rate limiting
+      if (i < segments.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    const merged = mergeResults(results);
+    merged.meta.title = title;
+
+    console.log('✅ All segments merged:', {
+      vocab: merged.vocabulaire.length,
+      verbs: merged.verbes.length,
+      particles: merged.particules.length,
+    });
+
+    return merged;
+  }
+
+  // Texte court: extraction directe
+  const result = await extractVocabularySegment(arabicText, uiLang, targetLanguage, 0, 1);
+  result.meta.title = title;
+  return result;
 }
 
 /**

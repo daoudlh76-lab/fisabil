@@ -18,8 +18,9 @@ export const useTextToSpeech = () => {
         await Speech.stop();
         setIsSpeaking(true);
 
-        // Ajuster le pitch selon le genre (voix plus grave pour homme, plus aiguë pour femme)
-        const pitch = gender === 'female' ? 1.15 : 0.85;
+        // Pitch très différencié pour une différence très audible: homme=grave (0.5), femme=aigu (1.5)
+        const pitch = gender === 'female' ? 1.5 : 0.5;
+        console.log(`🔊 Lecture avec voix ${gender === 'female' ? 'féminine' : 'masculine'} (pitch: ${pitch}, gender préféré: ${gender})`);
 
         await Speech.speak(text, {
           language,

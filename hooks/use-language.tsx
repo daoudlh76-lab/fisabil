@@ -6,7 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 type LanguageContextType = {
   language: Language;
   setLanguage: (lang: Language) => Promise<void>;
-  t: (path: string) => string;
+  t: (path: string, variables?: Record<string, string | number>) => string;
   availableLanguages: Language[];
   getLanguageName: (lang: Language) => string;
 };
@@ -49,7 +49,7 @@ export function LanguageProvider(props: { children: ReactNode }) {
     return LANGUAGE_NAMES[lang] || lang;
   };
 
-  const t = (path: string): string => {
+  const t = (path: string, variables?: Record<string, string | number>): string => {
     const keys = path.split(".");
     let value: any = translations[language];
 
@@ -61,7 +61,18 @@ export function LanguageProvider(props: { children: ReactNode }) {
       }
     }
 
-    return typeof value === "string" ? value : path;
+    if (typeof value !== "string") {
+      return path;
+    }
+
+    // Remplacer les variables {{variable}} par leurs valeurs
+    if (variables) {
+      return value.replace(/\{\{(\w+)\}\}/g, (match, varName) => {
+        return variables[varName] !== undefined ? String(variables[varName]) : match;
+      });
+    }
+
+    return value;
   };
 
   if (!isReady) {

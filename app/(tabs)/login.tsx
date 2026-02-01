@@ -1,4 +1,4 @@
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useState, useCallback } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { supabase } from "@/src/lib/supabase";
@@ -7,7 +7,8 @@ import { useVoicePreference, Gender } from "@/contexts/voice-preference-context"
 
 export default function LoginScreen() {
   const { t } = useLanguage();
-  const { setGender } = useVoicePreference();
+  const { setGender, gender } = useVoicePreference();
+  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +23,7 @@ export default function LoginScreen() {
       setEmail("");
       setPassword("");
       setLoading(false);
+      setSelectedGender("male"); // Réinitialiser aussi le genre sélectionné
     }, [])
   );
 
@@ -75,10 +77,12 @@ export default function LoginScreen() {
 
       // Sauvegarder la préférence de genre pour la voix
       await setGender(selectedGender);
+      console.log('✅ Préférence de genre sauvegardée:', selectedGender);
 
-      Alert.alert(t('auth.success'), t('auth.accountCreated'));
-      setIsSignUp(false);
-      setPassword("");
+      setLoading(false);
+
+      // Rediriger vers l'écran de vérification email
+      router.replace('/(tabs)/email-verification');
     } catch (e: any) {
       Alert.alert(t('auth.error'), e?.message ?? t('auth.error'));
       setLoading(false);
@@ -177,7 +181,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: "#F7F8FA", justifyContent: "center" },
+  container: { flex: 1, padding: 24, backgroundColor: "transparent", justifyContent: "center" },
   logo: { width: 140, height: 140, alignSelf: "center", marginBottom: 18 },
   title: { fontSize: 26, fontWeight: "800", textAlign: "center", marginBottom: 18, color: "#2F6B3D" },
   input: { borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, marginTop: 10, backgroundColor: "#FFF" },

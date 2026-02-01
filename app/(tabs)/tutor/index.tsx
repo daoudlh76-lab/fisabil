@@ -7,12 +7,12 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { useRealtimeTutor } from "@/hooks/use-realtime-tutor";
 import { useLanguage } from "@/hooks/use-language";
+import AnimatedLogoButton from "@/components/AnimatedLogoButton";
 
 export default function TutorPage() {
   const { language, t } = useLanguage();
@@ -124,7 +124,6 @@ export default function TutorPage() {
       >
         {!isConnected && messages.length === 0 && (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateEmoji}>{"🎙️"}</Text>
             <Text style={styles.emptyStateTitle}>
               {t("realtimeTutor.welcomeTitle")}
             </Text>
@@ -134,20 +133,12 @@ export default function TutorPage() {
             <Text style={styles.emptyStateHint}>
               {t("realtimeTutor.pressToStart")}
             </Text>
-            <Pressable
-              style={[styles.startButton, connecting && styles.startButtonConnecting]}
+            <AnimatedLogoButton
               onPress={handleConnect}
               disabled={connecting}
-            >
-              {connecting ? (
-                <ActivityIndicator size="large" color="#fff" />
-              ) : (
-                <>
-                  <Text style={styles.startButtonIcon}>{"🎤"}</Text>
-                  <Text style={styles.startButtonText}>{t("realtimeTutor.startConversation") || "Démarrer"}</Text>
-                </>
-              )}
-            </Pressable>
+              connecting={connecting}
+              size={180}
+            />
           </View>
         )}
 
@@ -237,9 +228,6 @@ export default function TutorPage() {
             }}
             disabled={isSpeaking || isTranscribing}
           >
-            <Text style={styles.mainMicButtonIcon}>
-              {isPaused ? "▶️" : isTranscribing ? "📝" : isListening ? "⏹️" : "🎙️"}
-            </Text>
             <Text style={styles.mainMicButtonText}>
               {isPaused ? "Reprendre" : isTranscribing ? "Transcription..." : isListening ? "Arrêter" : "Parler"}
             </Text>
@@ -286,7 +274,7 @@ export default function TutorPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "transparent",
   },
   infoBar: {
     flexDirection: "row",
@@ -294,7 +282,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: "#E8F5E9",
+    backgroundColor: "transparent",
   },
   infoText: {
     fontSize: 12,
@@ -521,7 +509,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "transparent",
   },
   disconnectButton: {
     paddingHorizontal: 16,

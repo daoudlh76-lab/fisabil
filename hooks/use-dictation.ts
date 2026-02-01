@@ -70,13 +70,14 @@ export const useDictation = () => {
     currentIndexRef.current = index;
     setCurrentSegmentIndex(index);
 
-    // Ajuster le pitch selon le genre (voix plus grave pour homme, plus aiguë pour femme)
-    const pitch = genderRef.current === 'female' ? 1.15 : 0.85;
+    // Pitch différencié mais naturel: homme (0.85-0.9), femme (1.1-1.15)
+    const pitch = genderRef.current === 'female' ? 1.12 : 0.88;
 
     Speech.speak(segment, {
       language: 'ar-SA',
       rate: speedRef.current,
       pitch: pitch,
+      volume: 1.0, // Volume maximum pour meilleure audibilité
       onDone: () => {
         if (isPlayingRef.current) {
           // Passer au segment suivant

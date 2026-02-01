@@ -8,7 +8,6 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
@@ -61,14 +60,11 @@ export default function DictationScreen() {
   const [loading, setLoading] = useState(true);
   const [dictationItems, setDictationItems] = useState<DictationItem[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [showAnswer, setShowAnswer] = useState(false);
   const { t } = useLanguage();
   const {
     isSpeaking,
-    currentText,
-    setCurrentText,
     speakSentence,
-    submitDictation,
-    dictations,
   } = useDictation();
 
   // Charger les textes depuis la bibliothèque
@@ -207,48 +203,31 @@ export default function DictationScreen() {
     }
   };
 
-  const handleSubmit = () => {
-    if (!currentText.trim()) {
-      Alert.alert(t('playlist.error'), t('revision.writeHere'));
-      return;
-    }
+  const handleShowAnswer = () => {
+    setShowAnswer(true);
+  };
 
-    if (!current) return;
-
-    const result = submitDictation(current.id, current.text);
-
-    if (result.isCorrect) {
-      Alert.alert(t('revision.perfect'), t('revision.dictationCorrect'), [
+  const handleNext = () => {
+    if (currentIdx < dictationItems.length - 1) {
+      setCurrentIdx(currentIdx + 1);
+      setShowAnswer(false);
+    } else {
+      Alert.alert(t('revision.finished'), t('revision.allDictationsComplete'), [
         {
-          text: t('revision.next'),
+          text: 'OK',
           onPress: () => {
-            if (currentIdx < dictationItems.length - 1) {
-              setCurrentIdx(currentIdx + 1);
-              setCurrentText('');
-            } else {
-              Alert.alert(t('revision.finished'), t('revision.allDictationsComplete'));
-              setCurrentIdx(0);
-              loadDictations(); // Recharger de nouvelles dictées
-            }
+            setCurrentIdx(0);
+            setShowAnswer(false);
+            loadDictations();
           },
         },
       ]);
-    } else {
-      const errorMsg = result.errors
-        .slice(0, 3)
-        .map((e) => `${t('revision.position')} ${e.position}: "${e.expected}" ${t('revision.vs')} "${e.got}"`)
-        .join('\n');
-
-      Alert.alert(
-        `❌ ${result.errors.length} ${t('revision.errors')}`,
-        `${errorMsg}\n\n${t('revision.tryAgain')}!`
-      );
     }
   };
 
   const handleRefresh = () => {
     setCurrentIdx(0);
-    setCurrentText('');
+    setShowAnswer(false);
     loadDictations();
   };
 
@@ -295,9 +274,15 @@ export default function DictationScreen() {
           </Text>
         </View>
 
-        <Text style={styles.instruction}>
-          {t('revision.listenAndWrite')}
-        </Text>
+        <View style={styles.instructionBox}>
+          <Text style={styles.instructionIcon}>📝</Text>
+          <Text style={styles.instruction}>
+            Écoutez la dictée et écrivez-la sur une feuille de papier
+          </Text>
+          <Text style={styles.subInstruction}>
+            💡 Astuce : Vous pouvez scanner votre feuille pour la corriger plus tard
+          </Text>
+        </View>
 
         <TouchableOpacity
           style={[styles.speakButton, isSpeaking && styles.speaking]}
@@ -309,38 +294,36 @@ export default function DictationScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TextInput
-          style={styles.input}
-          placeholder={t('revision.writeHere')}
-          value={currentText}
-          onChangeText={setCurrentText}
-          placeholderTextColor="#999"
-          multiline
-          textAlign="right"
-        />
+        {/* Réponse affichée si demandée */}
+        {showAnswer && (
+          <View style={styles.answerBox}>
+            <Text style={styles.answerLabel}>✅ Réponse correcte :</Text>
+            <Text style={styles.answerText}>{current?.text}</Text>
+            <Text style={styles.answerHint}>
+              📸 Comparez avec votre feuille ou scannez-la pour vérification
+            </Text>
+          </View>
+        )}
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-            <Text style={styles.submitButtonText}>✓ {t('revision.check')}</Text>
+          <TouchableOpacity
+            style={[styles.showAnswerButton, showAnswer && styles.showAnswerButtonDisabled]}
+            onPress={handleShowAnswer}
+            disabled={showAnswer}
+          >
+            <Text style={styles.showAnswerButtonText}>
+              {showAnswer ? '✓ Réponse affichée' : '👁 Voir la réponse'}
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={() => {
-              setCurrentText('');
-              Alert.alert(t('revision.answer'), `${t('revision.phraseWas')}\n\n${current?.text}`);
-            }}
-          >
-            <Text style={styles.skipButtonText}>👁 {t('revision.showAnswer')}</Text>
+          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+            <Text style={styles.nextButtonText}>➡️ Suivant</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.stats}>
           <Text style={styles.statsText}>
             📖 {currentIdx + 1} / {dictationItems.length}
-          </Text>
-          <Text style={styles.statsText}>
-            ✅ {dictations.filter((d) => d.isCorrect).length} {t('revision.correctCount')}
           </Text>
         </View>
       </View>
@@ -450,11 +433,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  instructionBox: {
+    backgroundColor: '#E3F2FD',
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2196F3',
+  },
+  instructionIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
   instruction: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1976D2',
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  subInstruction: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   speakButton: {
     backgroundColor: '#4CAF50',
@@ -472,44 +475,65 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 18,
+  answerBox: {
+    backgroundColor: '#E8F5E9',
+    padding: 20,
+    borderRadius: 12,
     marginBottom: 16,
-    minHeight: 120,
-    textAlignVertical: 'top',
-    backgroundColor: '#fafafa',
-    writingDirection: 'rtl',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  answerLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 12,
+  },
+  answerText: {
+    fontSize: 20,
+    color: '#1B5E20',
+    textAlign: 'right',
+    lineHeight: 32,
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  answerHint: {
+    fontSize: 13,
+    color: '#558B2F',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 8,
   },
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: 16,
   },
-  submitButton: {
+  showAnswerButton: {
     flex: 1,
     backgroundColor: '#1976d2',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
   },
-  submitButtonText: {
+  showAnswerButtonDisabled: {
+    backgroundColor: '#90CAF9',
+  },
+  showAnswerButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
-  skipButton: {
+  nextButton: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 12,
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
   },
-  skipButtonText: {
-    color: '#333',
-    fontSize: 16,
+  nextButtonText: {
+    color: 'white',
+    fontSize: 15,
     fontWeight: '600',
   },
   stats: {

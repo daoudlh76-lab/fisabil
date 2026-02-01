@@ -8,13 +8,51 @@ import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useAudioPlaylistContext } from "@/contexts/audio-playlist-context";
 import { useTextToSpeech } from "@/hooks/use-text-to-speech";
 import { useLanguage } from "@/hooks/use-language";
-import { performOcr, isOcrConfigured } from "@/src/lib/google-vision-ocr";
+import { useSubscription } from "@/contexts/subscription-context";
+import { useDailyLimit } from "@/hooks/use-daily-limit";
+import { performOcrWithFallback, isOcrConfigured } from "@/src/lib/google-vision-ocr";
 
 const GREEN = "#2E7D32";
-const BG = "#F3F4F6";
+const BG = "transparent";
 
 export default function ScannerScreen() {
   const { t } = useLanguage();
+  const { subscription, hasFeatureAccess, isLoaded } = useSubscription();
+  const scannerLimitRaw = useDailyLimit('scanner', 1);
+
+  // Debug: Afficher le plan actuel
+  React.useEffect(() => {
+    console.log('📊 Plan actuel dans Scanner:', subscription.plan);
+    console.log('📊 Subscription complète:', JSON.stringify(subscription, null, 2));
+    console.log('📊 isLoaded:', isLoaded);
+  }, [subscription.plan, isLoaded]);
+
+  // Ignorer la limite pour les utilisateurs premium
+  // IMPORTANT: Recalculer scannerLimit chaque fois que le plan change
+  const scannerLimit = React.useMemo(() => {
+    console.log('🔄 Recalcul de scannerLimit:', {
+      isLoaded,
+      plan: subscription.plan,
+      hasRawLimit: !!scannerLimitRaw,
+    });
+
+    // Ne pas appliquer les limites tant que l'abonnement n'est pas chargé
+    if (!isLoaded) {
+      console.log('⏳ Abonnement pas encore chargé');
+      return null;
+    }
+
+    // Les utilisateurs premium n'ont pas de limite
+    if (subscription.plan === 'premium_monthly' || subscription.plan === 'premium_annual') {
+      console.log('✨ Mode premium détecté, aucune limite');
+      return null;
+    }
+
+    // Les utilisateurs gratuits ont des limites
+    console.log('📊 Mode gratuit, limites appliquées');
+    return scannerLimitRaw;
+  }, [isLoaded, subscription.plan, scannerLimitRaw]);
+
   const [title, setTitle] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState("");
@@ -73,6 +111,25 @@ export default function ScannerScreen() {
       return;
     }
 
+    // Vérifier la limite quotidienne pour les utilisateurs gratuits
+    // Les utilisateurs premium n'ont pas de limite (scannerLimit === null)
+    if (isLoaded && subscription.plan === 'free' && scannerLimit) {
+      if (!scannerLimit.canUse) {
+        Alert.alert(
+          t('scanner.limitReached'),
+          t('scanner.limitReachedMessage', { limit: scannerLimit.limit }),
+          [
+            { text: t('settings.cancel'), style: 'cancel' },
+            {
+              text: t('settings.upgradeToPremium'),
+              onPress: () => router.push('/(tabs)/settings'),
+            },
+          ]
+        );
+        return;
+      }
+    }
+
     setOcrLoading(true);
 
     try {
@@ -82,25 +139,50 @@ export default function ScannerScreen() {
         console.warn('⚠️ Google Cloud Vision API non configurée, utilisation du mode démo');
         const mockText = "الحمد لله رب العالمين مرحبا بك في التطبيق";
         setOcrText(mockText);
-        const withDiacritics = addDiacriticsToText(mockText);
-        setReviewText(withDiacritics);
-        setShowDiacritics(true);
-        await convertAndAddToPlaylist(withDiacritics);
-        
+
+        // Vérifier si le texte mock contient déjà des diacritiques
+        const hasDiacritics = /[\u064B-\u0652]/.test(mockText);
+        let finalText = mockText;
+        if (!hasDiacritics) {
+          finalText = addDiacriticsToText(mockText);
+          setShowDiacritics(true);
+        } else {
+          setShowDiacritics(false);
+          console.log('✅ Texte avec voyelles détecté, conservation des voyelles d\'origine');
+        }
+
+        setReviewText(finalText);
+        await convertAndAddToPlaylist(finalText);
+
+        // Incrémenter le compteur de scans pour les utilisateurs gratuits seulement
+        if (isLoaded && subscription.plan === 'free' && scannerLimit) {
+          await scannerLimit.incrementUsage();
+        }
+
         if (multiPageMode) {
           Alert.alert(`✅ ${t('scanner.extractionOk')}`, t('scanner.textAdded'));
         } else {
-          Alert.alert(`✅ ${t('scanner.extractionOk')}`, t('scanner.vowelsAdded'));
+          Alert.alert(`✅ ${t('scanner.extractionOk')}`, hasDiacritics ? t('scanner.textExtracted') : t('scanner.vowelsAdded'));
         }
         return;
       }
 
-      // Effectuer l'OCR avec Google Cloud Vision
-      const result = await performOcr(imageUri);
+      // Effectuer l'OCR avec fallback automatique (Google Vision → OpenAI)
+      const result = await performOcrWithFallback(imageUri);
 
       if (result.error) {
         if (result.error === 'NO_TEXT_DETECTED') {
           Alert.alert(t('scanner.error'), t('scanner.noTextDetected'));
+        } else if (result.error === 'CONTENT_POLICY_VIOLATION') {
+          Alert.alert(
+            t('scanner.error'),
+            "L'image n'a pas pu être traitée par OpenAI. Veuillez configurer Google Cloud Vision API pour résoudre ce problème, ou essayer une autre image."
+          );
+        } else if (result.error === 'NO_API_CONFIGURED') {
+          Alert.alert(
+            t('scanner.error'),
+            "Aucune API OCR n'est configurée. Veuillez configurer Google Cloud Vision API ou OpenAI Vision dans les variables d'environnement."
+          );
         } else {
           Alert.alert(t('scanner.error'), `OCR Error: ${result.error}`);
         }
@@ -113,15 +195,31 @@ export default function ScannerScreen() {
       }
 
       setOcrText(result.text);
-      
-      // Ajouter automatiquement les diacritiques
-      const withDiacritics = addDiacriticsToText(result.text);
-      setReviewText(withDiacritics);
-      setShowDiacritics(true);
-      
+
+      // Vérifier si le texte contient déjà des diacritiques (voyelles arabes)
+      const hasDiacritics = /[\u064B-\u0652]/.test(result.text);
+
+      let finalText = result.text;
+      if (!hasDiacritics) {
+        // Ajouter les diacritiques uniquement si le texte n'en a pas
+        finalText = addDiacriticsToText(result.text);
+        setShowDiacritics(true);
+      } else {
+        // Le texte a déjà des voyelles, les garder telles quelles
+        setShowDiacritics(false);
+        console.log('✅ Texte avec voyelles détecté, conservation des voyelles d\'origine');
+      }
+
+      setReviewText(finalText);
+
       // Convertir automatiquement en audio et ajouter à la playlist
-      await convertAndAddToPlaylist(withDiacritics);
-      
+      await convertAndAddToPlaylist(finalText);
+
+      // Incrémenter le compteur de scans pour les utilisateurs gratuits seulement
+      if (isLoaded && subscription.plan === 'free' && scannerLimit) {
+        await scannerLimit.incrementUsage();
+      }
+
       if (multiPageMode) {
         Alert.alert(`✅ ${t('scanner.extractionOk')}`, t('scanner.textAdded'));
       } else {
@@ -139,14 +237,15 @@ export default function ScannerScreen() {
     try {
       // Générer un titre par défaut si pas de titre
       const trackTitle = title.trim() || `Texte du ${new Date().toLocaleDateString()}`;
-      
+
+      console.log('📝 Ajout à la playlist...', { trackTitle, textLength: text.length });
+
       // Ajouter à la playlist (sans fichier audio, on utilisera speakText pour la lecture)
-      await addTrack(trackTitle, text, null);
-      
-      // Notification silencieuse (pas d'alerte pour ne pas bloquer)
-      console.log('✅ Piste ajoutée à la playlist:', trackTitle);
+      const newTrack = await addTrack(trackTitle, text, null);
+
+      console.log('✅ Piste ajoutée à la playlist:', { id: newTrack.id, title: trackTitle });
     } catch (error) {
-      console.error('Erreur ajout playlist:', error);
+      console.error('❌ Erreur ajout playlist:', error);
       // Ne pas afficher d'erreur pour ne pas bloquer le workflow
     }
   }
@@ -225,8 +324,8 @@ export default function ScannerScreen() {
         return;
       }
 
-      // Convertir et ajouter à la playlist avant de sauvegarder
-      await convertAndAddToPlaylist(c);
+      // La piste a déjà été ajoutée à la playlist lors de l'OCR (ligne 88/123)
+      // Pas besoin de l'ajouter à nouveau ici pour éviter les doublons
 
       const { error } = await supabase.from("scans").insert([
         {
@@ -252,6 +351,25 @@ export default function ScannerScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.header}>{t('scanner.title')}</Text>
+
+      {/* Afficher le compteur de scans pour les utilisateurs gratuits seulement */}
+      {isLoaded && subscription.plan === 'free' && scannerLimit && !scannerLimit.loading && (
+        <View style={scannerLimit.canUse ? styles.limitBanner : styles.limitBannerWarning}>
+          <Text style={styles.limitBannerText}>
+            {scannerLimit.canUse
+              ? t('scanner.scansRemaining', { remaining: scannerLimit.remaining, limit: scannerLimit.limit })
+              : t('scanner.noScansLeft')}
+          </Text>
+          {!scannerLimit.canUse && (
+            <Pressable
+              style={styles.upgradeLinkButton}
+              onPress={() => router.push('/(tabs)/settings')}
+            >
+              <Text style={styles.upgradeLinkText}>{t('settings.upgradeToPremium')}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       <Text style={styles.label}>{t('scanner.titleInput')}</Text>
       <TextInput
@@ -409,6 +527,41 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
     marginBottom: 14,
+  },
+  limitBanner: {
+    backgroundColor: '#E8F5E9',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: GREEN,
+  },
+  limitBannerWarning: {
+    backgroundColor: '#FFF3E0',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9800',
+  },
+  limitBannerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+  },
+  upgradeLinkButton: {
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: GREEN,
+    borderRadius: 6,
+    alignSelf: 'center',
+  },
+  upgradeLinkText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'white',
   },
   label: {
     fontSize: 14,

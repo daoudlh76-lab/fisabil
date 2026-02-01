@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { supabase } from '@/src/lib/supabase';
 
 export type CardDifficulty = 'easy' | 'medium' | 'hard' | 'forgotten';
 
@@ -38,22 +39,55 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
   const currentCard = cards[currentIndex];
 
   const updateDifficulty = useCallback(
-    (difficulty: CardDifficulty) => {
+    async (difficulty: CardDifficulty) => {
+      const now = new Date();
+      const intervals: Record<CardDifficulty, number> = {
+        easy: 30, // 30 jours
+        medium: 7, // 7 jours
+        hard: 3, // 3 jours
+        forgotten: 1, // 1 jour
+      };
+
+      const nextReviewDate = new Date(now.getTime() + intervals[difficulty] * 24 * 60 * 60 * 1000);
+      const currentCard = cards[currentIndex];
+
+      // Sauvegarder en base de données
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData.session?.user?.id;
+
+        if (userId && currentCard) {
+          const { error } = await supabase
+            .from('vocab_cards_progress')
+            .upsert({
+              user_id: userId,
+              vocabulary_id: currentCard.id,
+              difficulty,
+              last_reviewed: now.toISOString(),
+              next_review: nextReviewDate.toISOString(),
+              review_count: currentCard.reviewCount + 1,
+            }, {
+              onConflict: 'user_id,vocabulary_id'
+            });
+
+          if (error) {
+            console.error('❌ Erreur sauvegarde progression:', error);
+          } else {
+            console.log('✅ Progression sauvegardée:', difficulty);
+          }
+        }
+      } catch (e) {
+        console.error('❌ Erreur:', e);
+      }
+
+      // Mettre à jour l'état local
       setCards((prev) => {
         const updated = [...prev];
-        const now = new Date();
-        const intervals: Record<CardDifficulty, number> = {
-          easy: 30, // 30 jours
-          medium: 7, // 7 jours
-          hard: 3, // 3 jours
-          forgotten: 1, // 1 jour
-        };
-
         updated[currentIndex] = {
           ...updated[currentIndex],
           difficulty,
           lastReviewed: now,
-          nextReview: new Date(now.getTime() + intervals[difficulty] * 24 * 60 * 60 * 1000),
+          nextReview: nextReviewDate,
           reviewCount: updated[currentIndex].reviewCount + 1,
         };
         return updated;
@@ -65,7 +99,7 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
         setIsFlipped(false);
       }
     },
-    [currentIndex, cards.length]
+    [currentIndex, cards]
   );
 
   const getCardsToReview = useCallback(() => {

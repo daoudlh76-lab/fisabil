@@ -24,8 +24,16 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: true,
         tabBarActiveTintColor: "#2E7D32",
-        // Cacher la barre d'onglets si pas connecté
-        tabBarStyle: session ? undefined : { display: 'none' },
+        // Barre d'onglets opaque
+        tabBarStyle: session ? {
+          backgroundColor: '#FFFFFF',
+          borderTopColor: 'rgba(0, 0, 0, 0.1)',
+        } : { display: 'none' },
+        // En-tête opaque
+        headerStyle: {
+          backgroundColor: '#FFFFFF',
+        },
+        headerTransparent: false,
       }}
     >
       {/* Scanner = index.tsx */}
@@ -61,11 +69,19 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* Cacher le dossier library/folder */}
+      <Tabs.Screen
+        name="library/folder/[id]"
+        options={{
+          href: null,
+        }}
+      />
+
       {/* Révision (Dictées + Vocabulaire) = revision/index.tsx */}
       <Tabs.Screen
         name="revision/index"
         options={{
-          title: t("nav.revision") || "Révision",
+          title: t("nav.revision"),
           tabBarIcon: ({ color }) => (
             <Ionicons name="book" size={24} color={color} />
           ),
@@ -91,11 +107,19 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="playlist"
         options={{
-          title: t("nav.playlist") || "Playlist",
+          title: t("nav.playlist"),
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons name="playlist-music" size={24} color={color} />
           ),
           href: session ? '/(tabs)/playlist' : null,
+        }}
+      />
+
+      {/* Cacher le dossier playlist/folder */}
+      <Tabs.Screen
+        name="playlist/folder/[id]"
+        options={{
+          href: null,
         }}
       />
 
@@ -115,7 +139,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: t("nav.settings") || "Paramètres",
+          title: t("nav.settings"),
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons name="cog" size={24} color={color} />
           ),
@@ -123,13 +147,41 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* Statistiques - cachée de la barre */}
+      <Tabs.Screen
+        name="statistics"
+        options={{
+          title: t("settings.statistics"),
+          href: null,
+        }}
+      />
+
+      {/* Abonnement - cachée de la barre */}
+      <Tabs.Screen
+        name="subscription"
+        options={{
+          title: t("settings.subscription"),
+          href: null,
+        }}
+      />
+
       {/* Page login - visible uniquement si pas connecté */}
       <Tabs.Screen
         name="login"
         options={{
-          title: t("nav.login") || "Connexion",
+          title: t("nav.login"),
           headerShown: false,
           href: session ? null : '/(tabs)/login',
+        }}
+      />
+
+      {/* Page de vérification email - cachée de la navigation */}
+      <Tabs.Screen
+        name="email-verification"
+        options={{
+          title: t("emailVerification.title"),
+          headerShown: false,
+          href: null,
         }}
       />
 

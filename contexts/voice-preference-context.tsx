@@ -23,9 +23,12 @@ export function VoicePreferenceProvider({ children }: { children: ReactNode }) {
         const stored = await AsyncStorage.getItem(VOICE_PREFERENCE_KEY);
         if (stored === 'male' || stored === 'female') {
           setGenderState(stored);
+          console.log('✅ Préférence vocale chargée:', stored);
+        } else {
+          console.log('ℹ️ Aucune préférence vocale trouvée, utilisation par défaut: male');
         }
       } catch (e) {
-        console.error('Error loading voice preference:', e);
+        console.error('❌ Erreur chargement préférence vocale:', e);
       } finally {
         setIsReady(true);
       }
@@ -37,8 +40,9 @@ export function VoicePreferenceProvider({ children }: { children: ReactNode }) {
     try {
       await AsyncStorage.setItem(VOICE_PREFERENCE_KEY, newGender);
       setGenderState(newGender);
+      console.log('✅ Nouvelle préférence vocale sauvegardée:', newGender);
     } catch (e) {
-      console.error('Error saving voice preference:', e);
+      console.error('❌ Erreur sauvegarde préférence vocale:', e);
     }
   };
 
@@ -58,19 +62,18 @@ export function useVoicePreference(): VoicePreferenceContextType {
 }
 
 // Mapping des voix par genre pour expo-speech
-// Note: Les voix disponibles varient selon l'appareil
+// Note: Pitch très différencié (0.5 homme / 1.5 femme) pour une différence très audible
 export const getVoiceOptionsForGender = (gender: Gender) => {
   if (gender === 'female') {
     return {
-      // Voix féminines arabes
-      pitch: 1.1,
-      // Sur iOS, on peut spécifier une voix
-      voice: 'com.apple.voice.compact.ar-SA.Maged', // Fallback, sera ignoré si pas dispo
+      // Voix féminine: pitch aigu
+      pitch: 1.5,
+      voice: 'com.apple.voice.compact.ar-SA.Maged',
     };
   }
   return {
-    // Voix masculines (défaut)
-    pitch: 0.9,
+    // Voix masculine: pitch grave
+    pitch: 0.5,
     voice: 'com.apple.voice.compact.ar-SA.Maged',
   };
 };

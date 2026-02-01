@@ -34,6 +34,13 @@ yarn-error.*
 .env
 .env.*
 .env*.local
+.env.production
+
+# Sensitive files
+google-service-account.json
+*.keystore
+credentials.json
+secrets.json
 
 # typescript
 *.tsbuildinfo

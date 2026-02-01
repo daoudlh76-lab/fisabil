@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "fisabil",
+    "name": "Fisabil",
     "slug": "fisabil",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,12 +8,23 @@
     "scheme": "fisabil",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "description": "Application d'apprentissage de l'arabe avec OCR, tuteur vocal IA et exercices interactifs. Scannez des textes arabes, pratiquez avec un tuteur virtuel intelligent et améliorez votre prononciation.",
+    "privacy": "public",
+    "primaryColor": "#2E7D32",
+    "backgroundColor": "#FFFFFF",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fisabil.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Permet d'utiliser le microphone pour parler au tuteur et faire des dictées.",
-        "NSSpeechRecognitionUsageDescription": "Permet de transcrire votre voix en texte arabe."
+        "NSCameraUsageDescription": "Permet de scanner des textes arabes avec l'appareil photo pour les ajouter à votre bibliothèque.",
+        "NSMicrophoneUsageDescription": "Permet d'utiliser le microphone pour parler au tuteur vocal et faire des dictées.",
+        "NSSpeechRecognitionUsageDescription": "Permet de transcrire votre voix en texte arabe pour pratiquer la prononciation.",
+        "NSPhotoLibraryUsageDescription": "Permet de sélectionner des images de textes arabes depuis votre galerie.",
+        "NSPhotoLibraryAddUsageDescription": "Permet de sauvegarder les textes scannés dans votre galerie."
       }
     },
     "android": {
@@ -24,9 +35,14 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.fisabil.app",
+      "versionCode": 1,
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.INTERNET"
+        "android.permission.INTERNET",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {

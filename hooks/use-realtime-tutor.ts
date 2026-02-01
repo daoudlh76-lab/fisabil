@@ -26,6 +26,15 @@ interface UserText {
   id: string;
   title: string;
   content: string;
+  vocabulary?: Array<{
+    word: string;
+    translation?: string;
+    root?: string;
+  }>;
+  userVocabulary?: Array<{
+    word: string;
+    translation: string;
+  }>;
 }
 
 interface RealtimeMessage {
@@ -81,16 +90,34 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
 
       if (!userId) return;
 
-      const { data: scans } = await supabase
-        .from('scans')
-        .select('id, title, content')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(10);
+      // Charger TOUS les scans ET TOUT le vocabulaire (pas de limite)
+      const [{ data: scans }, { data: vocab }] = await Promise.all([
+        supabase
+          .from('scans')
+          .select('id, title, content, vocabulary')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('vocabulary')
+          .select('word, translation')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+      ]);
 
       if (scans) {
+        console.log('📚 TOUS les textes chargés pour tuteur:', scans.length);
+      }
+
+      // Stocker TOUT le vocabulaire dans userTexts
+      if (vocab && scans) {
+        const textsWithVocab = scans.map(scan => ({
+          ...scan,
+          userVocabulary: vocab
+        }));
+        setUserTexts(textsWithVocab);
+        console.log('📖 TOUT le vocabulaire chargé:', vocab.length, 'mots de tous les textes');
+      } else if (scans) {
         setUserTexts(scans);
-        console.log('📚 Textes chargés pour tuteur:', scans.length);
       }
     } catch (e) {
       console.error('❌ Erreur chargement textes:', e);
@@ -101,9 +128,37 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
   const buildSystemInstructions = useCallback(() => {
     const targetLang = languageNames[uiLang] || 'French';
 
+    // Extraire TOUT le vocabulaire de TOUS les textes scannés
+    const allVocabulary: string[] = [];
+    const userVocabList: Array<{word: string, translation: string}> = [];
+
+    userTexts.forEach(text => {
+      // Vocabulaire extrait des textes scannés
+      if (text.vocabulary && Array.isArray(text.vocabulary)) {
+        text.vocabulary.forEach((item: any) => {
+          if (item.word) allVocabulary.push(item.word);
+        });
+      }
+      // Vocabulaire sauvegardé par l'utilisateur
+      if ((text as any).userVocabulary) {
+        userVocabList.push(...(text as any).userVocabulary);
+      }
+    });
+
+    // Utiliser TOUT le vocabulaire, pas de limite
     const textsContext = userTexts.length > 0
-      ? userTexts.map((t, i) => `--- TEXT ${i + 1}: "${t.title}" ---\n${t.content.slice(0, 1000)}`).join('\n\n')
+      ? userTexts.map((t, i) => `--- TEXT ${i + 1}: "${t.title}" ---\n${t.content.slice(0, 600)}`).join('\n\n')
       : 'No texts available yet.';
+
+    // Inclure TOUT le vocabulaire disponible
+    const vocabularyContext = allVocabulary.length > 0
+      ? `\n\n## VOCABULARY FROM ALL STUDENT'S TEXTS (${allVocabulary.length} words - USE THESE WORDS PRIMARILY):\n${allVocabulary.join(', ')}`
+      : '';
+
+    // Inclure TOUT le vocabulaire sauvegardé
+    const userVocabContext = userVocabList.length > 0
+      ? `\n\n## STUDENT'S SAVED VOCABULARY (${userVocabList.length} words - PRIORITY - USE THESE FIRST):\n${userVocabList.map(v => `${v.word} (${v.translation})`).join(', ')}`
+      : '';
 
     return `You are an expert Arabic language teacher (معلم اللغة العربية). You speak with a clear, warm voice.
 
@@ -112,21 +167,32 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
 2. **EXCEPTION**: If the student says "je ne comprends pas", "I don't understand", or similar, briefly explain in ${targetLang}, then return to Arabic
 3. **BE A REAL TEACHER**: Ask questions, correct mistakes, encourage progress
 
-## YOUR TEACHING METHOD:
-1. **ASK QUESTIONS** about the texts the student has studied
-2. **CORRECT ALL ERRORS** the student makes
-3. **EXPLAIN CORRECTIONS** in Arabic
-4. **ENCOURAGE**: Always be positive and supportive
+## YOUR TEACHING METHOD - CRITICAL RULES:
+1. **ONLY USE STUDENT'S KNOWN VOCABULARY**: You MUST use ONLY words from the student's saved vocabulary and scanned texts listed below
+2. **NEVER use words the student hasn't seen**: If a word is not in their vocabulary list, DO NOT use it
+3. **ASK QUESTIONS ABOUT THEIR TEXTS**: Base ALL your questions on the content they have studied
+4. **BUILD ON WHAT THEY KNOW**: Use ONLY words they've already seen in their texts
+5. **TEST THEIR KNOWLEDGE**: Ask about meanings, grammar, or usage of words from THEIR vocabulary
+6. **CORRECT ALL ERRORS** the student makes in Arabic, using ONLY their known vocabulary to explain
+7. **ENCOURAGE**: Always be positive and supportive
 
-## STUDENT'S TEXTS:
-${textsContext}
+## ALL STUDENT'S SCANNED TEXTS:
+${textsContext}${vocabularyContext}${userVocabContext}
 
-## IMPORTANT - SPEED IS CRITICAL:
-- Keep responses VERY SHORT (1-2 sentences max, under 30 words)
-- Respond IMMEDIATELY, don't overthink
-- Use simple Arabic for beginners
-- Only switch to ${targetLang} if explicitly asked
-- NO long explanations - be direct and concise
+## CRITICAL - YOUR QUESTIONS MUST:
+- Use ONLY vocabulary from the lists above
+- Ask about meanings of words they've scanned
+- Test their understanding of THEIR specific texts
+- Check if they remember words from THEIR texts
+- Quiz them on grammar patterns they've seen
+- Ask them to use words from THEIR vocabulary in sentences
+- Keep responses SHORT (1-2 sentences, under 30 words)
+- Be direct and conversational
+
+## EXAMPLES OF GOOD QUESTIONS (using student's vocabulary):
+- "ما معنى كلمة [word from their vocab]؟"
+- "هل تتذكر هذه الكلمة من النص؟"
+- "استخدم كلمة [their word] في جملة"
 
 Start with a SHORT greeting in Arabic (max 10 words).`;
   }, [userTexts, uiLang]);
@@ -159,14 +225,16 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
       formData.append('file', audioBlob as any);
       formData.append('model', 'whisper-1');
       formData.append('language', 'ar'); // Priorité à l'arabe
-      formData.append('prompt', 'بسم الله'); // Prompt court pour plus de rapidité
+      formData.append('temperature', '0'); // Plus précis et déterministe
+      // Prompt contextuel plus riche pour améliorer la reconnaissance
+      formData.append('prompt', 'بسم الله الرحمن الرحيم، السلام عليكم، كيف حالك، أنا أتعلم اللغة العربية');
 
       console.log("📤 Sending audio to Whisper API...");
       const startTime = Date.now();
 
-      // Timeout de 10 secondes pour Whisper
+      // Timeout de 15 secondes pour Whisper (plus de temps pour meilleure reconnaissance)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       try {
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -194,7 +262,7 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
       } catch (fetchErr: any) {
         clearTimeout(timeoutId);
         if (fetchErr.name === 'AbortError') {
-          console.error("❌ Whisper timeout (>10s)");
+          console.error("❌ Whisper timeout (>15s)");
           return null;
         }
         throw fetchErr;
@@ -217,7 +285,8 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
         uiLang === 'es' ? 'es-ES' :
         uiLang === 'ru' ? 'ru-RU' : 'en-US';
 
-      const pitch = gender === 'female' ? 1.15 : 0.85;
+      // Pitch très différencié pour une différence très audible: homme=grave (0.5), femme=aigu (1.5)
+      const pitch = gender === 'female' ? 1.5 : 0.5;
 
       Speech.speak(text, {
         language: lang,
@@ -342,13 +411,41 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true, // Réduit autres sons pendant enregistrement
+        playThroughEarpieceAndroid: false,
       });
 
       console.log('🎤 Creating recording...');
       const recording = new Audio.Recording();
       recordingRef.current = recording;
 
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      // Configuration audio optimisée pour la voix arabe
+      await recording.prepareToRecordAsync({
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 48000, // Meilleur pour la voix
+          numberOfChannels: 1, // Mono pour meilleure qualité vocale
+          bitRate: 128000, // Qualité élevée pour meilleure reconnaissance
+        },
+        ios: {
+          extension: '.m4a',
+          outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+          audioQuality: Audio.IOSAudioQuality.MAX,
+          sampleRate: 48000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      });
       await recording.startAsync();
 
       isListeningRef.current = true;
@@ -357,7 +454,7 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
 
       console.log('🎤 Recording started successfully');
 
-      // Arrêter automatiquement après 5 secondes pour une réponse plus rapide
+      // Arrêter automatiquement après 5 secondes
       if (listeningTimeoutRef.current) {
         clearTimeout(listeningTimeoutRef.current);
       }
@@ -365,7 +462,7 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
       listeningTimeoutRef.current = setTimeout(async () => {
         console.log('⏱️ Auto-stopping recording after timeout');
         await stopListening();
-      }, 5000);
+      }, 8000); // Augmenté à 8 secondes pour laisser plus de temps de parole
 
     } catch (err) {
       console.error('❌ Error starting recording:', err);
@@ -412,12 +509,13 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
       },
     }));
 
-    // Demander une réponse courte et rapide
+    // Demander une réponse TRÈS courte (conversation naturelle)
     wsRef.current.send(JSON.stringify({
       type: 'response.create',
       response: {
         modalities: ['text'],
-        instructions: 'Respond in 1-2 SHORT sentences only. Be quick and direct.',
+        instructions: 'MAXIMUM 15 words. ONE sentence. Talk like face-to-face conversation.',
+        max_output_tokens: 50, // Limiter strictement la longueur
       },
     }));
   }, []);
@@ -465,9 +563,8 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
             };
             setMessages(prev => [...prev, msg]);
 
-            // Lire le texte puis reprendre l'écoute automatiquement
+            // Lire le texte puis reprendre l'écoute après un court délai
             speakTextRef.current(responseText).then(() => {
-              // Attendre un petit moment puis relancer l'écoute
               setTimeout(() => {
                 if (shouldRestartListeningRef.current && !isPausedRef.current && isConnectedRef.current) {
                   console.log('🎤 Auto-restarting listening after TTS...');
@@ -531,10 +628,11 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
             type: 'response.create',
             response: {
               modalities: ['text'],
-              instructions: 'Say ONLY: "مرحباً! كيف حالك؟" (Hello! How are you?) - nothing more.',
+              instructions: 'Say ONLY: "مرحباً! كيف حالك؟" - nothing more.',
+              max_output_tokens: 20,
             },
           }));
-        }, 300);
+        }, 200);
       };
 
       ws.onmessage = (event) => {

@@ -1,8 +1,10 @@
-import { useSubscription } from '@/hooks/use-subscription';
+import { useSubscription } from '@/contexts/subscription-context';
 import { useLanguage } from '@/hooks/use-language';
 import { supabase } from '@/src/lib/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import React, { useState, useEffect } from 'react';
 import {
     Alert,
     Linking,
@@ -11,35 +13,78 @@ import {
     StyleSheet,
     Switch,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 
 export default function SettingsScreen() {
-  const { subscription, upgradeToPremium, getFeatures } = useSubscription();
+  const router = useRouter();
+  const { subscription, getFeatures, getCurrentPlanInfo } = useSubscription();
   const { language, setLanguage, availableLanguages, getLanguageName, t } = useLanguage();
+  const currentPlan = getCurrentPlanInfo();
   const features = getFeatures();
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const [resetModalVisible, setResetModalVisible] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  // États pour les données utilisateur
+  const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
+
+  // États pour les modals d'édition
+  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
+  const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [editedUserName, setEditedUserName] = useState('');
+
+  // Charger les données utilisateur au montage
+  useEffect(() => {
+    loadUserData();
+    loadPreferences();
+  }, []);
+
+  async function loadUserData() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUserEmail(session.user.email || '');
+        // Charger le nom d'utilisateur depuis les métadonnées ou AsyncStorage
+        const storedName = await AsyncStorage.getItem('@fisabil_user_name');
+        setUserName(storedName || t('settings.arabicLearner'));
+        setEditedUserName(storedName || '');
+      }
+    } catch (error) {
+      console.error('Erreur chargement données utilisateur:', error);
+    }
+  }
+
+  async function loadPreferences() {
+    try {
+      const notifications = await AsyncStorage.getItem('@fisabil_notifications');
+      const darkMode = await AsyncStorage.getItem('@fisabil_dark_mode');
+      if (notifications !== null) setNotificationsEnabled(notifications === 'true');
+      if (darkMode !== null) setDarkModeEnabled(darkMode === 'true');
+    } catch (error) {
+      console.error('Erreur chargement préférences:', error);
+    }
+  }
+
+  async function savePreference(key: string, value: boolean) {
+    try {
+      await AsyncStorage.setItem(key, value.toString());
+    } catch (error) {
+      console.error('Erreur sauvegarde préférence:', error);
+    }
+  }
 
   const handleUpgrade = () => {
-    Alert.alert(
-      `💎 ${t('settings.upgradeTitle')}`,
-      t('settings.upgradeDescription'),
-      [
-        { text: t('settings.cancel'), style: 'cancel' },
-        {
-          text: `💳 ${t('settings.pay')}`,
-          onPress: () => {
-            upgradeToPremium();
-            Alert.alert(
-              `✅ ${t('settings.thankYou')}`,
-              `${t('settings.welcomePremium')} 🎉`
-            );
-          },
-        },
-      ]
-    );
+    router.push('/(tabs)/subscription');
   };
 
   const handleContactSupport = () => {
@@ -60,16 +105,131 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleReset = () => {
+    setResetModalVisible(true);
+  };
+
+  const confirmReset = async () => {
+    setResetModalVisible(false);
+    setIsResetting(true);
+    try {
+      // 1. Récupérer l'ID de l'utilisateur actuel
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+
+      if (userId) {
+        // 2. Supprimer toutes les données Supabase de l'utilisateur
+        await Promise.all([
+          // Supprimer tous les scans (textes)
+          supabase.from('scans').delete().eq('user_id', userId),
+          // Supprimer tout le cache AI
+          supabase.from('ai_cache').delete().eq('user_id', userId),
+        ]);
+      }
+
+      // 3. Supprimer toutes les données locales (AsyncStorage)
+      await AsyncStorage.clear();
+
+      // 4. Déconnecter l'utilisateur
+      await supabase.auth.signOut();
+
+      // 5. Afficher le message de succès
+      Alert.alert(
+        t('settings.resetSuccess'),
+        t('settings.resetSuccessMessage')
+      );
+    } catch (error) {
+      console.error('Erreur réinitialisation:', error);
+      Alert.alert(t('settings.error'), String(error));
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handleToggleNotifications = async (value: boolean) => {
+    setNotificationsEnabled(value);
+    await savePreference('@fisabil_notifications', value);
+    if (value) {
+      Alert.alert(
+        '✅',
+        t('settings.notificationsEnabled') || 'Notifications activées'
+      );
+    }
+  };
+
+  const handleToggleDarkMode = async (value: boolean) => {
+    setDarkModeEnabled(value);
+    await savePreference('@fisabil_dark_mode', value);
+    Alert.alert(
+      'ℹ️',
+      t('settings.darkModeComingSoon') || 'Le mode sombre sera disponible dans une prochaine mise à jour'
+    );
+  };
+
+  const handleEditProfile = () => {
+    setEditProfileModalVisible(true);
+  };
+
+  const confirmEditProfile = async () => {
+    try {
+      if (editedUserName.trim()) {
+        await AsyncStorage.setItem('@fisabil_user_name', editedUserName.trim());
+        setUserName(editedUserName.trim());
+        setEditProfileModalVisible(false);
+        Alert.alert('✅', t('settings.profileUpdated') || 'Profil mis à jour avec succès');
+      }
+    } catch (error) {
+      Alert.alert(t('settings.error'), String(error));
+    }
+  };
+
+  const handleChangePassword = () => {
+    setChangePasswordModalVisible(true);
+  };
+
+  const confirmChangePassword = async () => {
+    try {
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        Alert.alert(t('settings.error'), t('settings.fillAllFields') || 'Veuillez remplir tous les champs');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        Alert.alert(t('settings.error'), t('settings.passwordMismatch') || 'Les mots de passe ne correspondent pas');
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        Alert.alert(t('settings.error'), t('auth.shortPassword') || 'Le mot de passe doit contenir au moins 6 caractères');
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+
+      setChangePasswordModalVisible(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      Alert.alert('✅', t('settings.passwordChanged') || 'Mot de passe modifié avec succès');
+    } catch (error: any) {
+      Alert.alert(t('settings.error'), error?.message || String(error));
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.title}>⚙️ {t('settings.title')}</Text>
+        <Text style={styles.title}>{t('settings.title')}</Text>
       </View>
 
       {/* LANGUE */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🌐 {t('settings.language')}</Text>
+        <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
         <TouchableOpacity 
           style={styles.settingRow}
           onPress={() => setLanguageModalVisible(true)}
@@ -96,11 +256,17 @@ export default function SettingsScreen() {
         >
           <View style={styles.planHeader}>
             <Text style={styles.planName}>
-              {subscription.plan === 'free' ? `🆓 ${t('settings.free')}` : `💎 ${t('settings.premium')}`}
+              {subscription.plan === 'free'
+                ? `🆓 ${t('settings.free')}`
+                : subscription.plan === 'premium_monthly'
+                ? `💎 ${t('settings.premium')} (${t('subscription.monthly')})`
+                : `👑 ${t('settings.premium')} (${t('subscription.annual')})`}
             </Text>
-            {subscription.plan === 'free' && (
+            {currentPlan && currentPlan.price > 0 && (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{t('settings.active')}</Text>
+                <Text style={styles.badgeText}>
+                  {currentPlan.price.toFixed(2)}{currentPlan.currency}/{currentPlan.period === 'month' ? t('subscription.mo') : t('subscription.yr')}
+                </Text>
               </View>
             )}
           </View>
@@ -132,7 +298,7 @@ export default function SettingsScreen() {
             </>
           )}
 
-          {subscription.plan === 'premium' && (
+          {(subscription.plan === 'premium_monthly' || subscription.plan === 'premium_annual') && (
             <>
               <Text style={styles.planDescription}>
                 {t('settings.unlimitedAccess')}
@@ -143,8 +309,18 @@ export default function SettingsScreen() {
                   size={20}
                   color="#4CAF50"
                 />
-                <Text style={styles.premiumText}>{t('settings.activeForever')}</Text>
+                <Text style={styles.premiumText}>
+                  {subscription.plan === 'premium_annual' ? t('settings.activeForever') : t('settings.activeSubscription')}
+                </Text>
               </View>
+              <TouchableOpacity
+                style={[styles.upgradeButton, { backgroundColor: '#666' }]}
+                onPress={handleUpgrade}
+              >
+                <Text style={styles.upgradeButtonText}>
+                  {t('subscription.managePlan')}
+                </Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -156,7 +332,7 @@ export default function SettingsScreen() {
 
         {features.map((feature) => {
           const hasAccess =
-            subscription.plan === 'premium'
+            subscription.plan === 'premium_monthly' || subscription.plan === 'premium_annual'
               ? feature.premiumAllowed
               : feature.freeAllowed;
 
@@ -238,6 +414,29 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* STATISTIQUES */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>📊 {t('settings.statistics')}</Text>
+
+        <TouchableOpacity
+          style={styles.supportRow}
+          onPress={() => router.push('/(tabs)/statistics')}
+        >
+          <View style={styles.supportIcon}>
+            <MaterialCommunityIcons
+              name="chart-box-outline"
+              size={24}
+              color="#2E7D32"
+            />
+          </View>
+          <View style={styles.supportInfo}>
+            <Text style={styles.supportLabel}>{t('statistics.myDictionary')}</Text>
+            <Text style={styles.supportEmail}>{t('statistics.viewProgress')}</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
+        </TouchableOpacity>
+      </View>
+
       {/* AUTRES PARAMÈTRES */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>🔧 {t('settings.other')}</Text>
@@ -249,20 +448,32 @@ export default function SettingsScreen() {
               {t('settings.learningReminders')}
             </Text>
           </View>
-          <Switch value={true} />
+          <Switch
+            value={notificationsEnabled}
+            onValueChange={handleToggleNotifications}
+          />
         </View>
 
         <View style={styles.settingRow}>
           <View>
             <Text style={styles.settingLabel}>{t('settings.darkMode')}</Text>
             <Text style={styles.settingDescription}>
-              {t('settings.toImplement')}
+              {darkModeEnabled ? t('settings.enabled') : t('settings.disabled')}
             </Text>
           </View>
-          <Switch value={false} />
+          <Switch
+            value={darkModeEnabled}
+            onValueChange={handleToggleDarkMode}
+          />
         </View>
 
-        <TouchableOpacity style={styles.settingRow}>
+        <TouchableOpacity
+          style={styles.settingRow}
+          onPress={() => Alert.alert(
+            t('settings.about'),
+            `Fisabil - ${t('settings.arabicLearningApp')}\n\nVersion 1.0.0\n\n© 2026 Fisabil\ncontact@fisabil.fr`
+          )}
+        >
           <View>
             <Text style={styles.settingLabel}>{t('settings.about')}</Text>
             <Text style={styles.settingDescription}>v1.0.0</Text>
@@ -270,7 +481,10 @@ export default function SettingsScreen() {
           <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.settingRow}>
+        <TouchableOpacity
+          style={styles.settingRow}
+          onPress={() => Linking.openURL('https://fisabil.fr/privacy')}
+        >
           <View>
             <Text style={styles.settingLabel}>{t('settings.privacyPolicy')}</Text>
             <Text style={styles.settingDescription}>{t('settings.readMore')}</Text>
@@ -350,27 +564,25 @@ export default function SettingsScreen() {
 
       {/* SECTION COMPTE */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>⚙️ {t('settings.account')}</Text>
+        <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
 
         <TouchableOpacity style={styles.accountRow}>
           <View>
             <Text style={styles.accountLabel}>{t('settings.username')}</Text>
-            <Text style={styles.accountValue}>{t('settings.arabicLearner')}</Text>
+            <Text style={styles.accountValue}>{userName || t('settings.arabicLearner')}</Text>
           </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.accountRow}>
           <View>
             <Text style={styles.accountLabel}>{t('settings.email')}</Text>
-            <Text style={styles.accountValue}>user@example.com</Text>
+            <Text style={styles.accountValue}>{userEmail || 'user@example.com'}</Text>
           </View>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.accountRow}
-          onPress={() =>
-            Alert.alert(t('settings.editProfile'), t('settings.toImplement'))
-          }
+          onPress={handleEditProfile}
         >
           <View>
             <Text style={styles.accountLabel}>{t('settings.editProfile')}</Text>
@@ -381,16 +593,35 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           style={styles.accountRow}
-          onPress={() =>
-            Alert.alert(
-              t('settings.changePassword'),
-              t('settings.toImplement')
-            )
-          }
+          onPress={handleChangePassword}
         >
           <View>
             <Text style={styles.accountLabel}>{t('settings.changePassword')}</Text>
             <Text style={styles.accountValue}>{t('settings.secureAccount')}</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
+        </TouchableOpacity>
+      </View>
+
+      {/* SECTION RÉINITIALISATION */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>🔄 {t('settings.reset')}</Text>
+
+        <TouchableOpacity
+          style={styles.resetRow}
+          onPress={handleReset}
+          disabled={isResetting}
+        >
+          <View style={styles.resetIcon}>
+            <MaterialCommunityIcons
+              name="refresh"
+              size={24}
+              color="#FF5722"
+            />
+          </View>
+          <View style={styles.resetInfo}>
+            <Text style={styles.resetLabel}>{t('settings.resetAll')}</Text>
+            <Text style={styles.resetDescription}>{t('settings.resetDescription')}</Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
         </TouchableOpacity>
@@ -441,6 +672,46 @@ export default function SettingsScreen() {
                 onPress={confirmLogout}
               >
                 <Text style={styles.modalConfirmText}>{t('settings.logout')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL DE RÉINITIALISATION */}
+      <Modal
+        transparent
+        visible={resetModalVisible}
+        onRequestClose={() => setResetModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIcon}>
+              <MaterialCommunityIcons
+                name="refresh"
+                size={40}
+                color="#FF5722"
+              />
+            </View>
+
+            <Text style={styles.modalTitle}>{t('settings.resetConfirmTitle')}</Text>
+            <Text style={styles.modalDescription}>
+              {t('settings.resetConfirmMessage')}
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setResetModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>{t('settings.cancel')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalConfirmButton, styles.resetConfirmButton]}
+                onPress={confirmReset}
+              >
+                <Text style={styles.modalConfirmText}>{t('settings.resetAll')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -499,6 +770,129 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* MODAL D'ÉDITION DU PROFIL */}
+      <Modal
+        transparent
+        visible={editProfileModalVisible}
+        onRequestClose={() => setEditProfileModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIcon}>
+              <MaterialCommunityIcons
+                name="account-edit"
+                size={40}
+                color="#1976d2"
+              />
+            </View>
+
+            <Text style={styles.modalTitle}>{t('settings.editProfile')}</Text>
+            <Text style={styles.modalDescription}>
+              {t('settings.enterNewName') || 'Entrez votre nouveau nom'}
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              value={editedUserName}
+              onChangeText={setEditedUserName}
+              placeholder={t('settings.username')}
+              autoCapitalize="words"
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setEditProfileModalVisible(false);
+                  setEditedUserName(userName);
+                }}
+              >
+                <Text style={styles.modalCancelText}>{t('settings.cancel')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalConfirmButton, styles.modalConfirmButtonPrimary]}
+                onPress={confirmEditProfile}
+              >
+                <Text style={styles.modalConfirmText}>{t('settings.save') || 'Enregistrer'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL DE CHANGEMENT DE MOT DE PASSE */}
+      <Modal
+        transparent
+        visible={changePasswordModalVisible}
+        onRequestClose={() => setChangePasswordModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIcon}>
+              <MaterialCommunityIcons
+                name="lock-reset"
+                size={40}
+                color="#FF9800"
+              />
+            </View>
+
+            <Text style={styles.modalTitle}>{t('settings.changePassword')}</Text>
+            <Text style={styles.modalDescription}>
+              {t('settings.enterPasswords') || 'Entrez votre nouveau mot de passe'}
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              placeholder={t('settings.currentPassword') || 'Mot de passe actuel'}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+
+            <TextInput
+              style={styles.modalInput}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              placeholder={t('settings.newPassword') || 'Nouveau mot de passe'}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+
+            <TextInput
+              style={styles.modalInput}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder={t('settings.confirmNewPassword') || 'Confirmer le mot de passe'}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setChangePasswordModalVisible(false);
+                  setCurrentPassword('');
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }}
+              >
+                <Text style={styles.modalCancelText}>{t('settings.cancel')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalConfirmButton, styles.modalConfirmButtonWarning]}
+                onPress={confirmChangePassword}
+              >
+                <Text style={styles.modalConfirmText}>{t('settings.change') || 'Modifier'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -506,7 +900,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: 'transparent',
   },
   header: {
     backgroundColor: '#1976d2',
@@ -869,5 +1263,60 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#4CAF50',
+  },
+  // Reset styles
+  resetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF5722',
+  },
+  resetIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 12,
+    backgroundColor: '#FBE9E7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  resetInfo: {
+    flex: 1,
+  },
+  resetLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF5722',
+  },
+  resetDescription: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  resetConfirmButton: {
+    backgroundColor: '#FF5722',
+  },
+  // Styles pour les inputs des modals
+  modalInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    fontSize: 14,
+    backgroundColor: '#F9FAFB',
+  },
+  modalConfirmButtonPrimary: {
+    backgroundColor: '#1976d2',
+  },
+  modalConfirmButtonWarning: {
+    backgroundColor: '#FF9800',
   },
 });

@@ -21,31 +21,14 @@ type ScanRow = {
   title: string;
   content: string;
   created_at: string;
+  folder_id: string | null;
 };
 
-type VocabItem = {
-  mot_ar: string;
-  traduction: string;
-  singulier?: string | null;
-  pluriel?: string | null;
-  contraire?: string | null;
-  remarque?: string | null;
-};
-
-type VerbItem = {
-  verbe_ar: string;
-  traduction: string;
-  passe_3ms: string;
-  present_3ms: string;
-  imperatif: string;
-  remarque?: string | null;
-};
-
-type ParticleItem = {
-  particule_ar: string;
-  type?: string | null;
-  traduction: string;
-  exemple?: string | null;
+type Folder = {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
 };
 
 type ExtractResponse = {
@@ -71,6 +54,9 @@ export default function LibraryItemScreen() {
   const [editing, setEditing] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
+
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
   // --- IA state
   const [aiLoading, setAiLoading] = useState(false);
@@ -111,9 +97,29 @@ export default function LibraryItemScreen() {
     return userId;
   }
 
+  async function loadFolders() {
+    try {
+      const userId = await getUserIdOrThrow();
+
+      const { data, error } = await supabase
+        .from("folders")
+        .select("id, name, color, icon")
+        .eq("user_id", userId)
+        .order("name", { ascending: true });
+
+      if (!error && data) {
+        setFolders(data as Folder[]);
+      }
+    } catch (e) {
+      console.error("Erreur chargement dossiers:", e);
+    }
+  }
+
   async function loadScan() {
     try {
       setLoading(true);
+      // Réinitialiser l'ancien vocabulaire au changement de texte
+      setAiData(null);
 
       if (!id) {
         Alert.alert(t('libraryDetail.error'), t('libraryDetail.missingId'));
@@ -125,7 +131,7 @@ export default function LibraryItemScreen() {
 
       const { data, error } = await supabase
         .from("scans")
-        .select("id,user_id,title,content,created_at")
+        .select("id,user_id,title,content,created_at,folder_id")
         .eq("id", id)
         .eq("user_id", userId);
 
@@ -145,6 +151,7 @@ export default function LibraryItemScreen() {
       setScan(row);
       setNewTitle(row.title ?? "");
       setNewContent(row.content ?? "");
+      setSelectedFolderId(row.folder_id ?? null);
 
       // ✅ Charge le cache IA si déjà présent
       try {
@@ -169,6 +176,7 @@ export default function LibraryItemScreen() {
   }
 
   useEffect(() => {
+    loadFolders();
     loadScan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -235,6 +243,38 @@ export default function LibraryItemScreen() {
     setEditing(false);
   }
 
+  async function updateFolder() {
+    try {
+      if (!scan) return;
+
+      const userId = await getUserIdOrThrow();
+
+      const { data, error } = await supabase
+        .from("scans")
+        .update({ folder_id: selectedFolderId })
+        .eq("id", scan.id)
+        .eq("user_id", userId)
+        .select("id,user_id,title,content,created_at,folder_id");
+
+      if (error) {
+        Alert.alert(t('libraryDetail.error'), error.message);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        Alert.alert(t('libraryDetail.error'), t('libraryDetail.noDataUpdated'));
+        return;
+      }
+
+      const updated = data[0] as ScanRow;
+      setScan(updated);
+
+      Alert.alert('✅', t('libraryDetail.folderUpdated'));
+    } catch (e: any) {
+      Alert.alert(t('libraryDetail.error'), e?.message ?? "Unknown error");
+    }
+  }
+
   async function saveEdit() {
     try {
       if (!scan) return;
@@ -251,10 +291,10 @@ export default function LibraryItemScreen() {
 
       const { data, error } = await supabase
         .from("scans")
-        .update({ title, content })
+        .update({ title, content, folder_id: selectedFolderId })
         .eq("id", scan.id)
         .eq("user_id", userId)
-        .select("id,user_id,title,content,created_at");
+        .select("id,user_id,title,content,created_at,folder_id");
 
       if (error) {
         Alert.alert(t('libraryDetail.error'), error.message);
@@ -650,22 +690,64 @@ export default function LibraryItemScreen() {
     ]);
   }
 
+  // Fonction pour normaliser un mot arabe (supprimer les diacritiques pour comparaison)
+  function normalizeArabic(text: string): string {
+    // Supprimer les diacritiques arabes (tashkeel) pour la comparaison
+    return text?.replace(/[\u064B-\u0652]/g, '').trim() || '';
+  }
+
+  // Vérifier si un mot existe déjà
+  function isDuplicate(type: 'word' | 'verb' | 'particle', wordAr: string): boolean {
+    if (!aiData) return false;
+    const normalized = normalizeArabic(wordAr);
+
+    if (type === 'word') {
+      return aiData.vocabulaire.some(v => normalizeArabic(v.mot_ar) === normalized);
+    } else if (type === 'verb') {
+      return aiData.verbes.some(v =>
+        normalizeArabic(v.verbe_ar) === normalized ||
+        normalizeArabic(v.passe_3ms) === normalized
+      );
+    } else {
+      return aiData.particules.some(p => normalizeArabic(p.particule_ar) === normalized);
+    }
+  }
+
   // Ajouter un nouveau mot avec complétion automatique
   async function addNewWord(type: 'word' | 'verb' | 'particle') {
     if (!newWordInput.trim() || !aiData) return;
 
+    // Vérifier les doublons AVANT de faire l'appel API
+    if (isDuplicate(type, newWordInput.trim())) {
+      Alert.alert('⚠️', t('libraryDetail.duplicateWord'));
+      return;
+    }
+
     setCompletingWord(true);
     try {
       const completed = await completeWordInfo(newWordInput.trim(), type, uiLang);
-      
+
       if (!completed) {
         Alert.alert(t('libraryDetail.error'), t('libraryDetail.completionError'));
         setCompletingWord(false);
         return;
       }
 
+      // Vérifier aussi avec le mot complété (peut avoir un tashkeel différent)
+      const completedWord = type === 'word'
+        ? (completed as VocabItem).mot_ar
+        : type === 'verb'
+          ? (completed as VerbItem).passe_3ms || (completed as VerbItem).verbe_ar
+          : (completed as ParticleItem).particule_ar;
+
+      if (isDuplicate(type, completedWord)) {
+        Alert.alert('⚠️', t('libraryDetail.duplicateWord'));
+        setCompletingWord(false);
+        return;
+      }
+
       let newData: ExtractResponse;
-      
+
       if (type === 'word') {
         newData = { ...aiData, vocabulaire: [...aiData.vocabulaire, completed as VocabItem] };
       } else if (type === 'verb') {
@@ -710,11 +792,7 @@ export default function LibraryItemScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Pressable style={styles.back} onPress={() => router.back()}>
-        <Text style={styles.backText}>{t('libraryDetail.backLibrary')}</Text>
-      </Pressable>
-
-      <Text style={styles.title}>✏️ {editing ? t('libraryDetail.edit') : t('libraryDetail.details')}</Text>
+      <Text style={styles.title}>{editing ? t('libraryDetail.edit') : t('libraryDetail.details')}</Text>
 
       <Text style={styles.label}>{t('libraryDetail.title')}</Text>
       <TextInput
@@ -735,6 +813,53 @@ export default function LibraryItemScreen() {
         multiline
         textAlignVertical="top"
       />
+
+      {/* Sélection du dossier - Toujours visible */}
+      {!editing && (
+        <View style={styles.folderSection}>
+          <Text style={styles.label}>📁 {t('libraryDetail.folder')}</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.folderScroll}
+          >
+            <Pressable
+              style={[
+                styles.folderChip,
+                selectedFolderId === null && styles.folderChipSelected
+              ]}
+              onPress={() => setSelectedFolderId(null)}
+            >
+              <Text style={styles.folderText}>{t('library.noFolder')}</Text>
+            </Pressable>
+            {folders.map((folder) => (
+              <Pressable
+                key={folder.id}
+                style={[
+                  styles.folderChip,
+                  selectedFolderId === folder.id && styles.folderChipSelected
+                ]}
+                onPress={() => setSelectedFolderId(folder.id)}
+              >
+                <Text style={styles.folderIcon}>{folder.icon}</Text>
+                <Text style={styles.folderText}>{folder.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {selectedFolderId !== scan?.folder_id && (
+            <Pressable style={styles.btnUpdateFolder} onPress={updateFolder}>
+              <Text style={styles.btnUpdateFolderText}>
+                ✅ {t('libraryDetail.updateFolder')}
+              </Text>
+            </Pressable>
+          )}
+          {folders.length === 0 && (
+            <Text style={styles.noFoldersText}>
+              {t('library.noFolders')}
+            </Text>
+          )}
+        </View>
+      )}
 
       <View style={styles.row}>
         {!editing ? (
@@ -1178,6 +1303,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
     gap: 12,
+    backgroundColor: 'transparent',
   },
   back: {
     alignSelf: "flex-start",
@@ -1525,5 +1651,56 @@ const styles = StyleSheet.create({
   },
   deleteBtn: {
     fontSize: 14,
+  },
+  // Styles pour la section dossier
+  folderSection: {
+    marginTop: 12,
+  },
+  folderScroll: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  folderChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 6,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+  folderChipSelected: {
+    backgroundColor: "#E8F5E9",
+    borderColor: "#2E7D32",
+  },
+  folderIcon: {
+    fontSize: 16,
+    marginRight: 4,
+  },
+  folderText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+  },
+  btnUpdateFolder: {
+    backgroundColor: "#1976d2",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignSelf: "flex-start",
+    marginTop: 4,
+  },
+  btnUpdateFolderText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  noFoldersText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#999",
+    fontStyle: "italic",
   },
 });
