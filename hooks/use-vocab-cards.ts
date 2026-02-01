@@ -8,6 +8,10 @@ export interface VocabCard {
   wordAr: string;
   wordFr: string;
   definition: string;
+  singulier?: string | null;
+  pluriel?: string | null;
+  contraire?: string | null;
+  racine?: string | null;
   difficulty: CardDifficulty;
   lastReviewed: Date | null;
   nextReview: Date;

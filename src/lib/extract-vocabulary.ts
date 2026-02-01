@@ -189,12 +189,39 @@ Examples:
 - ALWAYS provide contraire (opposite) when it exists, otherwise null
 - Return ONLY valid JSON, no markdown
 
-## JSON FORMAT:
+## JSON FORMAT - STRICT STRUCTURE:
 {
-  "vocabulaire": [{"mot_ar":"word WITH tashkeel", "traduction":"${targetLanguage} translation", "singulier":"singular WITH tashkeel", "pluriel":"plural WITH tashkeel", "contraire":"opposite or null", "remarque":"grammar note or null"}],
-  "verbes": [{"verbe_ar":"masdar WITH tashkeel", "traduction":"${targetLanguage} translation", "passe_3ms":"past WITH tashkeel", "present_3ms":"present WITH tashkeel", "imperatif":"imperative WITH tashkeel", "remarque":"grammar note or null"}],
-  "particules": [{"particule_ar":"particle WITH tashkeel", "type":"type", "traduction":"${targetLanguage} meaning", "exemple":"example sentence or null"}]
-}`;
+  "vocabulaire": [
+    {
+      "mot_ar": "word WITH full tashkeel",
+      "traduction": "${targetLanguage} translation",
+      "singulier": "singular form WITH tashkeel or null",
+      "pluriel": "plural form WITH tashkeel or null",
+      "contraire": "opposite/antonym WITH tashkeel or null",
+      "remarque": "grammar note or null"
+    }
+  ],
+  "verbes": [
+    {
+      "verbe_ar": "masdar WITH tashkeel",
+      "traduction": "${targetLanguage} translation",
+      "passe_3ms": "past 3rd masc sing WITH tashkeel",
+      "present_3ms": "present 3rd masc sing WITH tashkeel",
+      "imperatif": "imperative 2nd masc sing WITH tashkeel",
+      "remarque": "grammar note or null"
+    }
+  ],
+  "particules": [
+    {
+      "particule_ar": "particle WITH tashkeel",
+      "type": "type of particle",
+      "traduction": "${targetLanguage} meaning",
+      "exemple": "example sentence or null"
+    }
+  ]
+}
+
+IMPORTANT: NEVER omit the "contraire" field from vocabulaire items. ALWAYS include it (with value or null).`;
 
   const wordCount = arabicText.split(/\s+/).filter(w => w.length > 0).length;
 

@@ -20,6 +20,8 @@ type VocabItem = {
   word: string;
   translation: string;
   root?: string;
+  singulier?: string;
+  pluriel?: string;
   contraire?: string;
 };
 
@@ -70,6 +72,8 @@ export default function StatisticsScreen() {
                 word: item.mot_ar || item.word,
                 translation: item.traduction || item.translation,
                 root: item.racine || item.root,
+                singulier: item.singulier,
+                pluriel: item.pluriel,
                 contraire: item.contraire,
               }));
               allVocab.push(...vocabItems);
@@ -174,28 +178,34 @@ export default function StatisticsScreen() {
 
       {/* RÉSUMÉ */}
       <View style={styles.summary}>
-        <View style={styles.summaryCard}>
-          <MaterialCommunityIcons name="book-alphabet" size={32} color="#2E7D32" />
-          <Text style={styles.summaryCount}>{getTotalCount()}</Text>
-          <Text style={styles.summaryLabel}>{t('statistics.totalWords')}</Text>
+        {/* Première ligne : Mots totaux et Vocabulaire */}
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <MaterialCommunityIcons name="book-alphabet" size={32} color="#2E7D32" />
+            <Text style={styles.summaryCount}>{getTotalCount()}</Text>
+            <Text style={styles.summaryLabel}>{t('statistics.totalWords')}</Text>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <MaterialCommunityIcons name="book-open-variant" size={32} color="#1976d2" />
+            <Text style={styles.summaryCount}>{vocabulary.length}</Text>
+            <Text style={styles.summaryLabel}>{t('statistics.vocabulary')}</Text>
+          </View>
         </View>
 
-        <View style={styles.summaryCard}>
-          <MaterialCommunityIcons name="book-open-variant" size={32} color="#1976d2" />
-          <Text style={styles.summaryCount}>{vocabulary.length}</Text>
-          <Text style={styles.summaryLabel}>{t('statistics.vocabulary')}</Text>
-        </View>
+        {/* Deuxième ligne : Verbes et Particules */}
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <MaterialCommunityIcons name="run-fast" size={32} color="#FF9800" />
+            <Text style={styles.summaryCount}>{verbs.length}</Text>
+            <Text style={styles.summaryLabel}>{t('statistics.verbs')}</Text>
+          </View>
 
-        <View style={styles.summaryCard}>
-          <MaterialCommunityIcons name="run-fast" size={32} color="#FF9800" />
-          <Text style={styles.summaryCount}>{verbs.length}</Text>
-          <Text style={styles.summaryLabel}>{t('statistics.verbs')}</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <MaterialCommunityIcons name="star-four-points" size={32} color="#9C27B0" />
-          <Text style={styles.summaryCount}>{particles.length}</Text>
-          <Text style={styles.summaryLabel}>{t('statistics.particles')}</Text>
+          <View style={styles.summaryCard}>
+            <MaterialCommunityIcons name="star-four-points" size={32} color="#9C27B0" />
+            <Text style={styles.summaryCount}>{particles.length}</Text>
+            <Text style={styles.summaryLabel}>{t('statistics.particles')}</Text>
+          </View>
         </View>
       </View>
 
@@ -267,6 +277,24 @@ export default function StatisticsScreen() {
                   )}
                 </View>
                 <Text style={styles.translation}>{item.translation}</Text>
+
+                {/* Singulier et Pluriel */}
+                {(item.singulier || item.pluriel) && (
+                  <View style={styles.formsRow}>
+                    {item.singulier && (
+                      <Text style={styles.formText}>
+                        {t('statistics.singular')}: {item.singulier}
+                      </Text>
+                    )}
+                    {item.pluriel && (
+                      <Text style={styles.formText}>
+                        {t('statistics.plural')}: {item.pluriel}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {/* Contraire */}
                 {item.contraire && (
                   <Text style={styles.contraire}>
                     {t('statistics.opposite')}: {item.contraire}
@@ -310,23 +338,39 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   summary: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     padding: 16,
+    gap: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
     gap: 12,
   },
   summaryCard: {
     flex: 1,
-    minWidth: '45%',
     backgroundColor: 'white',
     borderRadius: 12,
-    padding: 16,
+    padding: 20,
     alignItems: 'center',
+    justifyContent: 'center',
+    aspectRatio: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  summaryCardWide: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    minHeight: 120,
   },
   summaryCount: {
     fontSize: 28,
@@ -385,7 +429,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   listContent: {
-    paddingBottom: 200,
+    paddingBottom: 120,
   },
   wordCard: {
     backgroundColor: 'white',
@@ -415,12 +459,25 @@ const styles = StyleSheet.create({
   translation: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 4,
+  },
+  formsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  formText: {
+    fontSize: 13,
+    color: '#1976d2',
+    fontStyle: 'italic',
   },
   contraire: {
     fontSize: 13,
-    color: '#2E7D32',
-    marginTop: 4,
-    fontStyle: 'italic',
+    color: '#FF9800',
+    marginTop: 6,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

@@ -41,7 +41,7 @@ export default function VocabCardsScreen() {
       const [{ data: vocab, error: vocabError }, { data: progress, error: progressError }] = await Promise.all([
         supabase
           .from('vocabulary')
-          .select('id, word, translation')
+          .select('id, word, translation, singulier, pluriel, contraire, racine')
           .eq('user_id', userId)
           .order('created_at', { ascending: false }),
         supabase
@@ -82,6 +82,10 @@ export default function VocabCardsScreen() {
           wordAr: v.word,
           wordFr: v.translation,
           definition: v.translation,
+          singulier: v.singulier,
+          pluriel: v.pluriel,
+          contraire: v.contraire,
+          racine: v.racine,
           difficulty: prog?.difficulty || 'medium',
           lastReviewed: prog?.last_reviewed ? new Date(prog.last_reviewed) : null,
           nextReview: prog?.next_review ? new Date(prog.next_review) : new Date(),
@@ -225,6 +229,36 @@ export default function VocabCardsScreen() {
         >
           <Text style={styles.cardWordBack}>{currentCard.wordFr}</Text>
           <Text style={styles.cardDefinition}>{currentCard.definition}</Text>
+
+          {/* Formes : Singulier et Pluriel */}
+          {(currentCard.singulier || currentCard.pluriel) && (
+            <View style={styles.formsContainer}>
+              {currentCard.singulier && (
+                <Text style={styles.formText}>
+                  {t('statistics.singular')}: {currentCard.singulier}
+                </Text>
+              )}
+              {currentCard.pluriel && (
+                <Text style={styles.formText}>
+                  {t('statistics.plural')}: {currentCard.pluriel}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Contraire */}
+          {currentCard.contraire && (
+            <Text style={styles.contraireText}>
+              {t('statistics.opposite')}: {currentCard.contraire}
+            </Text>
+          )}
+
+          {/* Racine */}
+          {currentCard.racine && (
+            <Text style={styles.racineText}>
+              {t('statistics.root')}: {currentCard.racine}
+            </Text>
+          )}
         </Animated.View>
       </TouchableOpacity>
 
@@ -417,5 +451,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#999',
     textAlign: 'center',
+  },
+  formsContainer: {
+    marginTop: 12,
+    gap: 6,
+  },
+  formText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  contraireText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,1)',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  racineText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    marginTop: 6,
+    fontStyle: 'italic',
   },
 });
