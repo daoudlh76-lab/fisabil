@@ -70,8 +70,8 @@ export const useDictation = () => {
     currentIndexRef.current = index;
     setCurrentSegmentIndex(index);
 
-    // Pitch différencié mais naturel: homme (0.85-0.9), femme (1.1-1.15)
-    const pitch = genderRef.current === 'female' ? 1.12 : 0.88;
+    // Voix féminine: pitch plus élevé (1.2), voix masculine: pitch plus bas (0.8)
+    const pitch = genderRef.current === 'female' ? 1.2 : 0.8;
 
     Speech.speak(segment, {
       language: 'ar-SA',

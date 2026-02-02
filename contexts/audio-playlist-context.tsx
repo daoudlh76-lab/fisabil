@@ -364,7 +364,8 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
           console.log('▶️ Starting speech...');
           await Speech.stop(); // Arrêter d'abord toute lecture en cours
 
-          const pitch = gender === 'female' ? 1.5 : 0.5;
+          // Voix féminine: pitch plus élevé (1.2), voix masculine: pitch plus bas (0.8)
+          const pitch = gender === 'female' ? 1.2 : 0.8;
           console.log(`🔊 Using ${gender === 'female' ? 'female' : 'male'} voice (pitch: ${pitch})`);
 
           setPlaylist((prev) => ({ ...prev, isPlaying: true, currentPosition: 0 }));

@@ -229,8 +229,8 @@ export function useSpeech() {
           speechLanguage = langMap[language] || "en-US";
         }
 
-        // Pitch très différencié pour une différence très audible: homme=grave (0.5), femme=aigu (1.5)
-        const pitch = gender === 'female' ? 1.5 : 0.5;
+        // Voix féminine: pitch plus élevé (1.2), voix masculine: pitch plus bas (0.8)
+        const pitch = gender === 'female' ? 1.2 : 0.8;
 
         console.log("🔊 Speaking:", text.slice(0, 50) + "...", "in", speechLanguage, "pitch:", pitch);
 
