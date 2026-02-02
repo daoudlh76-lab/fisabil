@@ -78,12 +78,8 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
   const speakTextRef = useRef<(text: string) => Promise<void>>(() => Promise.resolve());
   const sendUserSpeechRef = useRef<(text: string) => void>(() => {});
 
-  // Charger les textes de l'utilisateur
-  useEffect(() => {
-    loadUserTexts();
-  }, []);
-
-  const loadUserTexts = async () => {
+  // Fonction pour charger les textes de l'utilisateur
+  const loadUserTexts = useCallback(async () => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
@@ -128,7 +124,13 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
       console.error('❌ Erreur chargement textes:', e);
       return [];
     }
-  };
+  }, []);
+
+  // Charger les textes au montage
+  useEffect(() => {
+    console.log('🔄 Chargement initial des textes du tuteur...');
+    loadUserTexts();
+  }, [loadUserTexts]);
 
   // Construire les instructions système
   const buildSystemInstructions = useCallback((textsToUse?: typeof userTexts) => {
@@ -772,12 +774,6 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
     currentResponseRef.current = '';
     processedItemsRef.current.clear();
   }, [stopListening]);
-
-  // Charger les textes au montage
-  useEffect(() => {
-    console.log('🔄 Chargement initial des textes du tuteur...');
-    loadUserTexts();
-  }, []);
 
   // Cleanup
   useEffect(() => {
