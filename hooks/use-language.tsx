@@ -13,7 +13,7 @@ type LanguageContextType = {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-const AVAILABLE_LANGUAGES: Language[] = ["fr", "en", "de", "es", "ru", "ms"];
+const AVAILABLE_LANGUAGES: Language[] = ["fr", "en", "de", "es", "ru", "ms", "ar"];
 
 export function LanguageProvider(props: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>("fr");
