@@ -896,7 +896,6 @@ const styles = StyleSheet.create({
   cardContainer: {
     height: 300,
     marginBottom: 20,
-    perspective: 1000,
   },
   cardFlip: {
     position: 'absolute',

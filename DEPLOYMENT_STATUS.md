@@ -1,273 +1,219 @@
-# Status de Déploiement - Fisabil
+# 📋 État du Déploiement - Fisabil
 
-**Date de préparation**: 26 Janvier 2026
-**Version**: 1.0.0
-**Status**: ✅ **PRÊT POUR LE DÉPLOIEMENT**
-
----
-
-## ✅ Éléments Complétés
-
-### Configuration Technique
-- ✅ `app.json` complètement configuré avec toutes les métadonnées
-- ✅ `eas.json` configuré pour production
-- ✅ Permissions iOS complètes (Caméra, Micro, Speech Recognition, Photos)
-- ✅ Permissions Android complètes (Caméra, Micro, Internet, Storage)
-- ✅ Bundle Identifier iOS: `com.fisabil.app`
-- ✅ Package Android: `com.fisabil.app`
-- ✅ EAS Project ID configuré
-- ✅ Auto-increment activé pour iOS et Android
-
-### Assets
-- ✅ Logo principal (1.6 MB)
-- ✅ Adaptive icon Android
-- ✅ Icon iOS
-- ✅ Splash screen configuré
-
-### Documentation
-- ✅ Privacy Policy (`PRIVACY_POLICY.md`)
-- ✅ Store Listing guide (`STORE_LISTING.md`)
-- ✅ Deployment Guide complet (`DEPLOYMENT_GUIDE.md`)
-- ✅ README existant
-
-### Sécurité
-- ✅ `.gitignore` mis à jour pour exclure les fichiers sensibles
-- ✅ Template `.env.production.example` créé
-- ✅ Fichiers sensibles exclus du contrôle de version
-
-### Scripts
-- ✅ Script de vérification pré-déploiement (`scripts/pre-deployment-check.js`)
-- ✅ Scripts npm ajoutés pour build et submit
-- ✅ Tous les scripts testés et fonctionnels
+**Date**: 2 février 2026  
+**Version**: 1.0.0  
+**Statut**: ✅ **PRÊT POUR LE DÉPLOIEMENT**
 
 ---
 
-## ⚠️ Actions Requises Avant le Déploiement
+## ✅ Vérifications Complétées
 
-### 1. Variables d'Environnement de Production
+### 1. Configuration Expo (✅)
+- ✅ **app.json** validé (propriété 'privacy' retirée)
+- ✅ **eas.json** configuré correctement
+- ✅ Tous les checks expo-doctor passés (17/17)
+- ✅ SDK 54 à jour (expo@54.0.33, expo-font@14.0.11, expo-router@6.0.23)
 
-Créer `.env.production` avec vos clés de production:
+### 2. Build (✅)
+- ✅ **Build Preview APK** réussi
+  - URL: https://expo.dev/accounts/daoudlh/projects/fisabil/builds/f826d381-2dac-47d9-bdcf-e80387e807e2
+  - Taille: ~68.6 MB
+  - Durée: 2m 52s upload + build time
+- ✅ Credentials Android configurées (Keystore A8fmpo5soR)
+- ✅ Variables d'environnement chargées depuis EAS
 
-```bash
-cp .env.production.example .env.production
-# Puis éditer .env.production avec vos vraies clés
-```
+### 3. Git (✅)
+- ✅ Tous les changements commités
+- ✅ 11 commits en avance sur origin/main
+- ✅ Working tree propre
+- ✅ Derniers commits:
+  - `ffc514f` - fix: Corriger la configuration Expo et mettre à jour les dépendances SDK 54
+  - `6b2e898` - chore: Supprimer le fichier APK volumineux (120MB) causant les échecs d'upload du build
+  - `7565c43` - feat: Ajout singulier, pluriel et contraire dans le vocabulaire
 
-**Important**: Utiliser des clés API différentes pour la production!
+### 4. Base de Données (⚠️ ACTION REQUISE)
+- ✅ Migration créée: `10_add_vocabulary_forms.sql`
+- ⚠️ **À APPLIQUER MANUELLEMENT** dans Supabase Dashboard > SQL Editor
+- Colonnes à ajouter: `singulier`, `pluriel`, `contraire`, `racine`
 
-### 2. Screenshots pour les Stores
+### 5. Environnement (✅)
+- ✅ Fichier `.env` présent
+- ✅ Variables EAS configurées:
+  - `EXPO_PUBLIC_SUPABASE_URL`
+  - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+  - `EXPO_PUBLIC_OPENAI_API_KEY`
+  - `EXPO_PUBLIC_GOOGLE_VISION_API_KEY`
 
-**À créer** (voir `STORE_LISTING.md` pour détails):
-
-- [ ] 6-8 screenshots iPhone (6.5" et 5.5")
-- [ ] 6-8 screenshots iPad Pro
-- [ ] 2-8 screenshots Android Phone
-- [ ] 2-8 screenshots Android Tablet (optionnel)
-- [ ] Feature Graphic Google Play (1024x500)
-
-**Écrans recommandés à capturer**:
-1. Welcome/Login
-2. Scanner OCR en action
-3. Bibliothèque de textes
-4. Détail texte avec vocabulaire
-5. Tuteur vocal - conversation
-6. Cartes de révision
-7. Exercice de dictée
-8. Paramètres
-
-### 3. Hébergement de la Privacy Policy
-
-Options:
-- [ ] Créer un site web simple (https://fisabil.com/privacy)
-- [ ] Utiliser GitHub Pages (gratuit)
-- [ ] Utiliser Vercel/Netlify (gratuit)
-
-**Fichier prêt**: `PRIVACY_POLICY.md`
-
-### 4. Comptes Développeur
-
-- [ ] Apple Developer Account ($99/an)
-  - Créer sur https://developer.apple.com
-  - Activer l'authentification 2FA
-
-- [ ] Google Play Console ($25 one-time)
-  - Créer sur https://play.google.com/console
-
-- [ ] Compte Expo (gratuit)
-  - Déjà configuré avec Project ID
-
-### 5. Service Account Google (pour automated submission)
-
-Si vous voulez la soumission automatisée Android:
-
-- [ ] Créer un Service Account dans Google Play Console
-- [ ] Télécharger le JSON
-- [ ] Placer dans `./google-service-account.json`
+### 6. Permissions (✅)
+- ✅ Android:
+  - RECORD_AUDIO (microphone pour tuteur vocal)
+  - CAMERA (scan de textes)
+  - READ_MEDIA_IMAGES (sélection d'images)
+  - INTERNET (API calls)
+- ✅ iOS:
+  - NSCameraUsageDescription
+  - NSMicrophoneUsageDescription
+  - NSSpeechRecognitionUsageDescription
+  - NSPhotoLibraryUsageDescription
 
 ---
 
-## 🚀 Commandes de Déploiement
+## 🚀 Nouvelles Fonctionnalités (Version Actuelle)
 
-### Vérification Pré-Déploiement
+### 1. Dictée Manuscrite
+- ❌ Supprimé: Saisie au clavier
+- ✅ Nouveau: Instructions pour écrire sur papier
+- ✅ Bouton "Voir/Cacher la réponse"
+- ✅ Navigation manuelle entre exercices
 
+### 2. Vocabulaire Enrichi
+- ✅ Singulier et pluriel affichés
+- ✅ Contraires (antonymes) intégrés
+- ✅ Racines des mots
+- ✅ Affichage dans les cartes de révision
+- ✅ Affichage dans les statistiques
+
+### 3. Lecteur Audio Amélioré
+- ✅ Support audio avec fichiers (expo-av)
+- ✅ Support synthèse vocale (expo-speech)
+- ✅ Voix masculine/féminine selon préférence
+- ✅ Contrôles de lecture (pause, avance, recul)
+
+### 4. Statistiques Améliorées
+- ✅ Layout 2x2 pour les compteurs
+- ✅ Formes singulier/pluriel en bleu italic
+- ✅ Contraires en orange bold
+- ✅ Padding ajusté pour la barre de navigation
+
+---
+
+## 📦 Commandes de Déploiement
+
+### Build Preview (Déjà fait ✅)
 ```bash
-npm run deploy:check
+eas build --platform android --profile preview
 ```
 
-### Build de Production
-
+### Build Production AAB (Pour Google Play)
 ```bash
-# iOS seulement
-npm run deploy:ios
-
-# Android seulement
-npm run deploy:android
-
-# Les deux plateformes
-npm run deploy:all
+eas build --platform android --profile production
 ```
 
-### Soumission aux Stores
-
+### Build Production iOS (Pour App Store)
 ```bash
-# iOS App Store
-npm run submit:ios
+eas build --platform ios --profile production
+```
 
-# Google Play Store
-npm run submit:android
+### Build Both Platforms
+```bash
+eas build --platform all --profile production
+```
 
-# Les deux stores
-npm run submit:all
+### Submit to Stores
+```bash
+# Android (nécessite google-service-account.json)
+eas submit --platform android --latest
+
+# iOS (nécessite Apple Developer account)
+eas submit --platform ios --latest
+
+# Both
+eas submit --platform all --latest
 ```
 
 ---
 
-## 📋 Checklist de Lancement
+## ⚠️ Actions Requises Avant Production
 
-### Avant le Premier Build
+### 1. Base de Données Supabase (CRITIQUE)
+Exécuter dans Supabase Dashboard > SQL Editor:
+```sql
+ALTER TABLE public.vocabulary
+ADD COLUMN IF NOT EXISTS singulier TEXT,
+ADD COLUMN IF NOT EXISTS pluriel TEXT,
+ADD COLUMN IF NOT EXISTS contraire TEXT,
+ADD COLUMN IF NOT EXISTS racine TEXT;
 
-- [ ] Créer `.env.production` avec vraies clés API
-- [ ] Vérifier que les clés Supabase sont pour la production
-- [ ] Vérifier que la clé OpenAI est pour la production
-- [ ] Exécuter `npm run deploy:check`
-- [ ] Tous les tests passent ✅
-
-### Comptes et Accès
-
-- [ ] Apple Developer Account créé et actif
-- [ ] Google Play Console Account créé et actif
-- [ ] EAS CLI installé: `npm install -g eas-cli`
-- [ ] Logged in to EAS: `eas login`
-
-### Assets et Contenu
-
-- [ ] Screenshots préparés (minimum 6 par plateforme)
-- [ ] Privacy Policy hébergée en ligne
-- [ ] Support email configuré (support@fisabil.com)
-- [ ] Compte de test créé pour les reviewers
-
-### Configuration Stores
-
-#### Apple App Store
-- [ ] App Store Connect - App créée
-- [ ] Bundle ID confirmé: com.fisabil.app
-- [ ] Certificates et Provisioning Profiles configurés
-- [ ] TestFlight configuré (optionnel)
-- [ ] App Information remplie
-- [ ] Pricing & Availability configurés
-- [ ] Privacy information remplie
-- [ ] Screenshots uploadés
-- [ ] Export Compliance répondu
-
-#### Google Play Store
-- [ ] Google Play Console - App créée
-- [ ] Package name confirmé: com.fisabil.app
-- [ ] Store Listing rempli
-- [ ] Screenshots uploadés
-- [ ] Feature Graphic uploadé
-- [ ] Content Rating complété
-- [ ] Pricing & Distribution configurés
-- [ ] Data Safety section remplie
-
----
-
-## 🎯 Timeline Estimé
-
-| Étape | Durée Estimée |
-|-------|---------------|
-| Création des comptes développeur | 1-2 jours |
-| Préparation des screenshots | 2-4 heures |
-| Hébergement Privacy Policy | 1 heure |
-| Premier build iOS | 20-30 min |
-| Premier build Android | 20-30 min |
-| Configuration App Store Connect | 1-2 heures |
-| Configuration Google Play Console | 1-2 heures |
-| Soumission et attente review iOS | 24-48 heures |
-| Soumission et attente review Android | Quelques heures à 7 jours |
-
-**Total estimé**: 3-5 jours (incluant les reviews)
-
----
-
-## 📊 Métriques de Succès
-
-Une fois lancé, suivre:
-
-- **Downloads**: Nombre de téléchargements
-- **Active Users**: Utilisateurs actifs quotidiens/mensuels
-- **Retention**: Taux de rétention à J1, J7, J30
-- **Crashes**: Taux de crash (objectif < 1%)
-- **Reviews**: Note moyenne (objectif > 4.0)
-- **Engagement**: Temps moyen par session
-
----
-
-## 🔄 Mises à Jour Futures
-
-### Updates OTA (Over-The-Air)
-
-Pour les updates JavaScript/React qui ne nécessitent pas de rebuild:
-
-```bash
-eas update --branch production --message "Description du fix"
+COMMENT ON COLUMN public.vocabulary.singulier IS 'Forme singulière du mot arabe avec diacritiques';
+COMMENT ON COLUMN public.vocabulary.pluriel IS 'Forme plurielle du mot arabe avec diacritiques';
+COMMENT ON COLUMN public.vocabulary.contraire IS 'Antonyme/contraire du mot arabe avec diacritiques';
+COMMENT ON COLUMN public.vocabulary.racine IS 'Racine du mot arabe';
 ```
 
-### Nouvelles Versions
+### 2. Google Play Console
+- [ ] Créer le listing de l'application
+- [ ] Ajouter les captures d'écran
+- [ ] Rédiger la description
+- [ ] Définir la catégorie (Éducation)
+- [ ] Configurer le système de notation de contenu
 
-Pour les updates qui nécessitent un nouveau build:
+### 3. Credentials Android
+- [x] Keystore configurée dans EAS (A8fmpo5soR)
+- [ ] Vérifier le fichier `google-service-account.json` pour auto-submit
 
-1. Mettre à jour `version` dans `app.json`
-2. `buildNumber` et `versionCode` seront auto-incrémentés
-3. Rebuild: `npm run deploy:all`
-4. Resubmit: `npm run submit:all`
+### 4. Tests
+- [ ] Tester l'APK Preview sur appareil réel
+- [ ] Vérifier toutes les fonctionnalités:
+  - [ ] Scan OCR
+  - [ ] Tuteur vocal (microphone)
+  - [ ] Lecteur audio
+  - [ ] Cartes de révision
+  - [ ] Dictées
+  - [ ] Statistiques
+  - [ ] Vocabulaire enrichi (singulier, pluriel, contraire)
+
+### 5. Git
+- [ ] Push vers origin/main: `git push origin main`
+- [ ] Créer un tag de version: `git tag v1.0.0 && git push --tags`
+
+---
+
+## 📊 Informations Techniques
+
+### Versions
+- **Expo SDK**: 54.0.33
+- **React**: 19.1.0
+- **React Native**: 0.78.8
+- **Node**: Récent (vérifié avec expo-doctor)
+
+### Packages Critiques
+- `@supabase/supabase-js`: 2.90.1
+- `expo-speech-recognition`: 3.0.1
+- `expo-av`: 16.0.8
+- `expo-speech`: 14.0.8
+- `expo-router`: 6.0.23
+
+### Build Info
+- **EAS Project ID**: 4a8d9abd-37e7-4966-a595-bcb746ebffdf
+- **Bundle ID Android**: com.fisabil.app
+- **Bundle ID iOS**: com.fisabil.app
+- **Version Code**: 1 (auto-increment activé pour production)
 
 ---
 
 ## 📞 Support
 
-En cas de problèmes:
-
-1. Consulter `DEPLOYMENT_GUIDE.md`
-2. Vérifier les logs EAS: `eas build:view [build-id]`
-3. Consulter Expo Docs: https://docs.expo.dev
-4. Forum Expo: https://forums.expo.dev
-5. Stack Overflow: Tag `expo`
+- **Bugs/Issues**: Créer un ticket dans le repository Git
+- **EAS Builds**: https://expo.dev/accounts/daoudlh/projects/fisabil/builds
+- **Supabase Dashboard**: https://supabase.com/dashboard
 
 ---
 
-## 🎉 Prochaines Étapes
+## ✅ Checklist Finale
 
-1. ✅ Vérifier que tout est en place (ce document)
-2. 🔜 Créer les comptes développeur si pas encore fait
-3. 🔜 Préparer les screenshots
-4. 🔜 Héberger la Privacy Policy
-5. 🔜 Lancer le premier build de production
-6. 🔜 Remplir les store listings
-7. 🔜 Soumettre pour review
-8. 🎊 Célébrer le lancement!
+- [x] Configuration Expo validée
+- [x] Dépendances à jour
+- [x] Build preview réussi
+- [x] Code commité et propre
+- [x] Variables d'environnement configurées
+- [x] Permissions déclarées
+- [ ] Migration base de données appliquée
+- [ ] Tests manuels sur APK
+- [ ] Push vers origin/main
+- [ ] Tag de version créé
+- [ ] Build production lancé
+- [ ] Soumission aux stores
 
 ---
 
-**Fisabil v1.0.0 - Prêt pour le Monde! 🚀**
-
-*Document généré le 26 janvier 2026*
+**Prochaine étape recommandée**: Appliquer la migration Supabase puis lancer le build production.

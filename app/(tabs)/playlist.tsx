@@ -1134,9 +1134,6 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 8,
   },
-  trackDelete: {
-    padding: 8,
-  },
   folderText: {
     fontSize: 13,
     fontWeight: '600',
