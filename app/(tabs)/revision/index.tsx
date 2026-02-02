@@ -440,7 +440,7 @@ export default function RevisionScreen() {
             <>
               <View style={styles.dictationHeader}>
                 <View style={styles.levelBadge}>
-                  <Text style={styles.levelText}>{current.level}</Text>
+                  <Text style={styles.levelText}>{t(`revision.${current.level}`)}</Text>
                 </View>
                 <Text style={styles.wordCountBadge}>
                   📝 {current.wordCount} {t('revision.words')}
