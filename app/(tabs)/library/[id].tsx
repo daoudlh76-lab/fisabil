@@ -983,12 +983,13 @@ export default function LibraryItemScreen() {
                 )}
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                  <View style={{ minWidth: 560 }}>
+                  <View style={{ minWidth: 650 }}>
                     <View style={styles.tableHeader}>
                       <Text style={[styles.tableHeaderCell, { width: 110 }]}>{t('libraryDetail.word')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 110 }]}>{t('libraryDetail.translation')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 90 }]}>{t('libraryDetail.singular')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 90 }]}>{t('libraryDetail.plural')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 90 }]}>{t('libraryDetail.opposite')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
                     </View>
                     {aiData.vocabulaire?.length ? (
@@ -1018,6 +1019,12 @@ export default function LibraryItemScreen() {
                               onChangeText={(text) => setEditedItem({ ...editedItem, pluriel: text })}
                               textAlign="right"
                             />
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, { width: 90 }]}
+                              value={editedItem?.contraire || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, contraire: text })}
+                              textAlign="right"
+                            />
                             <View style={styles.editActions}>
                               <Pressable onPress={saveEditVocab}><Text style={styles.saveBtn}>✓</Text></Pressable>
                               <Pressable onPress={() => { setEditingVocabIdx(null); setEditedItem(null); }}><Text style={styles.cancelBtn}>✕</Text></Pressable>
@@ -1036,6 +1043,9 @@ export default function LibraryItemScreen() {
                             </Text>
                             <Text style={[styles.tableCell, styles.tableCellArabic, { width: 90 }]} numberOfLines={1}>
                               {v.pluriel ? addDiacriticsToWord(v.pluriel) : "-"}
+                            </Text>
+                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 90 }]} numberOfLines={1}>
+                              {v.contraire ? addDiacriticsToWord(v.contraire) : "-"}
                             </Text>
                             <View style={[styles.tableCell, { width: 60, flexDirection: 'row', justifyContent: 'center' }]}>
                               <Pressable onPress={() => startEditVocab(idx)}><Text style={styles.editBtn}>✏️</Text></Pressable>

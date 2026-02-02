@@ -278,8 +278,8 @@ export default function StatisticsScreen() {
                 </View>
                 <Text style={styles.translation}>{item.translation}</Text>
 
-                {/* Singulier et Pluriel */}
-                {(item.singulier || item.pluriel) && (
+                {/* Singulier, Pluriel et Contraire */}
+                {(item.singulier || item.pluriel || item.contraire) && (
                   <View style={styles.formsRow}>
                     {item.singulier && (
                       <Text style={styles.formText}>
@@ -291,14 +291,12 @@ export default function StatisticsScreen() {
                         {t('statistics.plural')}: {item.pluriel}
                       </Text>
                     )}
+                    {item.contraire && (
+                      <Text style={styles.contraire}>
+                        {t('statistics.opposite')}: {item.contraire}
+                      </Text>
+                    )}
                   </View>
-                )}
-
-                {/* Contraire */}
-                {item.contraire && (
-                  <Text style={styles.contraire}>
-                    {t('statistics.opposite')}: {item.contraire}
-                  </Text>
                 )}
               </View>
             ))
@@ -476,7 +474,6 @@ const styles = StyleSheet.create({
   contraire: {
     fontSize: 13,
     color: '#FF9800',
-    marginTop: 6,
     fontWeight: '600',
   },
   loadingContainer: {
