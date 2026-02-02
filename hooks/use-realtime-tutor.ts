@@ -88,7 +88,7 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
 
-      if (!userId) return;
+      if (!userId) return [];
 
       // Charger TOUS les scans ET TOUT le vocabulaire (pas de limite)
       const [{ data: scans }, { data: vocab }] = await Promise.all([
@@ -109,30 +109,37 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
       }
 
       // Stocker TOUT le vocabulaire dans userTexts
+      let loadedTexts: any[] = [];
       if (vocab && scans) {
         const textsWithVocab = scans.map(scan => ({
           ...scan,
           userVocabulary: vocab
         }));
         setUserTexts(textsWithVocab);
+        loadedTexts = textsWithVocab;
         console.log('📖 TOUT le vocabulaire chargé:', vocab.length, 'mots de tous les textes');
       } else if (scans) {
         setUserTexts(scans);
+        loadedTexts = scans;
       }
+
+      return loadedTexts;
     } catch (e) {
       console.error('❌ Erreur chargement textes:', e);
+      return [];
     }
   };
 
   // Construire les instructions système
-  const buildSystemInstructions = useCallback(() => {
+  const buildSystemInstructions = useCallback((textsToUse?: typeof userTexts) => {
     const targetLang = languageNames[uiLang] || 'French';
+    const texts = textsToUse || userTexts;
 
     // Extraire TOUT le vocabulaire de TOUS les textes scannés
     const allVocabulary: string[] = [];
     const userVocabList: Array<{word: string, translation: string}> = [];
 
-    userTexts.forEach(text => {
+    texts.forEach(text => {
       // Vocabulaire extrait des textes scannés
       if (text.vocabulary && Array.isArray(text.vocabulary)) {
         text.vocabulary.forEach((item: any) => {
@@ -146,8 +153,8 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
     });
 
     // Utiliser TOUT le vocabulaire, pas de limite
-    const textsContext = userTexts.length > 0
-      ? userTexts.map((t, i) => `--- TEXT ${i + 1}: "${t.title}" ---\n${t.content.slice(0, 600)}`).join('\n\n')
+    const textsContext = texts.length > 0
+      ? texts.map((t, i) => `--- TEXT ${i + 1}: "${t.title}" ---\n${t.content.slice(0, 600)}`).join('\n\n')
       : 'No texts available yet.';
 
     // Inclure TOUT le vocabulaire disponible
@@ -606,6 +613,11 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
         throw new Error('Clé API OpenAI non configurée');
       }
 
+      // IMPORTANT: Charger les textes AVANT de se connecter pour les avoir dans les instructions
+      console.log('📚 Rechargement des textes avant connexion...');
+      const loadedTexts = await loadUserTexts();
+      console.log(`✅ Textes rechargés (${loadedTexts.length} textes), connexion au WebSocket...`);
+
       const ws = new WebSocket(
         'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
         ['realtime', `openai-insecure-api-key.${OPENAI_API_KEY}`, 'openai-beta.realtime-v1']
@@ -625,7 +637,7 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
           type: 'session.update',
           session: {
             modalities: ['text'],
-            instructions: buildSystemInstructions(),
+            instructions: buildSystemInstructions(loadedTexts),
             voice: openaiVoice,
             turn_detection: null,
           },
@@ -760,6 +772,12 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
     currentResponseRef.current = '';
     processedItemsRef.current.clear();
   }, [stopListening]);
+
+  // Charger les textes au montage
+  useEffect(() => {
+    console.log('🔄 Chargement initial des textes du tuteur...');
+    loadUserTexts();
+  }, []);
 
   // Cleanup
   useEffect(() => {
