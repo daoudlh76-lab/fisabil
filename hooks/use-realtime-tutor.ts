@@ -198,13 +198,13 @@ ${textsContext}${vocabularyContext}${userVocabContext}
 - "استخدم كلمة [their word] في جملة"
 
 ## CONVERSATION FLOW:
-1. Greeting (5 words max) + IMMEDIATELY ask first question
-2. After student answers: "Good!" + IMMEDIATELY ask next question
+1. FIRST TIME ONLY: Full Islamic greeting "السلام عليكم. كيف حالك؟" + ask first question
+2. After student answers: Brief praise (2-3 words) + IMMEDIATELY ask next question
 3. Never end a response without asking a question
 4. If student is correct: Brief praise (2-3 words) + new question
 5. If student is wrong: Brief correction + ask simpler question about same word
 
-Start with: "مرحبا! ما معنى [pick a word from their vocabulary]؟"`;
+Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a word from their vocabulary]؟"`;
   }, [userTexts, uiLang]);
 
   // Fonction pour détecter si un texte contient de l'arabe
@@ -632,14 +632,14 @@ Start with: "مرحبا! ما معنى [pick a word from their vocabulary]؟"`;
         };
         ws.send(JSON.stringify(sessionConfig));
 
-        // Message de bienvenue court avec question directe - l'écoute démarre après le TTS
+        // Message de bienvenue avec salutations islamiques puis question - l'écoute démarre après le TTS
         setTimeout(() => {
           ws.send(JSON.stringify({
             type: 'response.create',
             response: {
               modalities: ['text'],
-              instructions: 'Start immediately with: Greeting (max 5 words) + pick ONE random word from the student vocabulary and ask: "ما معنى [word]؟" Nothing else.',
-              max_output_tokens: 25,
+              instructions: 'Start with EXACTLY: "السلام عليكم. كيف حالك؟" then pick ONE word from student vocabulary and ask "ما معنى [word]؟"',
+              max_output_tokens: 30,
             },
           }));
         }, 200);
