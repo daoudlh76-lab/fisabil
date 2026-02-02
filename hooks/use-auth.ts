@@ -49,14 +49,29 @@ export function useAuth() {
 
     const currentRoute = segments[1];
     const isOnLoginPage = currentRoute === 'login';
+    const isOnEmailVerificationPage = currentRoute === 'email-verification';
 
-    console.log('🔐 Route check:', { session: !!session, currentRoute, isOnLoginPage });
+    console.log('🔐 Route check:', {
+      session: !!session,
+      emailConfirmed: session?.user?.email_confirmed_at,
+      currentRoute,
+      isOnLoginPage,
+      isOnEmailVerificationPage
+    });
 
-    if (!session && !isOnLoginPage) {
+    // Cas 1: Pas de session et pas sur login -> rediriger vers login
+    if (!session && !isOnLoginPage && !isOnEmailVerificationPage) {
       console.log('🔐 No session, redirecting to login...');
       router.replace('/(tabs)/login');
-    } else if (session && isOnLoginPage) {
-      console.log('🔐 Has session, redirecting to home...');
+    }
+    // Cas 2: Session non vérifiée et pas sur page de vérification -> rediriger vers vérification
+    else if (session && !session.user.email_confirmed_at && !isOnEmailVerificationPage) {
+      console.log('🔐 Email not confirmed, redirecting to email verification...');
+      router.replace('/(tabs)/email-verification');
+    }
+    // Cas 3: Session vérifiée et sur login ou vérification -> rediriger vers home
+    else if (session && session.user.email_confirmed_at && (isOnLoginPage || isOnEmailVerificationPage)) {
+      console.log('🔐 Email confirmed, redirecting to home...');
       router.replace('/(tabs)');
     }
   }, [session, loading, segments, router]);
