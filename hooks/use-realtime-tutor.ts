@@ -122,20 +122,35 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
 
       // Stocker TOUT le vocabulaire dans userTexts
       let loadedTexts: any[] = [];
-      if (vocab && scans) {
-        const textsWithVocab = scans.map(scan => ({
-          ...scan,
-          userVocabulary: vocab
-        }));
-        setUserTexts(textsWithVocab);
-        loadedTexts = textsWithVocab;
-        console.log('✅ [TUTOR] Textes avec vocabulaire combinés:', textsWithVocab.length);
-      } else if (scans) {
-        setUserTexts(scans);
-        loadedTexts = scans;
-        console.log('✅ [TUTOR] Textes sans vocabulaire:', scans.length);
+
+      // Normaliser les résultats (null -> [])
+      const normalizedScans = scans || [];
+      const normalizedVocab = vocab || [];
+
+      console.log('📊 [TUTOR] Scans normalisés:', normalizedScans.length);
+      console.log('📊 [TUTOR] Vocab normalisé:', normalizedVocab.length);
+
+      if (normalizedScans.length > 0) {
+        if (normalizedVocab.length > 0) {
+          // Cas 1: On a des scans ET du vocabulaire
+          const textsWithVocab = normalizedScans.map(scan => ({
+            ...scan,
+            userVocabulary: normalizedVocab
+          }));
+          setUserTexts(textsWithVocab);
+          loadedTexts = textsWithVocab;
+          console.log('✅ [TUTOR] Textes avec vocabulaire combinés:', textsWithVocab.length);
+        } else {
+          // Cas 2: On a des scans SANS vocabulaire
+          setUserTexts(normalizedScans);
+          loadedTexts = normalizedScans;
+          console.log('✅ [TUTOR] Textes sans vocabulaire:', normalizedScans.length);
+        }
       } else {
-        console.log('⚠️ [TUTOR] Aucun texte à charger');
+        // Cas 3: Aucun scan - mettre un tableau vide
+        setUserTexts([]);
+        loadedTexts = [];
+        console.log('⚠️ [TUTOR] Aucun texte à charger - state mis à []');
       }
 
       console.log('✅ [TUTOR] loadUserTexts terminé, retour de', loadedTexts.length, 'textes');
