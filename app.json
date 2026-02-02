@@ -9,7 +9,6 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "description": "Application d'apprentissage de l'arabe avec OCR, tuteur vocal IA et exercices interactifs. Scannez des textes arabes, pratiquez avec un tuteur virtuel intelligent et améliorez votre prononciation.",
-    "privacy": "public",
     "primaryColor": "#2E7D32",
     "backgroundColor": "#FFFFFF",
     "ios": {
