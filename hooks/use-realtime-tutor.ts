@@ -81,13 +81,19 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
   // Fonction pour charger les textes de l'utilisateur
   const loadUserTexts = useCallback(async () => {
     try {
+      console.log('🔍 [TUTOR] Début loadUserTexts...');
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
+      console.log('🔍 [TUTOR] User ID:', userId);
 
-      if (!userId) return [];
+      if (!userId) {
+        console.log('⚠️ [TUTOR] Pas d\'utilisateur connecté');
+        return [];
+      }
 
       // Charger TOUS les scans ET TOUT le vocabulaire (pas de limite)
-      const [{ data: scans }, { data: vocab }] = await Promise.all([
+      console.log('🔍 [TUTOR] Requête Supabase pour scans et vocabulary...');
+      const [{ data: scans, error: scansError }, { data: vocab, error: vocabError }] = await Promise.all([
         supabase
           .from('scans')
           .select('id, title, content, vocabulary')
@@ -100,8 +106,18 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
           .order('created_at', { ascending: false })
       ]);
 
-      if (scans) {
-        console.log('📚 TOUS les textes chargés pour tuteur:', scans.length);
+      if (scansError) {
+        console.error('❌ [TUTOR] Erreur chargement scans:', scansError);
+      }
+      if (vocabError) {
+        console.error('❌ [TUTOR] Erreur chargement vocabulary:', vocabError);
+      }
+
+      console.log('📚 [TUTOR] Scans chargés:', scans?.length || 0);
+      console.log('📖 [TUTOR] Vocabulary chargé:', vocab?.length || 0);
+
+      if (scans && scans.length > 0) {
+        console.log('✅ [TUTOR] Premier scan:', scans[0].title);
       }
 
       // Stocker TOUT le vocabulaire dans userTexts
@@ -113,12 +129,16 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
         }));
         setUserTexts(textsWithVocab);
         loadedTexts = textsWithVocab;
-        console.log('📖 TOUT le vocabulaire chargé:', vocab.length, 'mots de tous les textes');
+        console.log('✅ [TUTOR] Textes avec vocabulaire combinés:', textsWithVocab.length);
       } else if (scans) {
         setUserTexts(scans);
         loadedTexts = scans;
+        console.log('✅ [TUTOR] Textes sans vocabulaire:', scans.length);
+      } else {
+        console.log('⚠️ [TUTOR] Aucun texte à charger');
       }
 
+      console.log('✅ [TUTOR] loadUserTexts terminé, retour de', loadedTexts.length, 'textes');
       return loadedTexts;
     } catch (e) {
       console.error('❌ Erreur chargement textes:', e);
