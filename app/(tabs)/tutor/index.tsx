@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import { useRealtimeTutor } from "@/hooks/use-realtime-tutor";
 import { useLanguage } from "@/hooks/use-language";
 import AnimatedLogoButton from "@/components/AnimatedLogoButton";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function TutorPage() {
   const { language, t } = useLanguage();
@@ -35,11 +36,20 @@ export default function TutorPage() {
     clearMessages,
     startListening,
     stopListening,
+    loadUserTexts,
   } = useRealtimeTutor(language);
 
   const [inputText, setInputText] = useState("");
   const [connecting, setConnecting] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Recharger les textes à chaque fois que l'utilisateur revient sur cette page
+  useFocusEffect(
+    useCallback(() => {
+      console.log('📚 Rechargement des textes du tuteur...');
+      loadUserTexts();
+    }, [loadUserTexts])
+  );
 
   // Scroll auto
   useEffect(() => {

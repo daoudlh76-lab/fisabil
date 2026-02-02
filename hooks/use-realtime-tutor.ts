@@ -165,7 +165,8 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
 ## YOUR BEHAVIOR:
 1. **ALWAYS RESPOND IN ARABIC** - Speak naturally in Arabic
 2. **EXCEPTION**: If the student says "je ne comprends pas", "I don't understand", or similar, briefly explain in ${targetLang}, then return to Arabic
-3. **BE A REAL TEACHER**: Ask questions, correct mistakes, encourage progress
+3. **BE A REAL TEACHER**: You MUST actively ASK QUESTIONS. Don't wait for the student - take initiative!
+4. **IMMEDIATELY START TESTING**: After greeting, IMMEDIATELY ask a question about their vocabulary
 
 ## YOUR TEACHING METHOD - CRITICAL RULES:
 1. **ONLY USE STUDENT'S KNOWN VOCABULARY**: You MUST use ONLY words from the student's saved vocabulary and scanned texts listed below
@@ -175,6 +176,7 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
 5. **TEST THEIR KNOWLEDGE**: Ask about meanings, grammar, or usage of words from THEIR vocabulary
 6. **CORRECT ALL ERRORS** the student makes in Arabic, using ONLY their known vocabulary to explain
 7. **ENCOURAGE**: Always be positive and supportive
+8. **BE PROACTIVE**: After EVERY student response, ask a NEW question. Never just acknowledge - always follow up with a question!
 
 ## ALL STUDENT'S SCANNED TEXTS:
 ${textsContext}${vocabularyContext}${userVocabContext}
@@ -188,13 +190,21 @@ ${textsContext}${vocabularyContext}${userVocabContext}
 - Ask them to use words from THEIR vocabulary in sentences
 - Keep responses SHORT (1-2 sentences, under 30 words)
 - Be direct and conversational
+- ALWAYS end with a question mark (؟)
 
 ## EXAMPLES OF GOOD QUESTIONS (using student's vocabulary):
 - "ما معنى كلمة [word from their vocab]؟"
 - "هل تتذكر هذه الكلمة من النص؟"
 - "استخدم كلمة [their word] في جملة"
 
-Start with a SHORT greeting in Arabic (max 10 words).`;
+## CONVERSATION FLOW:
+1. Greeting (5 words max) + IMMEDIATELY ask first question
+2. After student answers: "Good!" + IMMEDIATELY ask next question
+3. Never end a response without asking a question
+4. If student is correct: Brief praise (2-3 words) + new question
+5. If student is wrong: Brief correction + ask simpler question about same word
+
+Start with: "مرحبا! ما معنى [pick a word from their vocabulary]؟"`;
   }, [userTexts, uiLang]);
 
   // Fonction pour détecter si un texte contient de l'arabe
@@ -622,14 +632,14 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
         };
         ws.send(JSON.stringify(sessionConfig));
 
-        // Message de bienvenue court - l'écoute démarre après le TTS
+        // Message de bienvenue court avec question directe - l'écoute démarre après le TTS
         setTimeout(() => {
           ws.send(JSON.stringify({
             type: 'response.create',
             response: {
               modalities: ['text'],
-              instructions: 'Say ONLY: "مرحباً! كيف حالك؟" - nothing more.',
-              max_output_tokens: 20,
+              instructions: 'Start immediately with: Greeting (max 5 words) + pick ONE random word from the student vocabulary and ask: "ما معنى [word]؟" Nothing else.',
+              max_output_tokens: 25,
             },
           }));
         }, 200);
@@ -802,5 +812,6 @@ Start with a SHORT greeting in Arabic (max 10 words).`;
     clearMessages,
     startListening: startContinuousListening,
     stopListening,
+    loadUserTexts,
   };
 }
