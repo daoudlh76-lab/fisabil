@@ -124,6 +124,15 @@ export default function SettingsScreen() {
           supabase.from('scans').delete().eq('user_id', userId),
           // Supprimer tout le cache AI
           supabase.from('ai_cache').delete().eq('user_id', userId),
+          // Supprimer toutes les cartes de vocabulaire et leur progression
+          supabase.from('vocab_cards_progress').delete().eq('user_id', userId),
+          supabase.from('vocabulary').delete().eq('user_id', userId),
+          // Supprimer toutes les pistes audio de la playlist
+          supabase.from('audio_tracks').delete().eq('user_id', userId),
+          // Supprimer toutes les dictées
+          supabase.from('dictations').delete().eq('user_id', userId),
+          // Supprimer tous les dossiers
+          supabase.from('folders').delete().eq('user_id', userId),
         ]);
       }
 
