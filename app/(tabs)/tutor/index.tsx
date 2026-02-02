@@ -46,10 +46,21 @@ export default function TutorPage() {
   // Recharger les textes à chaque fois que l'utilisateur revient sur cette page
   useFocusEffect(
     useCallback(() => {
-      console.log('📚 Rechargement des textes du tuteur...');
-      loadUserTexts();
-    }, [loadUserTexts])
+      console.log('📚 [PAGE] Rechargement des textes du tuteur...');
+      console.log('📚 [PAGE] userTexts actuels:', userTexts.length);
+      loadUserTexts().then((texts) => {
+        console.log('📚 [PAGE] Textes rechargés:', texts?.length || 0);
+      });
+    }, [loadUserTexts, userTexts])
   );
+
+  // Log userTexts à chaque changement
+  useEffect(() => {
+    console.log('📚 [PAGE] userTexts mis à jour:', userTexts.length);
+    if (userTexts.length > 0) {
+      console.log('📚 [PAGE] Premier texte:', userTexts[0]?.title);
+    }
+  }, [userTexts]);
 
   // Scroll auto
   useEffect(() => {
