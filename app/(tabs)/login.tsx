@@ -15,6 +15,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedGender, setSelectedGender] = useState<Gender>("male");
+  const [showPassword, setShowPassword] = useState(false);
 
   // Réinitialiser le formulaire en mode inscription quand on arrive sur la page
   useFocusEffect(
@@ -105,14 +106,23 @@ export default function LoginScreen() {
         editable={!loading}
       />
 
-      <TextInput
-        style={styles.input}
-        placeholder={t('auth.passwordPlaceholder')}
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        editable={!loading}
-      />
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder={t('auth.passwordPlaceholder')}
+          secureTextEntry={!showPassword}
+          value={password}
+          onChangeText={setPassword}
+          editable={!loading}
+        />
+        <Pressable
+          style={styles.eyeButton}
+          onPress={() => setShowPassword(!showPassword)}
+          disabled={loading}
+        >
+          <Text style={styles.eyeIcon}>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
+        </Pressable>
+      </View>
 
       {/* Sélection du genre (uniquement lors de l'inscription) */}
       {isSignUp && (
@@ -185,6 +195,10 @@ const styles = StyleSheet.create({
   logo: { width: 140, height: 140, alignSelf: "center", marginBottom: 18 },
   title: { fontSize: 26, fontWeight: "800", textAlign: "center", marginBottom: 18, color: "#2F6B3D" },
   input: { borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, marginTop: 10, backgroundColor: "#FFF" },
+  passwordContainer: { position: "relative", marginTop: 10 },
+  passwordInput: { borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, paddingRight: 50, backgroundColor: "#FFF" },
+  eyeButton: { position: "absolute", right: 12, top: 12, padding: 4 },
+  eyeIcon: { fontSize: 20 },
   button: { backgroundColor: "#2F6B3D", padding: 16, borderRadius: 16, marginTop: 24, alignItems: "center" },
   buttonText: { color: "#FFF", fontWeight: "800", fontSize: 16 },
   toggleText: { textAlign: "center", marginTop: 16, color: "#2F6B3D", textDecorationLine: "underline", fontWeight: "600" },
