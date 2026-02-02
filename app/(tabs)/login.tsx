@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useState, useCallback } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, ScrollView, Platform } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/hooks/use-language";
 import { useVoicePreference, Gender } from "@/contexts/voice-preference-context";
@@ -91,107 +91,118 @@ export default function LoginScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Image source={require("@/assets/logo.png")} style={styles.logo} resizeMode="contain" />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Image source={require("@/assets/logo.png")} style={styles.logo} resizeMode="contain" />
 
-      <Text style={styles.title}>{isSignUp ? t('auth.signUp') : t('auth.signIn')}</Text>
+        <Text style={styles.title}>{isSignUp ? t('auth.signUp') : t('auth.signIn')}</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder={t('auth.emailPlaceholder')}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        editable={!loading}
-      />
-
-      <View style={styles.passwordContainer}>
         <TextInput
-          style={styles.passwordInput}
-          placeholder={t('auth.passwordPlaceholder')}
-          secureTextEntry={!showPassword}
-          value={password}
-          onChangeText={setPassword}
+          style={styles.input}
+          placeholder={t('auth.emailPlaceholder')}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
           editable={!loading}
         />
+
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder={t('auth.passwordPlaceholder')}
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+            editable={!loading}
+          />
+          <Pressable
+            style={styles.eyeButton}
+            onPress={() => setShowPassword(!showPassword)}
+            disabled={loading}
+          >
+            <Text style={styles.eyeIcon}>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
+          </Pressable>
+        </View>
+
+        {/* Sélection du genre (uniquement lors de l'inscription) */}
+        {isSignUp && (
+          <View style={styles.genderContainer}>
+            <Text style={styles.genderLabel}>{t('auth.selectGender')}</Text>
+            <View style={styles.genderButtons}>
+              <Pressable
+                style={[
+                  styles.genderButton,
+                  selectedGender === 'male' && styles.genderButtonActive,
+                ]}
+                onPress={() => setSelectedGender('male')}
+                disabled={loading}
+              >
+                <Text style={[
+                  styles.genderText,
+                  selectedGender === 'male' && styles.genderTextActive,
+                ]}>
+                  {t('auth.male')}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.genderButton,
+                  selectedGender === 'female' && styles.genderButtonActive,
+                ]}
+                onPress={() => setSelectedGender('female')}
+                disabled={loading}
+              >
+                <Text style={[
+                  styles.genderText,
+                  selectedGender === 'female' && styles.genderTextActive,
+                ]}>
+                  {t('auth.female')}
+                </Text>
+              </Pressable>
+            </View>
+            <Text style={styles.genderHint}>{t('auth.genderHint')}</Text>
+          </View>
+        )}
+
         <Pressable
-          style={styles.eyeButton}
-          onPress={() => setShowPassword(!showPassword)}
+          style={[styles.button, loading && { opacity: 0.6 }]}
+          onPress={isSignUp ? onSignUp : onLogin}
           disabled={loading}
         >
-          <Text style={styles.eyeIcon}>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
+          <Text style={styles.buttonText}>
+            {loading ? t('auth.loading') : isSignUp ? t('auth.signUp') : t('auth.signIn')}
+          </Text>
         </Pressable>
-      </View>
 
-      {/* Sélection du genre (uniquement lors de l'inscription) */}
-      {isSignUp && (
-        <View style={styles.genderContainer}>
-          <Text style={styles.genderLabel}>{t('auth.selectGender')}</Text>
-          <View style={styles.genderButtons}>
-            <Pressable
-              style={[
-                styles.genderButton,
-                selectedGender === 'male' && styles.genderButtonActive,
-              ]}
-              onPress={() => setSelectedGender('male')}
-              disabled={loading}
-            >
-              <Text style={[
-                styles.genderText,
-                selectedGender === 'male' && styles.genderTextActive,
-              ]}>
-                {t('auth.male')}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.genderButton,
-                selectedGender === 'female' && styles.genderButtonActive,
-              ]}
-              onPress={() => setSelectedGender('female')}
-              disabled={loading}
-            >
-              <Text style={[
-                styles.genderText,
-                selectedGender === 'female' && styles.genderTextActive,
-              ]}>
-                {t('auth.female')}
-              </Text>
-            </Pressable>
-          </View>
-          <Text style={styles.genderHint}>{t('auth.genderHint')}</Text>
-        </View>
-      )}
-
-      <Pressable
-        style={[styles.button, loading && { opacity: 0.6 }]}
-        onPress={isSignUp ? onSignUp : onLogin}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? t('auth.loading') : isSignUp ? t('auth.signUp') : t('auth.signIn')}
-        </Text>
-      </Pressable>
-
-      <Pressable 
-        onPress={() => {
-          setIsSignUp(!isSignUp);
-          setEmail("");
-          setPassword("");
-        }}
-        disabled={loading}
-      >
-        <Text style={styles.toggleText}>
-          {isSignUp ? t('auth.toggleLogin') : t('auth.toggle')}
-        </Text>
-      </Pressable>
-    </View>
+        <Pressable
+          onPress={() => {
+            setIsSignUp(!isSignUp);
+            setEmail("");
+            setPassword("");
+          }}
+          disabled={loading}
+        >
+          <Text style={styles.toggleText}>
+            {isSignUp ? t('auth.toggleLogin') : t('auth.toggle')}
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: "transparent", justifyContent: "center" },
+  container: { flex: 1, backgroundColor: "transparent" },
+  scrollContent: { flexGrow: 1, padding: 24, justifyContent: "center" },
   logo: { width: 140, height: 140, alignSelf: "center", marginBottom: 18 },
   title: { fontSize: 26, fontWeight: "800", textAlign: "center", marginBottom: 18, color: "#2F6B3D" },
   input: { borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, padding: 12, marginTop: 10, backgroundColor: "#FFF" },
