@@ -39,11 +39,17 @@ export default function LoginScreen() {
 
       if (error) {
         console.log('🔐 Login error:', error);
+        console.log('🔐 Error status:', error.status);
+        console.log('🔐 Error code:', (error as any).code);
 
         // Message d'erreur plus clair selon le type d'erreur
         let errorMessage = error.message;
 
         if (error.message.includes('Invalid login credentials')) {
+          // L'erreur "Invalid login credentials" peut signifier :
+          // 1. Mauvais email/mot de passe
+          // 2. Email non vérifié
+          // On ne peut pas faire la différence côté client pour des raisons de sécurité
           errorMessage = t('auth.invalidCredentials');
         } else if (error.message.includes('Email not confirmed')) {
           errorMessage = t('auth.emailNotConfirmed');
