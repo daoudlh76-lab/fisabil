@@ -516,6 +516,14 @@ export const translations = {
       genderHint: "Ceci détermine la voix du tuteur",
       invalidCredentials: "Connexion impossible. Causes possibles :\n• Email ou mot de passe incorrect\n• Email non vérifié (vérifiez votre boîte mail)\n• Compte inexistant (inscrivez-vous d'abord)",
       emailNotConfirmed: "Votre email n'est pas encore vérifié. Veuillez vérifier votre boîte de réception et cliquer sur le lien de confirmation.",
+      forgotPassword: "Mot de passe oublié ?",
+      forgotPasswordTitle: "Réinitialiser le mot de passe",
+      forgotPasswordDescription: "Entrez votre email et nous vous enverrons un lien pour réinitialiser votre mot de passe.",
+      sendResetLink: "Envoyer le lien",
+      resetEmailSent: "Email envoyé !",
+      resetEmailMessage: "Un email de réinitialisation a été envoyé à votre adresse. Cliquez sur le lien dans l'email pour créer un nouveau mot de passe.",
+      backToLogin: "Retour à la connexion",
+      checkSpam: "N'oubliez pas de vérifier vos spams si vous ne voyez pas l'email.",
     },
 
     // Email Verification
@@ -1032,6 +1040,14 @@ export const translations = {
       genderHint: "This determines the tutor's voice",
       invalidCredentials: "Login failed. Possible causes:\n• Incorrect email or password\n• Email not verified (check your inbox)\n• Account doesn't exist (sign up first)",
       emailNotConfirmed: "Your email is not verified yet. Please check your inbox and click on the confirmation link.",
+      forgotPassword: "Forgot password?",
+      forgotPasswordTitle: "Reset Password",
+      forgotPasswordDescription: "Enter your email and we'll send you a link to reset your password.",
+      sendResetLink: "Send reset link",
+      resetEmailSent: "Email sent!",
+      resetEmailMessage: "A password reset email has been sent to your address. Click the link in the email to create a new password.",
+      backToLogin: "Back to login",
+      checkSpam: "Don't forget to check your spam folder if you don't see the email.",
     },
 
     // Email Verification
@@ -3566,6 +3582,14 @@ export const translations = {
       genderHint: "هذا يحدد صوت المعلم",
       invalidCredentials: "فشل تسجيل الدخول. الأسباب المحتملة:\n• البريد الإلكتروني أو كلمة المرور غير صحيحة\n• البريد الإلكتروني غير مؤكد (تحقق من بريدك)\n• الحساب غير موجود (سجل أولاً)",
       emailNotConfirmed: "لم يتم التحقق من بريدك الإلكتروني بعد. يرجى التحقق من صندوق الوارد والنقر على رابط التأكيد.",
+      forgotPassword: "هل نسيت كلمة المرور؟",
+      forgotPasswordTitle: "إعادة تعيين كلمة المرور",
+      forgotPasswordDescription: "أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور.",
+      sendResetLink: "إرسال رابط إعادة التعيين",
+      resetEmailSent: "تم إرسال البريد!",
+      resetEmailMessage: "تم إرسال بريد إعادة تعيين كلمة المرور إلى عنوانك. انقر على الرابط في البريد لإنشاء كلمة مرور جديدة.",
+      backToLogin: "العودة إلى تسجيل الدخول",
+      checkSpam: "لا تنس التحقق من مجلد الرسائل غير المرغوب فيها إذا لم تر البريد.",
     },
 
     // Email Verification

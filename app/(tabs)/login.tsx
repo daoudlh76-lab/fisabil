@@ -206,6 +206,19 @@ export default function LoginScreen() {
           </Text>
         </Pressable>
 
+        {/* Bouton "Mot de passe oublié" uniquement en mode connexion */}
+        {!isSignUp && (
+          <Pressable
+            onPress={() => router.push('/(tabs)/forgot-password')}
+            disabled={loading}
+            style={styles.forgotPasswordButton}
+          >
+            <Text style={styles.forgotPasswordText}>
+              {t('auth.forgotPassword')}
+            </Text>
+          </Pressable>
+        )}
+
         <Pressable
           onPress={() => {
             setIsSignUp(!isSignUp);
@@ -252,4 +265,6 @@ const styles = StyleSheet.create({
   genderText: { fontSize: 16, fontWeight: "600", color: "#666" },
   genderTextActive: { color: "#2F6B3D" },
   genderHint: { fontSize: 12, color: "#999", textAlign: "center", marginTop: 8, fontStyle: "italic" },
+  forgotPasswordButton: { marginTop: 12, padding: 8 },
+  forgotPasswordText: { textAlign: "center", color: "#2F6B3D", fontSize: 14, fontWeight: "600" },
 });
