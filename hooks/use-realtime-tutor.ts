@@ -98,7 +98,7 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
       const [{ data: scans, error: scansError }, { data: vocab, error: vocabError }] = await Promise.all([
         supabase
           .from('scans')
-          .select('id, title, content, vocabulary')
+          .select('id, title, content')
           .eq('user_id', userId)
           .order('created_at', { ascending: false }),
         supabase
