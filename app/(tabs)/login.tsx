@@ -13,14 +13,13 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false); // false = connexion par défaut
   const [selectedGender, setSelectedGender] = useState<Gender>("male");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Réinitialiser le formulaire en mode inscription quand on arrive sur la page
+  // Réinitialiser le formulaire quand on arrive sur la page
   useFocusEffect(
     useCallback(() => {
-      setIsSignUp(true);
       setEmail("");
       setPassword("");
       setLoading(false);
