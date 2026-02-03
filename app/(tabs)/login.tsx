@@ -34,6 +34,8 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
+    console.log('🔐 Tentative de connexion avec:', email);
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -41,6 +43,7 @@ export default function LoginScreen() {
         console.log('🔐 Login error:', error);
         console.log('🔐 Error status:', error.status);
         console.log('🔐 Error code:', (error as any).code);
+        console.log('🔐 Error message complet:', JSON.stringify(error));
 
         // Message d'erreur plus clair selon le type d'erreur
         let errorMessage = error.message;
@@ -61,6 +64,8 @@ export default function LoginScreen() {
       }
 
       console.log('✅ Login successful:', data.user?.email);
+      console.log('✅ User ID:', data.user?.id);
+      console.log('✅ Email confirmed:', data.user?.email_confirmed_at);
       // ✅ Redirection automatique via le hook useAuth
       // (pas besoin de router.replace ici)
     } catch (e: any) {
