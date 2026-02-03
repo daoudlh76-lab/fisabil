@@ -35,17 +35,30 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
-        Alert.alert(t('auth.error'), error.message);
+        console.log('🔐 Login error:', error);
+
+        // Message d'erreur plus clair selon le type d'erreur
+        let errorMessage = error.message;
+
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = t('auth.invalidCredentials');
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = t('auth.emailNotConfirmed');
+        }
+
+        Alert.alert(t('auth.error'), errorMessage);
         setLoading(false);
         return;
       }
 
+      console.log('✅ Login successful:', data.user?.email);
       // ✅ Redirection automatique via le hook useAuth
       // (pas besoin de router.replace ici)
     } catch (e: any) {
+      console.error('🔐 Login exception:', e);
       Alert.alert(t('auth.error'), e?.message ?? t('auth.error'));
       setLoading(false);
     }

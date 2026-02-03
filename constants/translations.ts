@@ -514,6 +514,8 @@ export const translations = {
       male: "Homme",
       female: "Femme",
       genderHint: "Ceci détermine la voix du tuteur",
+      invalidCredentials: "Email ou mot de passe incorrect. Vérifiez vos informations ou créez un compte si vous êtes nouveau.",
+      emailNotConfirmed: "Votre email n'est pas encore vérifié. Veuillez vérifier votre boîte de réception et cliquer sur le lien de confirmation.",
     },
 
     // Email Verification
@@ -1028,6 +1030,8 @@ export const translations = {
       male: "Male",
       female: "Female",
       genderHint: "This determines the tutor's voice",
+      invalidCredentials: "Incorrect email or password. Check your information or create an account if you're new.",
+      emailNotConfirmed: "Your email is not verified yet. Please check your inbox and click on the confirmation link.",
     },
 
     // Email Verification
@@ -1543,6 +1547,8 @@ export const translations = {
       male: "Mann",
       female: "Frau",
       genderHint: "Dies bestimmt die Stimme des Tutors",
+      invalidCredentials: "Falsche E-Mail oder Passwort. Überprüfen Sie Ihre Angaben oder erstellen Sie ein Konto, wenn Sie neu sind.",
+      emailNotConfirmed: "Ihre E-Mail ist noch nicht verifiziert. Bitte überprüfen Sie Ihren Posteingang und klicken Sie auf den Bestätigungslink.",
     },
   },
 
@@ -2044,6 +2050,8 @@ export const translations = {
       male: "Hombre",
       female: "Mujer",
       genderHint: "Esto determina la voz del tutor",
+      invalidCredentials: "Correo electrónico o contraseña incorrectos. Verifica tu información o crea una cuenta si eres nuevo.",
+      emailNotConfirmed: "Tu correo electrónico aún no está verificado. Por favor, revisa tu bandeja de entrada y haz clic en el enlace de confirmación.",
     },
   },
 
@@ -2545,6 +2553,8 @@ export const translations = {
       male: "Мужчина",
       female: "Женщина",
       genderHint: "Это определяет голос репетитора",
+      invalidCredentials: "Неверный адрес электронной почты или пароль. Проверьте свои данные или создайте аккаунт, если вы новый пользователь.",
+      emailNotConfirmed: "Ваш адрес электронной почты еще не подтвержден. Пожалуйста, проверьте почтовый ящик и нажмите на ссылку подтверждения.",
     },
   },
 
@@ -3048,6 +3058,8 @@ export const translations = {
       male: "Lelaki",
       female: "Perempuan",
       genderHint: "Ini menentukan suara tutor",
+      invalidCredentials: "E-mel atau kata laluan tidak betul. Semak maklumat anda atau cipta akaun jika anda baru.",
+      emailNotConfirmed: "E-mel anda belum disahkan lagi. Sila semak peti masuk anda dan klik pada pautan pengesahan.",
     },
   },
 
@@ -3552,6 +3564,8 @@ export const translations = {
       male: "رجل",
       female: "امرأة",
       genderHint: "هذا يحدد صوت المعلم",
+      invalidCredentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة. تحقق من معلوماتك أو أنشئ حساباً إذا كنت جديداً.",
+      emailNotConfirmed: "لم يتم التحقق من بريدك الإلكتروني بعد. يرجى التحقق من صندوق الوارد والنقر على رابط التأكيد.",
     },
 
     // Email Verification
