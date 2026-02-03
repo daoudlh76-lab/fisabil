@@ -112,27 +112,32 @@ Example: "الحمد لله رب العالمين" → Extract as "الْحَم�
 
 ## SINGULIER/PLURIEL - CRITICAL:
 For EVERY noun in vocabulaire, you MUST provide:
-- **singulier**: The singular form WITH FULL TASHKEEL (e.g., "كِتَابٌ")
+- **traduction**: Translation of the SINGULAR form in ${targetLanguage}
+- **singulier**: The SINGULAR form WITH FULL TASHKEEL (e.g., "كِتَابٌ")
 - **pluriel**: The plural form WITH FULL TASHKEEL (e.g., "كُتُبٌ")
-- If the word in text is singular → mot_ar = singulier, provide pluriel
-- If the word in text is plural → mot_ar = pluriel, provide singulier
+- **contraire**: The opposite/antonym WITH FULL TASHKEEL or null
+- **remarque**: If word appeared as plural in text, note it: "Appeared as [plural] in text"
+
 Examples:
-- "الْعَالَمِينَ" (plural) → singulier: "عَالَمٌ", pluriel: "عَالَمُونَ / عَوَالِمُ"
-- "كِتَابٌ" (singular) → singulier: "كِتَابٌ", pluriel: "كُتُبٌ"
-- "رَجُلٌ" (singular) → singulier: "رَجُلٌ", pluriel: "رِجَالٌ"
+- Text has "الْعَالَمِينَ" (plural) → traduction: "world", singulier: "عَالَمٌ", pluriel: "عَالَمُونَ / عَوَالِمُ", remarque: "Appeared as الْعَالَمِينَ in text"
+- Text has "كِتَابٌ" (singular) → traduction: "book", singulier: "كِتَابٌ", pluriel: "كُتُبٌ"
+- Text has "رِجَالٌ" (plural) → traduction: "man", singulier: "رَجُلٌ", pluriel: "رِجَالٌ", remarque: "Appeared as رِجَالٌ in text"
 
 ## RULES:
 - EVERY Arabic word in output MUST have FULL TASHKEEL
-- NO duplicates (each unique word once)
+- NO duplicates (each unique singular form once)
 - Include EVERY word - proper nouns, numbers, everything
-- ALWAYS fill singulier AND pluriel for nouns (never leave both as null)
+- For nouns: traduction translates the SINGULAR, singulier is the singular form
+- For verbs: NO verbe_ar field, use passe_3ms, present_3ms, imperatif
+- ALWAYS fill singulier AND pluriel for nouns
+- ALWAYS provide contraire when it exists
 - Return ONLY valid JSON, no markdown
 
 ## JSON FORMAT:
 {
-  "vocabulaire": [{"mot_ar":"word WITH tashkeel", "traduction":"${targetLanguage} translation", "singulier":"singular WITH tashkeel", "pluriel":"plural WITH tashkeel", "contraire":"opposite or null", "remarque":"grammar note or null"}],
-  "verbes": [{"verbe_ar":"masdar WITH tashkeel", "traduction":"${targetLanguage} translation", "passe_3ms":"past WITH tashkeel", "present_3ms":"present WITH tashkeel", "imperatif":"imperative WITH tashkeel", "remarque":"grammar note or null"}],
-  "particules": [{"particule_ar":"particle WITH tashkeel", "type":"type", "traduction":"${targetLanguage} meaning", "exemple":"example sentence or null"}]
+  "vocabulaire": [{"traduction":"${targetLanguage} translation of singular", "singulier":"singular WITH tashkeel", "pluriel":"plural WITH tashkeel or null", "contraire":"opposite WITH tashkeel or null", "remarque":"note or null"}],
+  "verbes": [{"traduction":"${targetLanguage} translation", "passe_3ms":"past WITH tashkeel", "present_3ms":"present WITH tashkeel", "imperatif":"imperative WITH tashkeel", "remarque":"note or null"}],
+  "particules": [{"particule_ar":"particle WITH tashkeel", "type":"type", "traduction":"${targetLanguage} meaning", "exemple":"example or null"}]
 }`;
 
     const userPrompt = `Extract EVERY SINGLE WORD from this Arabic text with FULL TASHKEEL (vowels).

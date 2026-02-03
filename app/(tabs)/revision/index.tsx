@@ -3,6 +3,7 @@ import { useVocabCards, VocabCard } from '@/hooks/use-vocab-cards';
 import { useDiacritics } from '@/hooks/use-diacritics-local';
 import { useLanguage } from '@/hooks/use-language';
 import { supabase } from '@/src/lib/supabase';
+import { migrateExtractVocabResult, needsMigration } from '@/src/lib/migrate-vocab-data';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
@@ -148,7 +149,10 @@ export default function RevisionScreen() {
           }
 
           if (cached?.payload) {
-            vocabData = cached.payload;
+            // Migrer automatiquement si nécessaire
+            vocabData = needsMigration(cached.payload)
+              ? migrateExtractVocabResult(cached.payload)
+              : cached.payload;
             console.log('📦 Cache trouvé pour:', cacheKey, 'avec', {
               vocab: vocabData.vocabulaire?.length || 0,
               verbes: vocabData.verbes?.length || 0,
@@ -163,15 +167,14 @@ export default function RevisionScreen() {
           continue;
         }
 
-        // Ajouter les mots de vocabulaire (singulier privilégié)
+        // Ajouter les mots de vocabulaire (singulier)
         if (vocabData.vocabulaire && Array.isArray(vocabData.vocabulaire)) {
           for (const item of vocabData.vocabulaire) {
-            if (item.mot_ar && item.traduction) {
-              // Utiliser le singulier si disponible, sinon le mot original
-              const displayWord = item.singulier || item.mot_ar;
+            if (item.singulier && item.traduction) {
               allCards.push({
                 id: `vocab-${cardIndex++}`,
-                wordAr: displayWord,
+                scanId: scan.id, // UUID du scan
+                wordAr: item.singulier,
                 wordFr: item.traduction,
                 definition: item.remarque || (item.pluriel ? `ج: ${item.pluriel}` : '') || '',
                 difficulty: 'medium',
@@ -183,15 +186,14 @@ export default function RevisionScreen() {
           }
         }
 
-        // Ajouter les verbes (forme au passé privilégiée)
+        // Ajouter les verbes (forme au passé)
         if (vocabData.verbes && Array.isArray(vocabData.verbes)) {
           for (const item of vocabData.verbes) {
-            if (item.verbe_ar && item.traduction) {
-              // Utiliser le passé 3ms si disponible, sinon le verbe original
-              const displayVerb = item.passe_3ms || item.verbe_ar;
+            if (item.passe_3ms && item.traduction) {
               allCards.push({
                 id: `verb-${cardIndex++}`,
-                wordAr: displayVerb,
+                scanId: scan.id, // UUID du scan
+                wordAr: item.passe_3ms,
                 wordFr: item.traduction,
                 definition: `${item.present_3ms || ''} / ${item.imperatif || ''}`.replace(/^\s*\/\s*$/, '').trim(),
                 difficulty: 'medium',
@@ -209,6 +211,7 @@ export default function RevisionScreen() {
             if (item.particule_ar && item.traduction) {
               allCards.push({
                 id: `particle-${cardIndex++}`,
+                scanId: scan.id, // UUID du scan
                 wordAr: item.particule_ar,
                 wordFr: item.traduction,
                 definition: item.exemple || item.type || '',

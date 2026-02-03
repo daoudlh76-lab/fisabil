@@ -165,26 +165,6 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Page login - visible uniquement si pas connecté */}
-      <Tabs.Screen
-        name="login"
-        options={{
-          title: t("nav.login"),
-          headerShown: false,
-          href: session ? null : '/(tabs)/login',
-        }}
-      />
-
-      {/* Page de vérification email - cachée de la navigation */}
-      <Tabs.Screen
-        name="email-verification"
-        options={{
-          title: t("emailVerification.title"),
-          headerShown: false,
-          href: null,
-        }}
-      />
-
       {/* Cacher explore.tsx */}
       <Tabs.Screen
         name="explore"

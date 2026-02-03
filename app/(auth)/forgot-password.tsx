@@ -19,6 +19,8 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
+      // Utiliser un deep link pour rediriger vers l'app mobile
+      // Le lien dans l'email ouvrira l'app à /reset-password avec le token
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: 'fisabil://reset-password',
       });
@@ -52,7 +54,7 @@ export default function ForgotPasswordScreen() {
 
         <Pressable
           style={styles.button}
-          onPress={() => router.replace('/(tabs)/login')}
+          onPress={() => router.replace('/(auth)/login')}
         >
           <Text style={styles.buttonText}>{t('auth.backToLogin')}</Text>
         </Pressable>

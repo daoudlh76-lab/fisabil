@@ -41,7 +41,7 @@ export default function EmailVerificationScreen() {
   async function goToLogin() {
     // Déconnecter l'utilisateur avant de retourner à la page de login
     await supabase.auth.signOut();
-    router.replace('/(tabs)/login');
+    router.replace('/(auth)/login');
   }
 
   return (

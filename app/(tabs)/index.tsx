@@ -308,7 +308,7 @@ export default function ScannerScreen() {
       const userId = sessionData.session?.user?.id;
       if (!userId) {
         Alert.alert(t('scanner.notConnected'), t('scanner.loginRequired'));
-        router.push("/(tabs)/login");
+        router.push("/(auth)/login");
         return;
       }
 

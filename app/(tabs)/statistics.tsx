@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { useLanguage } from '@/hooks/use-language';
 import { supabase } from '@/src/lib/supabase';
 import { useFocusEffect } from '@react-navigation/native';
+import { migrateExtractVocabResult, needsMigration } from '@/src/lib/migrate-vocab-data';
 
 type Tab = 'vocabulary' | 'verbs' | 'particles';
 
@@ -64,12 +65,14 @@ export default function StatisticsScreen() {
       if (cacheData) {
         for (const cache of cacheData) {
           try {
-            const data = cache.payload as any;
+            // Migrer automatiquement si nécessaire
+            const rawData = cache.payload as any;
+            const data = needsMigration(rawData) ? migrateExtractVocabResult(rawData) : rawData;
 
             // Ajouter le vocabulaire (mapper les propriétés correctement)
             if (data.vocabulaire && Array.isArray(data.vocabulaire)) {
               const vocabItems = data.vocabulaire.map((item: any) => ({
-                word: item.mot_ar || item.word,
+                word: item.singulier || item.word,
                 translation: item.traduction || item.translation,
                 root: item.racine || item.root,
                 singulier: item.singulier,
@@ -82,7 +85,7 @@ export default function StatisticsScreen() {
             // Ajouter les verbes
             if (data.verbes && Array.isArray(data.verbes)) {
               const verbItems = data.verbes.map((item: any) => ({
-                word: item.verbe_ar || item.word,
+                word: item.passe_3ms || item.word,
                 translation: item.traduction || item.translation,
                 root: item.passe_3ms || item.root,
               }));

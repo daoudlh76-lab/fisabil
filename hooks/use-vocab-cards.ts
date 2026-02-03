@@ -5,6 +5,7 @@ export type CardDifficulty = 'easy' | 'medium' | 'hard' | 'forgotten';
 
 export interface VocabCard {
   id: string;
+  scanId?: string; // UUID du scan d'origine
   wordAr: string;
   wordFr: string;
   definition: string;
@@ -60,25 +61,28 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
         const { data: sessionData } = await supabase.auth.getSession();
         const userId = sessionData.session?.user?.id;
 
-        if (userId && currentCard) {
+        if (userId && currentCard && currentCard.scanId) {
           const { error } = await supabase
             .from('vocab_cards_progress')
             .upsert({
               user_id: userId,
-              vocabulary_id: currentCard.id,
+              scan_id: currentCard.scanId,
+              word_ar: currentCard.wordAr,
               difficulty,
               last_reviewed: now.toISOString(),
               next_review: nextReviewDate.toISOString(),
               review_count: currentCard.reviewCount + 1,
             }, {
-              onConflict: 'user_id,vocabulary_id'
+              onConflict: 'user_id,scan_id,word_ar'
             });
 
           if (error) {
             console.error('❌ Erreur sauvegarde progression:', error);
           } else {
-            console.log('✅ Progression sauvegardée:', difficulty);
+            console.log('✅ Progression sauvegardée:', { scanId: currentCard.scanId, word: currentCard.wordAr, difficulty });
           }
+        } else if (!currentCard?.scanId) {
+          console.warn('⚠️ Impossible de sauvegarder: scanId manquant pour', currentCard?.wordAr);
         }
       } catch (e) {
         console.error('❌ Erreur:', e);

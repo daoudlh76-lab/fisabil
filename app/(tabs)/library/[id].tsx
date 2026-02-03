@@ -14,6 +14,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
 import { extractVocabulary, isVocabExtractionConfigured, completeWordInfo, VocabItem, VerbItem, ParticleItem } from "@/src/lib/extract-vocabulary";
+import { migrateExtractVocabResult, needsMigration } from "@/src/lib/migrate-vocab-data";
 
 type ScanRow = {
   id: string;
@@ -163,7 +164,10 @@ export default function LibraryItemScreen() {
           .maybeSingle();
 
         if (cached?.payload) {
-          setAiData(cached.payload as ExtractResponse);
+          const data = cached.payload as ExtractResponse;
+          // Migrer automatiquement si nécessaire
+          const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
+          setAiData(migratedData);
         }
       } catch {
         // si table cache non créée, pas grave
@@ -213,7 +217,10 @@ export default function LibraryItemScreen() {
             .maybeSingle();
 
           if (cached?.payload) {
-            setAiData(cached.payload as ExtractResponse);
+            const data = cached.payload as ExtractResponse;
+            // Migrer automatiquement si nécessaire
+            const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
+            setAiData(migratedData);
           } else {
             // Pas de cache pour cette langue, régénérer avec les données mock
             generateVocab();
@@ -405,7 +412,6 @@ export default function LibraryItemScreen() {
       },
       vocabulaire: [
         {
-          mot_ar: "كِتَابٌ",
           traduction: tr.vocab.book,
           singulier: "كِتَابٌ",
           pluriel: "كُتُبٌ",
@@ -413,7 +419,6 @@ export default function LibraryItemScreen() {
           remarque: tr.vocab.mascSingular,
         },
         {
-          mot_ar: "مَدْرَسَةٌ",
           traduction: tr.vocab.school,
           singulier: "مَدْرَسَةٌ",
           pluriel: "مَدَارِسُ",
@@ -421,7 +426,6 @@ export default function LibraryItemScreen() {
           remarque: tr.vocab.femSingular,
         },
         {
-          mot_ar: "طَالِبٌ",
           traduction: tr.vocab.student,
           singulier: "طَالِبٌ",
           pluriel: "طُلَّابٌ",
@@ -431,7 +435,6 @@ export default function LibraryItemScreen() {
       ],
       verbes: [
         {
-          verbe_ar: "كَتَبَ",
           traduction: tr.verbs.write,
           passe_3ms: "كَتَبَ",
           present_3ms: "يَكْتُبُ",
@@ -439,7 +442,6 @@ export default function LibraryItemScreen() {
           remarque: tr.verbs.regularVerb,
         },
         {
-          verbe_ar: "قَرَأَ",
           traduction: tr.verbs.read,
           passe_3ms: "قَرَأَ",
           present_3ms: "يَقْرَأُ",
@@ -702,10 +704,9 @@ export default function LibraryItemScreen() {
     const normalized = normalizeArabic(wordAr);
 
     if (type === 'word') {
-      return aiData.vocabulaire.some(v => normalizeArabic(v.mot_ar) === normalized);
+      return aiData.vocabulaire.some(v => normalizeArabic(v.singulier) === normalized);
     } else if (type === 'verb') {
       return aiData.verbes.some(v =>
-        normalizeArabic(v.verbe_ar) === normalized ||
         normalizeArabic(v.passe_3ms) === normalized
       );
     } else {
@@ -735,9 +736,9 @@ export default function LibraryItemScreen() {
 
       // Vérifier aussi avec le mot complété (peut avoir un tashkeel différent)
       const completedWord = type === 'word'
-        ? (completed as VocabItem).mot_ar
+        ? (completed as VocabItem).singulier
         : type === 'verb'
-          ? (completed as VerbItem).passe_3ms || (completed as VerbItem).verbe_ar
+          ? (completed as VerbItem).passe_3ms
           : (completed as ParticleItem).particule_ar;
 
       if (isDuplicate(type, completedWord)) {
@@ -983,13 +984,12 @@ export default function LibraryItemScreen() {
                 )}
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                  <View style={{ minWidth: 650 }}>
+                  <View style={{ minWidth: 540 }}>
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.tableHeaderCell, { width: 110 }]}>{t('libraryDetail.word')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 110 }]}>{t('libraryDetail.translation')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 90 }]}>{t('libraryDetail.singular')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 90 }]}>{t('libraryDetail.plural')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 90 }]}>{t('libraryDetail.opposite')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 120 }]}>{t('libraryDetail.translation')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.singular')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.plural')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.opposite')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
                     </View>
                     {aiData.vocabulaire?.length ? (
@@ -997,30 +997,24 @@ export default function LibraryItemScreen() {
                         editingVocabIdx === idx ? (
                           <View key={`v-edit-${idx}`} style={styles.editRow}>
                             <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 110 }]}
-                              value={editedItem?.mot_ar || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, mot_ar: text })}
-                              textAlign="right"
-                            />
-                            <TextInput
-                              style={[styles.editInput, { width: 110 }]}
+                              style={[styles.editInput, { width: 120 }]}
                               value={editedItem?.traduction || ''}
                               onChangeText={(text) => setEditedItem({ ...editedItem, traduction: text })}
                             />
                             <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 90 }]}
+                              style={[styles.editInput, styles.editInputArabic, { width: 100 }]}
                               value={editedItem?.singulier || ''}
                               onChangeText={(text) => setEditedItem({ ...editedItem, singulier: text })}
                               textAlign="right"
                             />
                             <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 90 }]}
+                              style={[styles.editInput, styles.editInputArabic, { width: 100 }]}
                               value={editedItem?.pluriel || ''}
                               onChangeText={(text) => setEditedItem({ ...editedItem, pluriel: text })}
                               textAlign="right"
                             />
                             <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 90 }]}
+                              style={[styles.editInput, styles.editInputArabic, { width: 100 }]}
                               value={editedItem?.contraire || ''}
                               onChangeText={(text) => setEditedItem({ ...editedItem, contraire: text })}
                               textAlign="right"
@@ -1032,19 +1026,16 @@ export default function LibraryItemScreen() {
                           </View>
                         ) : (
                           <Pressable key={`v-${idx}`} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowEven]} onPress={() => startEditVocab(idx)}>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 110 }]} numberOfLines={1}>
-                              {addDiacriticsToWord(v.mot_ar)}
-                            </Text>
-                            <Text style={[styles.tableCell, { width: 110 }]} numberOfLines={2}>
+                            <Text style={[styles.tableCell, { width: 120 }]} numberOfLines={2}>
                               {v.traduction}
                             </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 90 }]} numberOfLines={1}>
+                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 100 }]} numberOfLines={1}>
                               {v.singulier ? addDiacriticsToWord(v.singulier) : "-"}
                             </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 90 }]} numberOfLines={1}>
+                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 100 }]} numberOfLines={1}>
                               {v.pluriel ? addDiacriticsToWord(v.pluriel) : "-"}
                             </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 90 }]} numberOfLines={1}>
+                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 100 }]} numberOfLines={1}>
                               {v.contraire ? addDiacriticsToWord(v.contraire) : "-"}
                             </Text>
                             <View style={[styles.tableCell, { width: 60, flexDirection: 'row', justifyContent: 'center' }]}>
@@ -1102,13 +1093,12 @@ export default function LibraryItemScreen() {
                 )}
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                  <View style={{ minWidth: 610 }}>
+                  <View style={{ minWidth: 515 }}>
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.tableHeaderCell, { width: 95 }]}>{t('libraryDetail.verb')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.translation')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 85 }]}>{t('libraryDetail.past')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 85 }]}>{t('libraryDetail.present')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 85 }]}>{t('libraryDetail.imperative')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 110 }]}>{t('libraryDetail.translation')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 95 }]}>{t('libraryDetail.past')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 95 }]}>{t('libraryDetail.present')}</Text>
+                      <Text style={[styles.tableHeaderCell, { width: 95 }]}>{t('libraryDetail.imperative')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
                     </View>
                     {aiData.verbes?.length ? (
@@ -1116,30 +1106,24 @@ export default function LibraryItemScreen() {
                         editingVerbIdx === idx ? (
                           <View key={`vb-edit-${idx}`} style={styles.editRow}>
                             <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 95 }]}
-                              value={editedItem?.verbe_ar || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, verbe_ar: text })}
-                              textAlign="right"
-                            />
-                            <TextInput
-                              style={[styles.editInput, { width: 100 }]}
+                              style={[styles.editInput, { width: 110 }]}
                               value={editedItem?.traduction || ''}
                               onChangeText={(text) => setEditedItem({ ...editedItem, traduction: text })}
                             />
                             <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 85 }]}
+                              style={[styles.editInput, styles.editInputArabic, { width: 95 }]}
                               value={editedItem?.passe_3ms || ''}
                               onChangeText={(text) => setEditedItem({ ...editedItem, passe_3ms: text })}
                               textAlign="right"
                             />
                             <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 85 }]}
+                              style={[styles.editInput, styles.editInputArabic, { width: 95 }]}
                               value={editedItem?.present_3ms || ''}
                               onChangeText={(text) => setEditedItem({ ...editedItem, present_3ms: text })}
                               textAlign="right"
                             />
                             <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 85 }]}
+                              style={[styles.editInput, styles.editInputArabic, { width: 95 }]}
                               value={editedItem?.imperatif || ''}
                               onChangeText={(text) => setEditedItem({ ...editedItem, imperatif: text })}
                               textAlign="right"
@@ -1151,19 +1135,16 @@ export default function LibraryItemScreen() {
                           </View>
                         ) : (
                           <Pressable key={`vb-${idx}`} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowEven]} onPress={() => startEditVerb(idx)}>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 95 }]} numberOfLines={1}>
-                              {addDiacriticsToWord(vb.verbe_ar)}
-                            </Text>
-                            <Text style={[styles.tableCell, { width: 100 }]} numberOfLines={2}>
+                            <Text style={[styles.tableCell, { width: 110 }]} numberOfLines={2}>
                               {vb.traduction}
                             </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 85 }]} numberOfLines={1}>
+                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 95 }]} numberOfLines={1}>
                               {addDiacriticsToWord(vb.passe_3ms)}
                             </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 85 }]} numberOfLines={1}>
+                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 95 }]} numberOfLines={1}>
                               {addDiacriticsToWord(vb.present_3ms)}
                             </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 85 }]} numberOfLines={1}>
+                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 95 }]} numberOfLines={1}>
                               {addDiacriticsToWord(vb.imperatif)}
                             </Text>
                             <View style={[styles.tableCell, { width: 60, flexDirection: 'row', justifyContent: 'center' }]}>

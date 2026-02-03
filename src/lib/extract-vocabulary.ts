@@ -20,16 +20,14 @@ const languageNames: Record<string, string> = {
 };
 
 export type VocabItem = {
-  mot_ar: string;
   traduction: string;
-  singulier?: string | null;
+  singulier: string;
   pluriel?: string | null;
   contraire?: string | null;
   remarque?: string | null;
 };
 
 export type VerbItem = {
-  verbe_ar: string;
   traduction: string;
   passe_3ms: string;
   present_3ms: string;
@@ -95,16 +93,16 @@ function mergeResults(results: ExtractVocabResult[]): ExtractVocabResult {
 
   for (const result of results) {
     for (const item of result.vocabulaire || []) {
-      const key = item.mot_ar?.replace(/[\u064B-\u0652]/g, '') || ''; // Normaliser sans tashkeel pour comparaison
-      if (!seenVocab.has(key) && item.mot_ar) {
+      const key = item.singulier?.replace(/[\u064B-\u0652]/g, '') || ''; // Normaliser sans tashkeel pour comparaison
+      if (!seenVocab.has(key) && item.singulier) {
         seenVocab.add(key);
         merged.vocabulaire.push(item);
       }
     }
 
     for (const item of result.verbes || []) {
-      const key = item.passe_3ms?.replace(/[\u064B-\u0652]/g, '') || item.verbe_ar || '';
-      if (!seenVerbs.has(key) && item.verbe_ar) {
+      const key = item.passe_3ms?.replace(/[\u064B-\u0652]/g, '') || '';
+      if (!seenVerbs.has(key) && item.passe_3ms) {
         seenVerbs.add(key);
         merged.verbes.push(item);
       }
@@ -159,14 +157,16 @@ Example: "الحمد لله رب العالمين" → Extract as "الْحَم�
 
 ## SINGULIER/PLURIEL - CRITICAL:
 For EVERY noun in vocabulaire, you MUST provide:
-- **singulier**: The singular form WITH FULL TASHKEEL (e.g., "كِتَابٌ")
+- **traduction**: Translation of the SINGULAR form in ${targetLanguage}
+- **singulier**: The SINGULAR form WITH FULL TASHKEEL (e.g., "كِتَابٌ")
 - **pluriel**: The plural form WITH FULL TASHKEEL (e.g., "كُتُبٌ")
-- If the word in text is singular → mot_ar = singulier, provide pluriel
-- If the word in text is plural → mot_ar = pluriel, provide singulier
+- **contraire**: The opposite/antonym WITH FULL TASHKEEL or null
+- **remarque**: If the word appeared as plural in text, note it: "Appeared as [plural form] in text"
+
 Examples:
-- "الْعَالَمِينَ" (plural) → singulier: "عَالَمٌ", pluriel: "عَالَمُونَ / عَوَالِمُ"
-- "كِتَابٌ" (singular) → singulier: "كِتَابٌ", pluriel: "كُتُبٌ"
-- "رَجُلٌ" (singular) → singulier: "رَجُلٌ", pluriel: "رِجَالٌ"
+- Text has "الْعَالَمِينَ" (plural) → traduction: "world" (singular meaning), singulier: "عَالَمٌ", pluriel: "عَالَمُونَ / عَوَالِمُ", remarque: "Appeared as الْعَالَمِينَ in text"
+- Text has "كِتَابٌ" (singular) → traduction: "book", singulier: "كِتَابٌ", pluriel: "كُتُبٌ", remarque: null
+- Text has "رِجَالٌ" (plural) → traduction: "man", singulier: "رَجُلٌ", pluriel: "رِجَالٌ", remarque: "Appeared as رِجَالٌ in text"
 
 ## CONTRAIRE (ANTONYME) - REQUIRED:
 For EVERY word (noun, adjective) in vocabulaire, you MUST provide:
@@ -183,9 +183,11 @@ Examples:
 
 ## RULES:
 - EVERY Arabic word in output MUST have FULL TASHKEEL
-- NO duplicates (each unique word once)
+- NO duplicates (each unique singular form once)
 - Include EVERY word - proper nouns, numbers, everything
-- ALWAYS fill singulier AND pluriel for nouns (never leave both as null)
+- For nouns: traduction translates the SINGULAR form, singulier is the singular with tashkeel
+- If word appeared as plural in text, note it in remarque field
+- ALWAYS fill singulier AND pluriel for nouns
 - ALWAYS provide contraire (opposite) when it exists, otherwise null
 - Return ONLY valid JSON, no markdown
 
@@ -193,21 +195,19 @@ Examples:
 {
   "vocabulaire": [
     {
-      "mot_ar": "word WITH full tashkeel",
-      "traduction": "${targetLanguage} translation",
-      "singulier": "singular form WITH tashkeel or null",
-      "pluriel": "plural form WITH tashkeel or null",
-      "contraire": "opposite/antonym WITH tashkeel or null",
-      "remarque": "grammar note or null"
+      "traduction": "${targetLanguage} translation of the SINGULAR form",
+      "singulier": "singular form WITH full tashkeel",
+      "pluriel": "plural form WITH full tashkeel or null",
+      "contraire": "opposite/antonym WITH full tashkeel or null",
+      "remarque": "note 'Appeared as [plural] in text' if word was plural, or other grammar note, or null"
     }
   ],
   "verbes": [
     {
-      "verbe_ar": "masdar WITH tashkeel",
-      "traduction": "${targetLanguage} translation",
-      "passe_3ms": "past 3rd masc sing WITH tashkeel",
-      "present_3ms": "present 3rd masc sing WITH tashkeel",
-      "imperatif": "imperative 2nd masc sing WITH tashkeel",
+      "traduction": "${targetLanguage} translation of the verb",
+      "passe_3ms": "past 3rd masc sing WITH full tashkeel",
+      "present_3ms": "present 3rd masc sing WITH full tashkeel",
+      "imperatif": "imperative 2nd masc sing WITH full tashkeel",
       "remarque": "grammar note or null"
     }
   ],
@@ -227,7 +227,11 @@ IMPORTANT: NEVER omit the "contraire" field from vocabulaire items. ALWAYS inclu
 
   const userPrompt = `Extract EVERY SINGLE WORD from this Arabic text (segment ${segmentIndex + 1}/${totalSegments}) with FULL TASHKEEL.
 
-CRITICAL: If a word has no diacritics, ADD THEM according to Arabic grammar.
+CRITICAL RULES:
+1. If a word has no diacritics, ADD THEM according to Arabic grammar
+2. For ALL NOUNS: singulier is the SINGULAR form, traduction translates the SINGULAR
+3. If a word appears as plural in text, use its SINGULAR and note the plural form in remarque
+4. For ALL VERBS: provide traduction, passe_3ms, present_3ms, imperatif (NO verbe_ar field)
 
 TEXT:
 """
@@ -237,6 +241,8 @@ ${arabicText}
 IMPORTANT:
 - This segment has ~${wordCount} words - extract ALL of them
 - EVERY Arabic word in output MUST have FULL TASHKEEL
+- For vocabulaire: NO mot_ar field, use singulier and translate the SINGULAR
+- For verbes: NO verbe_ar field, use passe_3ms, present_3ms, imperatif
 - Return complete JSON.`;
 
   try {
@@ -464,13 +470,13 @@ export async function completeWordInfo(
 ADD FULL TASHKEEL (all diacritics) to ALL Arabic: فَتْحَة, ضَمَّة, كَسْرَة, سُكُون, شَدَّة, تَنْوِين.
 Translate to ${targetLanguage}.
 Return ONLY valid JSON, no markdown.`;
-    expectedFormat = `{"mot_ar": "word with tashkeel", "traduction": "translation", "singulier": "singular form or null", "pluriel": "plural form or null"}`;
+    expectedFormat = `{"traduction": "translation of singular", "singulier": "singular form with tashkeel", "pluriel": "plural form with tashkeel or null", "contraire": "opposite or null"}`;
   } else if (type === 'verb') {
     systemPrompt = `You are an Arabic linguist. Complete the conjugation for this Arabic verb.
 ADD FULL TASHKEEL (all diacritics) to ALL Arabic forms.
 Translate to ${targetLanguage}.
 Return ONLY valid JSON, no markdown.`;
-    expectedFormat = `{"verbe_ar": "root/masdar with tashkeel", "traduction": "translation", "passe_3ms": "past 3rd masc sing", "present_3ms": "present 3rd masc sing", "imperatif": "imperative 2nd masc sing"}`;
+    expectedFormat = `{"traduction": "translation", "passe_3ms": "past 3rd masc sing with tashkeel", "present_3ms": "present 3rd masc sing with tashkeel", "imperatif": "imperative 2nd masc sing with tashkeel"}`;
   } else {
     systemPrompt = `You are an Arabic linguist. Complete the information for this Arabic particle/preposition.
 ADD FULL TASHKEEL (all diacritics) to ALL Arabic.

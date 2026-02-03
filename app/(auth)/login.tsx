@@ -106,7 +106,7 @@ export default function LoginScreen() {
       setLoading(false);
 
       // Rediriger vers l'écran de vérification email
-      router.replace('/(tabs)/email-verification');
+      router.replace('/(auth)/email-verification');
     } catch (e: any) {
       Alert.alert(t('auth.error'), e?.message ?? t('auth.error'));
       setLoading(false);
@@ -209,7 +209,7 @@ export default function LoginScreen() {
         {/* Bouton "Mot de passe oublié" uniquement en mode connexion */}
         {!isSignUp && (
           <Pressable
-            onPress={() => router.push('/(tabs)/forgot-password')}
+            onPress={() => router.push('/(auth)/forgot-password')}
             disabled={loading}
             style={styles.forgotPasswordButton}
           >
