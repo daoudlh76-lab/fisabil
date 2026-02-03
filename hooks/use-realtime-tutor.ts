@@ -93,6 +93,8 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
 
       // Charger TOUS les scans ET TOUT le vocabulaire (pas de limite)
       console.log('🔍 [TUTOR] Requête Supabase pour scans et vocabulary...');
+      console.log('🔍 [TUTOR] userId utilisé pour la requête:', userId);
+
       const [{ data: scans, error: scansError }, { data: vocab, error: vocabError }] = await Promise.all([
         supabase
           .from('scans')
@@ -108,16 +110,24 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
 
       if (scansError) {
         console.error('❌ [TUTOR] Erreur chargement scans:', scansError);
+        console.error('❌ [TUTOR] Détails erreur scans:', JSON.stringify(scansError));
       }
       if (vocabError) {
         console.error('❌ [TUTOR] Erreur chargement vocabulary:', vocabError);
+        console.error('❌ [TUTOR] Détails erreur vocabulary:', JSON.stringify(vocabError));
       }
 
       console.log('📚 [TUTOR] Scans chargés:', scans?.length || 0);
       console.log('📖 [TUTOR] Vocabulary chargé:', vocab?.length || 0);
+      console.log('📊 [TUTOR] Type de scans:', typeof scans, Array.isArray(scans));
+      console.log('📊 [TUTOR] Valeur de scans:', scans);
 
       if (scans && scans.length > 0) {
         console.log('✅ [TUTOR] Premier scan:', scans[0].title);
+        console.log('✅ [TUTOR] Premier scan ID:', scans[0].id);
+        console.log('✅ [TUTOR] Premier scan content length:', scans[0].content?.length || 0);
+      } else {
+        console.log('⚠️ [TUTOR] Aucun scan trouvé dans la base de données');
       }
 
       // Stocker TOUT le vocabulaire dans userTexts
