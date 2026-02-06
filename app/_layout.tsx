@@ -3,13 +3,14 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useAuth } from '@/hooks/use-auth';
-import { LanguageProvider } from '@/hooks/use-language';
 import { AudioPlaylistProvider } from '@/contexts/audio-playlist-context';
-import { VoicePreferenceProvider } from '@/contexts/voice-preference-context';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SubscriptionProvider } from '@/contexts/subscription-context';
-import { ActivityIndicator, View, ImageBackground, StyleSheet } from 'react-native';
+import { VoicePreferenceProvider } from '@/contexts/voice-preference-context';
+import { useAuth } from '@/hooks/use-auth';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LanguageProvider } from '@/hooks/use-language';
+import { ActivityIndicator, ImageBackground, StyleSheet, View } from 'react-native';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -44,6 +45,7 @@ export default function RootLayout() {
   }
 
   return (
+    <ErrorBoundary>
     <ImageBackground
       source={require('@/assets/images/bg-mosque.png')}
       style={styles.background}
@@ -54,7 +56,10 @@ export default function RootLayout() {
           <AudioPlaylistProvider>
             <LanguageProvider>
               <ThemeProvider value={customTheme}>
-                <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}>
+                <Stack screenOptions={{
+                  contentStyle: { backgroundColor: 'transparent' },
+                  animation: 'slide_from_right',
+                }}>
                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                   <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
                 </Stack>
@@ -65,6 +70,7 @@ export default function RootLayout() {
         </VoicePreferenceProvider>
       </SubscriptionProvider>
     </ImageBackground>
+    </ErrorBoundary>
   );
 }
 

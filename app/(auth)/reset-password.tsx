@@ -1,25 +1,57 @@
-import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View, ActivityIndicator } from "react-native";
-import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/hooks/use-language";
+import { supabase } from "@/src/lib/supabase";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 
 export default function ResetPasswordScreen() {
   const { t } = useLanguage();
   const router = useRouter();
+  const { email, verified, otp } = useLocalSearchParams<{ email?: string; verified?: string; otp?: string }>();
+
+  // ...existing state declarations...
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Pas besoin de vérifier la session ici
-  // L'utilisateur peut accéder à cette page avec un token de récupération
-  // qui est différent d'une session normale
+  // Vérifier qu'on a bien l'email et que l'OTP est vérifié OU qu'une session existe
+  useEffect(() => {
+    const checkAccess = async () => {
+      console.log('🔍 Reset Password - Paramètres reçus:', { email, verified, otp });
+
+      // Normaliser verified (accepte 'true' ou true)
+      const verifiedFlag = verified === 'true' || verified === true || verified === '1' || verified === 1;
+
+      // Si on vient du flux OTP avec verified=true
+      if (verifiedFlag && email) {
+        console.log('✅ Flux OTP validé - accès autorisé');
+        return; // OK, on peut continuer
+      }
+
+      console.log('⚠️ Flux OTP non détecté, vérification de la session...');
+
+      // Sinon, vérifier qu'une session existe (flux magic link classique)
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        console.log('❌ Aucune session - redirection vers forgot-password');
+        Alert.alert(
+          t('auth.error'),
+          "Accès non autorisé. Veuillez recommencer le processus.",
+          [{ text: "OK", onPress: () => router.replace('/(auth)/forgot-password') }]
+        );
+      } else {
+        console.log('✅ Session trouvée - accès autorisé');
+      }
+    };
+    checkAccess();
+  }, [email, verified, otp]);
 
   async function handleResetPassword() {
     if (!newPassword || !confirmPassword) {
-      Alert.alert(t('auth.error'), "Veuillez remplir tous les champs");
+      Alert.alert(t('auth.error'), t('auth.fillAllFields'));
       return;
     }
 
@@ -29,33 +61,56 @@ export default function ResetPasswordScreen() {
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert(t('auth.error'), "Les mots de passe ne correspondent pas");
+      Alert.alert(t('auth.error'), t('auth.passwordsDoNotMatch'));
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      // Normaliser verified (accepte 'true' ou true)
+      const verifiedFlag = verified === 'true' || verified === true || verified === '1' || verified === 1;
 
-      if (error) {
-        Alert.alert(t('auth.error'), error.message);
+      if (verifiedFlag && email) {
+        // Flux OTP natif Supabase : l'utilisateur doit avoir une session après vérification
+        const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+
+        if (updateError) {
+          Alert.alert(t('auth.error'), updateError.message || t('auth.resetButton'));
+          setLoading(false);
+          return;
+        }
+
+        Alert.alert(
+          t('auth.resetSuccess'),
+          t('auth.resetSuccessMessage'),
+          [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
+        );
         setLoading(false);
         return;
-      }
+      } else {
+        // Flux classique (magic link) : utiliser updateUser
+        const { error } = await supabase.auth.updateUser({
+          password: newPassword,
+        });
 
-      Alert.alert(
-        "Succès",
-        "Votre mot de passe a été réinitialisé avec succès",
-        [
-          {
-            text: "OK",
-            onPress: () => router.replace('/(auth)/login'),
-          },
-        ]
-      );
-      setLoading(false);
+        if (error) {
+          Alert.alert(t('auth.error'), error.message);
+          setLoading(false);
+          return;
+        }
+
+        Alert.alert(
+          t('auth.resetSuccess'),
+          t('auth.resetSuccessMessage'),
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace('/(auth)/login'),
+            },
+          ]
+        );
+        setLoading(false);
+      }
     } catch (e: any) {
       Alert.alert(t('auth.error'), e?.message ?? t('auth.error'));
       setLoading(false);
@@ -63,78 +118,92 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Image source={require("@/assets/logo.png")} style={styles.logo} resizeMode="contain" />
-
-      <Text style={styles.title}>Nouveau mot de passe</Text>
-
-      <Text style={styles.description}>
-        Entrez votre nouveau mot de passe (minimum 6 caractères)
-      </Text>
-
-      <View style={styles.passwordContainer}>
-        <TextInput
-          style={styles.passwordInput}
-          placeholder="Nouveau mot de passe"
-          secureTextEntry={!showPassword}
-          value={newPassword}
-          onChangeText={setNewPassword}
-          editable={!loading}
-        />
-        <Pressable
-          style={styles.eyeButton}
-          onPress={() => setShowPassword(!showPassword)}
-          disabled={loading}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.eyeIcon}>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
-        </Pressable>
-      </View>
+          <Image source={require("@/assets/logo.png")} style={styles.logo} resizeMode="contain" />
 
-      <View style={styles.passwordContainer}>
-        <TextInput
-          style={styles.passwordInput}
-          placeholder="Confirmer le mot de passe"
-          secureTextEntry={!showConfirmPassword}
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          editable={!loading}
-        />
-        <Pressable
-          style={styles.eyeButton}
-          onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-          disabled={loading}
-        >
-          <Text style={styles.eyeIcon}>{showConfirmPassword ? "👁️" : "👁️‍🗨️"}</Text>
-        </Pressable>
-      </View>
+          <Text style={styles.title}>{t('auth.newPasswordTitle')}</Text>
 
-      <Pressable
-        style={[styles.button, loading && { opacity: 0.6 }]}
-        onPress={handleResetPassword}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#FFF" />
-        ) : (
-          <Text style={styles.buttonText}>Réinitialiser le mot de passe</Text>
-        )}
-      </Pressable>
+          <Text style={styles.description}>
+            {t('auth.newPasswordDescription')}
+          </Text>
 
-      <Pressable
-        onPress={() => router.replace('/(auth)/login')}
-        style={styles.backButton}
-      >
-        <Text style={styles.backButtonText}>{t('auth.backToLogin')}</Text>
-      </Pressable>
-    </View>
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder={t('auth.newPasswordPlaceholder')}
+              secureTextEntry={!showPassword}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              editable={!loading}
+            />
+            <Pressable
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+              disabled={loading}
+            >
+              <Text style={styles.eyeIcon}>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder={t('auth.confirmPasswordPlaceholder')}
+              secureTextEntry={!showConfirmPassword}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              editable={!loading}
+            />
+            <Pressable
+              style={styles.eyeButton}
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              disabled={loading}
+            >
+              <Text style={styles.eyeIcon}>{showConfirmPassword ? "👁️" : "👁️‍🗨️"}</Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            style={[styles.button, loading && { opacity: 0.6 }]}
+            onPress={handleResetPassword}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.buttonText}>{t('auth.resetButton')}</Text>
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.replace('/(auth)/login')}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonText}>{t('auth.backToLogin')}</Text>
+          </Pressable>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 24,
     backgroundColor: "transparent",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 24,
     justifyContent: "center",
   },
   logo: {

@@ -1,20 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Pressable,
-  Alert,
-  Modal,
-  TextInput,
-  TouchableOpacity,
-} from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useAudioPlaylistContext } from '@/contexts/audio-playlist-context';
 import { useLanguage } from '@/hooks/use-language';
 import { supabase } from '@/src/lib/supabase';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    Alert,
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 const GREEN = '#2E7D32';
 
@@ -34,6 +34,7 @@ export default function PlaylistScreen() {
     removeTrack,
     selectTrack,
     togglePlayPause,
+    stopPlayback,
     nextTrack,
     previousTrack,
     toggleLooping,
@@ -410,6 +411,13 @@ export default function PlaylistScreen() {
                 size={32}
                 color="white"
               />
+            </Pressable>
+
+            <Pressable
+              style={styles.controlButton}
+              onPress={stopPlayback}
+            >
+              <MaterialCommunityIcons name="stop" size={32} color={GREEN} />
             </Pressable>
 
             <Pressable

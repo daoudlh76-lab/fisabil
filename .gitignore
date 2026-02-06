@@ -50,3 +50,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Build outputs
+build-preview/
+build-preview-android/

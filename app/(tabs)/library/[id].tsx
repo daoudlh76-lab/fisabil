@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -9,6 +9,8 @@ import {
     Text,
     TextInput,
     View,
+    KeyboardAvoidingView,
+    Platform,
 } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
@@ -180,10 +182,16 @@ export default function LibraryItemScreen() {
   }
 
   useEffect(() => {
-    loadFolders();
     loadScan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Recharger les dossiers chaque fois que l'écran devient actif
+  useFocusEffect(
+    useCallback(() => {
+      loadFolders();
+    }, [])
+  );
 
   // Générer automatiquement le vocabulaire quand le scan est chargé et qu'il n'y a pas de cache
   useEffect(() => {
@@ -792,8 +800,13 @@ export default function LibraryItemScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{editing ? t('libraryDetail.edit') : t('libraryDetail.details')}</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>{editing ? t('libraryDetail.edit') : t('libraryDetail.details')}</Text>
 
       <Text style={styles.label}>{t('libraryDetail.title')}</Text>
       <TextInput
@@ -1276,7 +1289,8 @@ export default function LibraryItemScreen() {
       <Text style={styles.meta}>
         {t('libraryDetail.createdAt')} {new Date(scan.created_at).toLocaleString()}
       </Text>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -51,6 +51,8 @@ export function useAuth() {
     const isOnLoginPage = currentRoute === 'login';
     const isOnEmailVerificationPage = currentRoute === 'email-verification';
     const isOnForgotPasswordPage = currentRoute === 'forgot-password';
+    const isOnVerifyOtpPage = currentRoute === 'verify-otp';
+    const isOnVerifyEmailPage = currentRoute === 'verify-email';
     const isOnResetPasswordPage = currentRoute === 'reset-password';
 
     console.log('🔐 Route check:', {
@@ -60,11 +62,14 @@ export function useAuth() {
       isOnLoginPage,
       isOnEmailVerificationPage,
       isOnForgotPasswordPage,
+      isOnVerifyOtpPage,
+      isOnVerifyEmailPage,
       isOnResetPasswordPage
     });
 
     // Cas 1: Pas de session et pas sur login -> rediriger vers login
-    if (!session && !isOnLoginPage && !isOnEmailVerificationPage && !isOnForgotPasswordPage && !isOnResetPasswordPage) {
+    // SAUF si on est dans le flux de réinitialisation de mot de passe (forgot-password, verify-otp, verify-email, reset-password)
+    if (!session && !isOnLoginPage && !isOnEmailVerificationPage && !isOnForgotPasswordPage && !isOnVerifyOtpPage && !isOnVerifyEmailPage && !isOnResetPasswordPage) {
       console.log('🔐 No session, redirecting to login...');
       router.replace('/(auth)/login');
     }

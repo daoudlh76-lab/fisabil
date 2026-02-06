@@ -1,9 +1,9 @@
-import { useState, useCallback, useRef } from "react";
-import * as Speech from "expo-speech";
+import { useVoicePreference } from "@/contexts/voice-preference-context";
+import { speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
 import { Audio } from "expo-audio";
 import * as FileSystem from "expo-file-system";
+import { useCallback, useRef, useState } from "react";
 import { useLanguage } from "./use-language";
-import { useVoicePreference } from "@/contexts/voice-preference-context";
 
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
@@ -203,22 +203,21 @@ export function useSpeech() {
     return totalChars > 0 && (arabicChars / totalChars) > 0.5;
   };
 
-  // Parler (synthèse vocale) - CETTE FONCTION MARCHE
+  // Parler (OpenAI TTS natural voice, fallback to device)
   const speak = useCallback(
     async (text: string) => {
       try {
         setIsSpeaking(true);
         setError(null);
 
-        // Arrêter la parole précédente si elle est en cours
-        await Speech.stop();
+        // Stop any previous speech
+        await stopTTS();
 
-        // Détecter automatiquement la langue du texte
+        // Detect language
         let speechLanguage: string;
         if (isArabicText(text)) {
-          speechLanguage = "ar-SA"; // Arabe saoudien
+          speechLanguage = "ar-SA";
         } else {
-          // Utiliser la langue de l'UI pour les textes non-arabes
           const langMap: Record<string, string> = {
             fr: "fr-FR",
             en: "en-US",
@@ -229,15 +228,15 @@ export function useSpeech() {
           speechLanguage = langMap[language] || "en-US";
         }
 
-        // Voix féminine: pitch plus élevé (1.2), voix masculine: pitch plus bas (0.8)
-        const pitch = gender === 'female' ? 1.2 : 0.8;
+        const speed = isArabicText(text) ? 0.9 : 1.0;
 
-        console.log("🔊 Speaking:", text.slice(0, 50) + "...", "in", speechLanguage, "pitch:", pitch);
+        console.log("🔊 Speaking (OpenAI):", text.slice(0, 50) + "...", "lang:", speechLanguage);
 
-        await Speech.speak(text, {
+        await speakWithOpenAI({
+          text,
+          gender,
+          speed,
           language: speechLanguage,
-          pitch,
-          rate: isArabicText(text) ? 0.8 : 0.85, // Un peu plus lent pour l'arabe
           onDone: () => {
             console.log("🔊 Speech finished");
             setIsSpeaking(false);
@@ -245,18 +244,16 @@ export function useSpeech() {
           onError: (err) => {
             console.error("Speech synthesis error:", err);
             setIsSpeaking(false);
-            const errorMsg = "Speech synthesis error";
-            setError(errorMsg);
+            setError("Speech synthesis error");
           },
         });
       } catch (err) {
         console.error("❌ Speech error:", err);
-        setIsSpeaking(false);
         const errorMsg =
-          err instanceof Error
-            ? err.message
-            : "Speech error";
+          err instanceof Error ? err.message : "Speech error";
         setError(errorMsg);
+      } finally {
+        setIsSpeaking(false);
       }
     },
     [language, gender]
@@ -265,7 +262,7 @@ export function useSpeech() {
   // Arrêter la parole
   const stopSpeaking = useCallback(async () => {
     try {
-      await Speech.stop();
+      await stopTTS();
       setIsSpeaking(false);
       console.log("🔊 Speech stopped");
     } catch (err) {

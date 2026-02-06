@@ -47,15 +47,60 @@ Si vous voulez personnaliser l'email de réinitialisation :
 
 Le `{{ .ConfirmationURL }}` utilisera automatiquement le `redirectTo` spécifié dans le code.
 
-### 3. Code de l'Application
+### 3. Code de l'Application — Deprecated / Legacy Flow
 
-Le code a été mis à jour dans `/app/(auth)/forgot-password.tsx` :
+> Deprecated / Legacy Flow — utilisation historique de `resetPasswordForEmail`
+
+L'exemple suivant illustre l'ancien flux basé sur deep links. Il est conservé ici pour référence historique et pour les cas web, mais **il est déprécié pour la réinitialisation de mot de passe sur l'application mobile**.
 
 ```typescript
+// DEPRECATED for mobile reset password (Legacy deep-link flow)
 const { error } = await supabase.auth.resetPasswordForEmail(email, {
   redirectTo: 'fisabil://reset-password',
 });
 ```
+
+Pourquoi ce flux est déprécié pour l'app mobile :
+
+- Il dépend de deep links (URLs de redirection) pour ouvrir l'application et transférer le token.
+- Il peut provoquer l'envoi de magic links qui ne correspondent pas au comportement OTP souhaité.
+- L'application mobile n'utilise plus ce flux pour le reset password — il reste néanmoins valable pour certains workflows web.
+
+Si vous maintenez du code legacy ou des workflows web, vous pouvez conserver cet exemple en tant que référence. Pour le reset password mobile, utilisez le nouveau flux OTP recommandé (voir section "Nouveau flux OTP (recommandé)" ci‑dessous).
+
+### 4. Nouveau flux OTP (recommandé)
+
+L'application mobile utilise désormais un flux OTP natif géré par Supabase Auth :
+
+- Envoi de l'OTP par email : depuis `app/(auth)/forgot-password.tsx`, l'app appelle :
+
+```ts
+await supabase.auth.signInWithOtp({
+  email,
+  options: { shouldCreateUser: false },
+});
+```
+
+- Vérification du code OTP : l'écran `app/(auth)/verify-otp.tsx` récupère le code saisi et appelle :
+
+```ts
+await supabase.auth.verifyOtp({ email, token: code, type: 'email' });
+```
+
+- Réinitialisation du mot de passe : après validation OTP, l'utilisateur est redirigé vers `app/(auth)/reset-password.tsx` où l'app utilise `supabase.auth.updateUser({ password })` pour appliquer le nouveau mot de passe.
+
+Points importants :
+- Les deep links **ne sont pas requis** pour ce flux OTP — tout se passe via codes envoyés par email.
+- Ce flux évite la dépendance aux redirect URLs pour la réinitialisation, simplifiant le comportement mobile et évitant les magic links non désirés.
+
+### 5. Quand garder les deep links
+
+Conserver les deep links configurés reste pertinent pour :
+
+- le login par magic link (si vous l'utilisez)
+- la confirmation d'email
+
+Ne retirez donc pas la configuration deep link si vous utilisez les magic links ou la confirmation d'email, mais sachez qu'ils ne sont plus nécessaires pour le reset password mobile.
 
 ### 4. Gestion du Deep Link dans l'App
 

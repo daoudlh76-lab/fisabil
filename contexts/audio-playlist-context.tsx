@@ -1,18 +1,19 @@
+import { useVoicePreference } from '@/contexts/voice-preference-context';
+import { supabase } from "@/src/lib/supabase";
+import { speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
 import * as Speech from 'expo-speech';
 import React, {
-    createContext,
-    ReactNode,
-    useCallback,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
-import { supabase } from "@/src/lib/supabase";
-import { useVoicePreference } from '@/contexts/voice-preference-context';
 
 export interface AudioTrack {
   id: string;
@@ -38,6 +39,7 @@ interface AudioPlaylistContextType {
   removeTrack: (trackId: string) => void;
   selectTrack: (index: number) => void;
   togglePlayPause: () => Promise<void>;
+  stopPlayback: () => Promise<void>;
   nextTrack: () => void;
   previousTrack: () => void;
   toggleLooping: () => void;
@@ -135,6 +137,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         speechIntervalRef.current = null;
       }
       Speech.stop().catch(() => {});
+      stopTTS().catch(() => {});
     };
   }, []);
 
@@ -352,7 +355,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         if (playlist.isPlaying) {
           // Arrêter la synthèse vocale
           console.log('⏸️ Stopping speech...');
-          await Speech.stop();
+          await stopTTS();
           if (speechIntervalRef.current) {
             clearInterval(speechIntervalRef.current);
             speechIntervalRef.current = null;
@@ -360,13 +363,11 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
           setPlaylist((prev) => ({ ...prev, isPlaying: false }));
           console.log('✅ Speech stopped');
         } else {
-          // Démarrer la synthèse vocale
-          console.log('▶️ Starting speech...');
-          await Speech.stop(); // Arrêter d'abord toute lecture en cours
+          // Démarrer la synthèse vocale (OpenAI TTS natural voice)
+          console.log('▶️ Starting speech (OpenAI TTS)...');
+          await stopTTS(); // Arrêter d'abord toute lecture en cours
 
-          // Voix féminine: pitch plus élevé (1.2), voix masculine: pitch plus bas (0.8)
-          const pitch = gender === 'female' ? 1.2 : 0.8;
-          console.log(`🔊 Using ${gender === 'female' ? 'female' : 'male'} voice (pitch: ${pitch})`);
+          console.log(`🔊 Using ${gender === 'female' ? 'female' : 'male'} voice (OpenAI TTS)`);
 
           setPlaylist((prev) => ({ ...prev, isPlaying: true, currentPosition: 0 }));
 
@@ -398,10 +399,11 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
             });
           }, 1000);
 
-          await Speech.speak(track.text, {
+          await speakWithOpenAI({
+            text: track.text,
+            gender,
+            speed: 0.9,
             language: 'ar-SA',
-            pitch,
-            rate: 0.85,
             onDone: () => {
               console.log('🔊 Speech finished');
               if (speechIntervalRef.current) {
@@ -472,6 +474,31 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Arrêter complètement la lecture (stop, pas pause)
+  const stopPlayback = useCallback(async () => {
+    try {
+      console.log('⏹️ stopPlayback called');
+      // Stop audio file playback
+      if (soundRef.current) {
+        await soundRef.current.stopAsync().catch(() => {});
+        // Seek to beginning
+        await soundRef.current.setPositionAsync(0).catch(() => {});
+      }
+      // Stop TTS playback
+      await stopTTS();
+      // Stop speech interval timer
+      if (speechIntervalRef.current) {
+        clearInterval(speechIntervalRef.current);
+        speechIntervalRef.current = null;
+      }
+      setPlaylist((prev) => ({ ...prev, isPlaying: false, currentPosition: 0 }));
+      console.log('⏹️ Playback stopped');
+    } catch (error) {
+      console.error('❌ Error in stopPlayback:', error);
+      setPlaylist((prev) => ({ ...prev, isPlaying: false, currentPosition: 0 }));
+    }
+  }, []);
+
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -485,6 +512,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
       removeTrack,
       selectTrack,
       togglePlayPause,
+      stopPlayback,
       nextTrack,
       previousTrack,
       toggleLooping,
@@ -498,6 +526,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
       removeTrack,
       selectTrack,
       togglePlayPause,
+      stopPlayback,
       nextTrack,
       previousTrack,
       toggleLooping,

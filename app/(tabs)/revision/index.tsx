@@ -176,7 +176,7 @@ export default function RevisionScreen() {
                 scanId: scan.id, // UUID du scan
                 wordAr: item.singulier,
                 wordFr: item.traduction,
-                definition: item.remarque || (item.pluriel ? `ج: ${item.pluriel}` : '') || '',
+                definition: item.pluriel ? `ج: ${item.pluriel}` : '',
                 difficulty: 'medium',
                 lastReviewed: null,
                 nextReview: new Date(),

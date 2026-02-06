@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import * as Speech from 'expo-speech';
 import { useVoicePreference } from '@/contexts/voice-preference-context';
+import { speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface DictationEntry {
   id: string;
@@ -56,7 +56,7 @@ export const useDictation = () => {
     return segments;
   }, []);
 
-  // Lire un segment spécifique
+  // Lire un segment spécifique (OpenAI TTS natural voice)
   const speakSegmentInternal = useCallback((index: number) => {
     if (index < 0 || index >= segmentsRef.current.length) {
       console.log('✅ Lecture terminée (tous les segments)');
@@ -70,31 +70,32 @@ export const useDictation = () => {
     currentIndexRef.current = index;
     setCurrentSegmentIndex(index);
 
-    // Voix féminine: pitch plus élevé (1.2), voix masculine: pitch plus bas (0.8)
-    const pitch = genderRef.current === 'female' ? 1.2 : 0.8;
+    if (index === 0) {
+      console.log('▶️ Lecture démarrée');
+    }
 
-    Speech.speak(segment, {
+    speakWithOpenAI({
+      text: segment,
+      gender: genderRef.current,
+      speed: speedRef.current,
       language: 'ar-SA',
-      rate: speedRef.current,
-      pitch: pitch,
-      volume: 1.0, // Volume maximum pour meilleure audibilité
       onDone: () => {
         if (isPlayingRef.current) {
           // Passer au segment suivant
           speakSegmentInternal(index + 1);
         }
       },
-      onError: (error) => {
-        console.error('❌ Erreur synthèse vocale:', error);
+      onError: (err) => {
+        console.error('❌ Erreur synthèse vocale:', err);
         setIsSpeaking(false);
         setIsPaused(false);
         isPlayingRef.current = false;
       },
-      onStart: () => {
-        if (index === 0) {
-          console.log('▶️ Lecture démarrée');
-        }
-      },
+    }).catch((err) => {
+      console.error('❌ Erreur segment TTS:', err);
+      setIsSpeaking(false);
+      setIsPaused(false);
+      isPlayingRef.current = false;
     });
   }, []);
 
@@ -108,7 +109,7 @@ export const useDictation = () => {
     console.log('🔊 Lecture du texte:', text.substring(0, 50) + '...');
     
     // Arrêter toute lecture en cours
-    Speech.stop();
+    stopTTS();
     
     // Préparer les segments
     segmentsRef.current = splitIntoSegments(text);
@@ -126,7 +127,7 @@ export const useDictation = () => {
   // Mettre en pause
   const pause = useCallback(() => {
     console.log('⏸️ Pause');
-    Speech.stop();
+    stopTTS();
     isPlayingRef.current = false;
     setIsPaused(true);
     setIsSpeaking(false);
@@ -153,7 +154,7 @@ export const useDictation = () => {
   // Arrêter complètement
   const stop = useCallback(() => {
     console.log('⏹️ Stop');
-    Speech.stop();
+    stopTTS();
     isPlayingRef.current = false;
     setIsSpeaking(false);
     setIsPaused(false);
@@ -166,7 +167,7 @@ export const useDictation = () => {
     const newIndex = Math.max(0, currentIndexRef.current - segments);
     console.log(`⏪ Retour de ${segments} segments vers ${newIndex}`);
     
-    Speech.stop();
+    stopTTS();
     currentIndexRef.current = newIndex;
     setCurrentSegmentIndex(newIndex);
     
@@ -191,7 +192,7 @@ export const useDictation = () => {
     
     // Si en cours de lecture, redémarrer avec la nouvelle vitesse
     if (isPlayingRef.current) {
-      Speech.stop();
+      stopTTS();
       setTimeout(() => {
         speakSegmentInternal(currentIndexRef.current);
       }, 100);

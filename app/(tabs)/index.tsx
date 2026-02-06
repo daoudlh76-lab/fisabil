@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Alert, ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useDiacritics as useOldDiacritics } from "@/hooks/use-diacritics";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
@@ -349,8 +349,13 @@ export default function ScannerScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>{t('scanner.title')}</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.header}>{t('scanner.title')}</Text>
 
       {/* Afficher le compteur de scans pour les utilisateurs gratuits seulement */}
       {isLoaded && subscription.plan === 'free' && scannerLimit && !scannerLimit.loading && (
@@ -512,7 +517,8 @@ export default function ScannerScreen() {
       >
         <Text style={styles.saveButtonText}>{t('scanner.save')}</Text>
       </Pressable>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

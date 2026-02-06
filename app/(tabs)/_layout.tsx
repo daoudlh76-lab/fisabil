@@ -34,6 +34,8 @@ export default function TabsLayout() {
           backgroundColor: '#FFFFFF',
         },
         headerTransparent: false,
+        // Animation de transition entre les pages
+        animation: 'shift',
       }}
     >
       {/* Scanner = index.tsx */}

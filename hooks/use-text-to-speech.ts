@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
-import * as Speech from 'expo-speech';
 import { useVoicePreference } from '@/contexts/voice-preference-context';
+import { speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
+import { useCallback, useState } from 'react';
 
 export const useTextToSpeech = () => {
   const [isConverting, setIsConverting] = useState(false);
@@ -10,22 +10,22 @@ export const useTextToSpeech = () => {
   // Préférence de voix (homme/femme)
   const { gender } = useVoicePreference();
 
-  // Fonction pour lire le texte à voix haute (synthèse vocale)
+  // Fonction pour lire le texte à voix haute (OpenAI TTS natural voice)
   const speakText = useCallback(
     async (text: string, language: string = 'ar-SA'): Promise<void> => {
       try {
         // Arrêter la parole précédente si elle est en cours
-        await Speech.stop();
+        await stopTTS();
         setIsSpeaking(true);
 
-        // Voix féminine: pitch plus élevé (1.2), voix masculine: pitch plus bas (0.8)
-        const pitch = gender === 'female' ? 1.2 : 0.8;
-        console.log(`🔊 Lecture avec voix ${gender === 'female' ? 'féminine' : 'masculine'} (pitch: ${pitch}, gender préféré: ${gender})`);
+        const speed = language.startsWith('ar') ? 0.9 : 1.0;
+        console.log(`🔊 Lecture avec voix ${gender === 'female' ? 'féminine' : 'masculine'} (OpenAI TTS, gender: ${gender})`);
 
-        await Speech.speak(text, {
+        await speakWithOpenAI({
+          text,
+          gender,
+          speed,
           language,
-          pitch,
-          rate: 0.85,
           onDone: () => {
             setIsSpeaking(false);
             console.log('🔊 Lecture terminée');
@@ -37,6 +37,7 @@ export const useTextToSpeech = () => {
         });
       } catch (error) {
         console.error('Erreur synthèse vocale:', error);
+      } finally {
         setIsSpeaking(false);
       }
     },
@@ -46,7 +47,7 @@ export const useTextToSpeech = () => {
   // Fonction pour arrêter la parole
   const stopSpeaking = useCallback(async () => {
     try {
-      await Speech.stop();
+      await stopTTS();
       setIsSpeaking(false);
     } catch (error) {
       console.error('Erreur arrêt parole:', error);

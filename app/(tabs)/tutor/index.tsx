@@ -1,22 +1,35 @@
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  TextInput,
-  Pressable,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
-import { useRealtimeTutor } from "@/hooks/use-realtime-tutor";
-import { useLanguage } from "@/hooks/use-language";
 import AnimatedLogoButton from "@/components/AnimatedLogoButton";
+import { useChatTutor } from "@/hooks/use-chat-tutor";
+import { useLanguage } from "@/hooks/use-language";
+import { supabase } from "@/src/lib/supabase";
 import { useFocusEffect } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+} from "react-native";
+
+type Folder = {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+};
 
 export default function TutorPage() {
   const { language, t } = useLanguage();
+  const [selectedTextId, setSelectedTextId] = useState<string | undefined>(undefined);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+
   const {
     isConnected,
     isListening,
@@ -37,13 +50,33 @@ export default function TutorPage() {
     startListening,
     stopListening,
     loadUserTexts,
-  } = useRealtimeTutor(language);
+    preparedCount,
+    prepareNow,
+    startDialogue,
+  } = useChatTutor(language, selectedTextId);
 
   const [inputText, setInputText] = useState("");
   const [connecting, setConnecting] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Recharger les textes à chaque fois que l'utilisateur revient sur cette page
+  // Charger les dossiers
+  const loadFolders = useCallback(async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user?.id;
+    if (!userId) return;
+
+    const { data, error } = await supabase
+      .from("folders")
+      .select("id, name, color, icon")
+      .eq("user_id", userId)
+      .order("name", { ascending: true });
+
+    if (!error && data) {
+      setFolders(data as Folder[]);
+    }
+  }, []);
+
+  // Recharger les textes et dossiers à chaque fois que l'utilisateur revient sur cette page
   useFocusEffect(
     useCallback(() => {
       console.log('📚 [PAGE] Rechargement des textes du tuteur...');
@@ -51,8 +84,42 @@ export default function TutorPage() {
       loadUserTexts().then((texts) => {
         console.log('📚 [PAGE] Textes rechargés:', texts?.length || 0);
       });
-    }, [loadUserTexts, userTexts])
+      loadFolders();
+    }, [loadUserTexts, loadFolders, userTexts])
   );
+
+  // Filtrer les textes par recherche et dossier
+  const filteredTexts = useMemo(() => {
+    let filtered = userTexts;
+
+    // Filtrer par dossier si un dossier est sélectionné
+    if (selectedFolderId === 'unclassified') {
+      filtered = filtered.filter(t => t.folder_id === null);
+    } else if (selectedFolderId) {
+      filtered = filtered.filter(t => t.folder_id === selectedFolderId);
+    }
+
+    // Filtrer par recherche
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(t =>
+        t.title.toLowerCase().includes(query) ||
+        t.content.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [userTexts, selectedFolderId, searchQuery]);
+
+  // Obtenir les textes d'un dossier spécifique
+  const getFolderTexts = useCallback((folderId: string) => {
+    return userTexts.filter(t => t.folder_id === folderId);
+  }, [userTexts]);
+
+  // Textes non classés
+  const unclassifiedTexts = useMemo(() => {
+    return userTexts.filter(t => t.folder_id === null);
+  }, [userTexts]);
 
   // Log userTexts à chaque changement
   useEffect(() => {
@@ -94,6 +161,28 @@ export default function TutorPage() {
         <Text style={styles.infoText}>
           {"📚 "}{userTexts.length} {t("realtimeTutor.textsAvailable")}
         </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={[styles.infoText, { marginRight: 8 }]}>Préparées: {preparedCount()}</Text>
+          <Pressable style={[styles.controlButton, { backgroundColor: '#E0E0E0' }]} onPress={async () => {
+            const id = selectedTextId ?? userTexts[0]?.id;
+            if (!id) return;
+            await prepareNow(id);
+          }}>
+            <Text style={{ fontSize: 12, fontWeight: '600' }}>Préparer maintenant</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.controlButton, { marginLeft: 8, backgroundColor: preparedCount() > 0 ? '#2F6B3D' : '#BDBDBD' }]}
+            onPress={async () => {
+              const id = selectedTextId ?? userTexts[0]?.id;
+              if (!id) return;
+              console.log('[UI] Start Dialogue pressed for', id);
+              await startDialogue(id);
+            }}
+            disabled={preparedCount() === 0}
+          >
+            <Text style={[styles.controlButtonText, { color: '#fff' }]}>Start Dialogue</Text>
+          </Pressable>
+        </View>
         <View style={styles.controlsRow}>
           {isConnected && (
             <Pressable
@@ -151,6 +240,183 @@ export default function TutorPage() {
             <Text style={styles.emptyStateText}>
               {t("realtimeTutor.welcomeText")}
             </Text>
+
+            {/* Sélection de texte avec dossiers et recherche */}
+            {userTexts.length > 0 && (
+              <View style={styles.textSelectionContainer}>
+                <Text style={styles.textSelectionLabel}>
+                  📖 {t("realtimeTutor.selectText") || "Choisir un texte :"}
+                </Text>
+
+                {/* Barre de recherche */}
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder={t('library.search') || "🔍 Rechercher..."}
+                  style={styles.searchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <ScrollView
+                  style={styles.textList}
+                  contentContainerStyle={styles.textListContent}
+                  nestedScrollEnabled={true}
+                >
+                  {/* Option pour tous les textes */}
+                  <Pressable
+                    style={[
+                      styles.textOption,
+                      !selectedTextId && !selectedFolderId && styles.textOptionSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedTextId(undefined);
+                      setSelectedFolderId(undefined);
+                      setSearchQuery("");
+                    }}
+                  >
+                    <Text style={[
+                      styles.textOptionTitle,
+                      !selectedTextId && !selectedFolderId && styles.textOptionTitleSelected,
+                    ]}>
+                      📚 {t("realtimeTutor.allTexts") || "Tous mes textes"}
+                    </Text>
+                    <Text style={styles.textOptionSubtitle}>
+                      {userTexts.length} {t("realtimeTutor.texts") || "textes"}
+                    </Text>
+                  </Pressable>
+
+                  {/* Dossiers */}
+                  {folders.length > 0 && (
+                    <View style={styles.foldersSection}>
+                      <Text style={styles.sectionTitle}>{t('library.myFolders') || "Mes dossiers"}</Text>
+                      {folders.map((folder) => {
+                        const folderTexts = getFolderTexts(folder.id);
+                        if (folderTexts.length === 0) return null;
+
+                        return (
+                          <Pressable
+                            key={folder.id}
+                            style={[
+                              styles.folderOption,
+                              selectedFolderId === folder.id && styles.textOptionSelected,
+                            ]}
+                            onPress={() => {
+                              if (selectedFolderId === folder.id) {
+                                setSelectedFolderId(undefined);
+                                setSelectedTextId(undefined);
+                              } else {
+                                setSelectedFolderId(folder.id);
+                                setSelectedTextId(undefined);
+                              }
+                            }}
+                          >
+                            <View style={styles.folderHeader}>
+                              <Text style={[
+                                styles.folderTitle,
+                                selectedFolderId === folder.id && styles.textOptionTitleSelected,
+                              ]}>
+                                {folder.icon} {folder.name}
+                              </Text>
+                              <Text style={styles.folderCount}>
+                                {folderTexts.length}
+                              </Text>
+                            </View>
+
+                            {/* Afficher les textes du dossier si sélectionné */}
+                            {selectedFolderId === folder.id && (
+                              <View style={styles.folderTexts}>
+                                {folderTexts.map((text) => (
+                                  <Pressable
+                                    key={text.id}
+                                    style={[
+                                      styles.textOptionNested,
+                                      selectedTextId === text.id && styles.textOptionNestedSelected,
+                                    ]}
+                                    onPress={() => setSelectedTextId(text.id)}
+                                  >
+                                    <Text style={[
+                                      styles.textOptionTitle,
+                                      selectedTextId === text.id && styles.textOptionTitleSelected,
+                                    ]}>
+                                      {text.title}
+                                    </Text>
+                                    <Text style={styles.textOptionSubtitle}>
+                                      {text.content?.slice(0, 40)}...
+                                    </Text>
+                                  </Pressable>
+                                ))}
+                              </View>
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* Textes non classés */}
+                  {unclassifiedTexts.length > 0 && (
+                    <View style={styles.foldersSection}>
+                      <Text style={styles.sectionTitle}>{t('library.unclassified') || "Textes non classés"}</Text>
+                      <Pressable
+                        style={[
+                          styles.folderOption,
+                          selectedFolderId === 'unclassified' && styles.textOptionSelected,
+                        ]}
+                        onPress={() => {
+                          if (selectedFolderId === 'unclassified') {
+                            setSelectedFolderId(undefined);
+                            setSelectedTextId(undefined);
+                          } else {
+                            setSelectedFolderId('unclassified');
+                            setSelectedTextId(undefined);
+                          }
+                        }}
+                      >
+                        <View style={styles.folderHeader}>
+                          <Text style={[
+                            styles.folderTitle,
+                            selectedFolderId === 'unclassified' && styles.textOptionTitleSelected,
+                          ]}>
+                            📄 {t('library.noFolder') || "Sans dossier"}
+                          </Text>
+                          <Text style={styles.folderCount}>
+                            {unclassifiedTexts.length}
+                          </Text>
+                        </View>
+
+                        {/* Afficher les textes non classés si sélectionné */}
+                        {selectedFolderId === 'unclassified' && (
+                          <View style={styles.folderTexts}>
+                            {unclassifiedTexts.map((text) => (
+                              <Pressable
+                                key={text.id}
+                                style={[
+                                  styles.textOptionNested,
+                                  selectedTextId === text.id && styles.textOptionNestedSelected,
+                                ]}
+                                onPress={() => setSelectedTextId(text.id)}
+                              >
+                                <Text style={[
+                                  styles.textOptionTitle,
+                                  selectedTextId === text.id && styles.textOptionTitleSelected,
+                                ]}>
+                                  {text.title}
+                                </Text>
+                                <Text style={styles.textOptionSubtitle}>
+                                  {text.content?.slice(0, 40)}...
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                      </Pressable>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+
             <Text style={styles.emptyStateHint}>
               {t("realtimeTutor.pressToStart")}
             </Text>
@@ -582,5 +848,114 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#FFF",
     textAlign: "center",
+  },
+  textSelectionContainer: {
+    width: "100%",
+    maxWidth: 400,
+    marginVertical: 20,
+    paddingHorizontal: 16,
+  },
+  textSelectionLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  textList: {
+    maxHeight: 300,
+  },
+  textListContent: {
+    gap: 10,
+  },
+  textOption: {
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 2,
+    borderColor: "#E0E0E0",
+  },
+  textOptionSelected: {
+    borderColor: "#2E7D32",
+    backgroundColor: "#E8F5E9",
+  },
+  textOptionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
+  textOptionTitleSelected: {
+    color: "#2E7D32",
+  },
+  textOptionSubtitle: {
+    fontSize: 12,
+    color: "#666",
+  },
+  searchInput: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  foldersSection: {
+    marginTop: 8,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  folderOption: {
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 2,
+    borderColor: "#E0E0E0",
+    marginBottom: 8,
+  },
+  folderHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  folderTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+    flex: 1,
+  },
+  folderCount: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#666",
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  folderTexts: {
+    marginTop: 8,
+    paddingLeft: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: "#E0E0E0",
+  },
+  textOptionNested: {
+    backgroundColor: "#F9F9F9",
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    marginBottom: 6,
+  },
+  textOptionNestedSelected: {
+    borderColor: "#2E7D32",
+    backgroundColor: "#E8F5E9",
   },
 });

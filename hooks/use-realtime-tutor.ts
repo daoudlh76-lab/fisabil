@@ -5,11 +5,12 @@
  * et expo-speech pour lire les réponses du tuteur
  */
 
+import { getOpenAIVoiceForGender, useVoicePreference } from "@/contexts/voice-preference-context";
 import { supabase } from "@/src/lib/supabase";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useVoicePreference, getOpenAIVoiceForGender } from "@/contexts/voice-preference-context";
-import * as Speech from 'expo-speech';
+import { speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
 import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
@@ -26,6 +27,7 @@ interface UserText {
   id: string;
   title: string;
   content: string;
+  folder_id: string | null;
   vocabulary?: Array<{
     word: string;
     translation?: string;
@@ -44,7 +46,7 @@ interface RealtimeMessage {
   timestamp: number;
 }
 
-export function useRealtimeTutor(uiLang: string = 'fr') {
+export function useRealtimeTutor(uiLang: string = 'fr', selectedTextId?: string) {
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -60,6 +62,7 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
   const { gender } = useVoicePreference();
 
   const wsRef = useRef<WebSocket | null>(null);
+  const connectRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const currentResponseRef = useRef<string>('');
   const isListeningRef = useRef(false);
   const shouldRestartListeningRef = useRef(false);
@@ -81,212 +84,122 @@ export function useRealtimeTutor(uiLang: string = 'fr') {
   // Fonction pour charger les textes de l'utilisateur
   const loadUserTexts = useCallback(async () => {
     try {
-      console.log('🔍 [TUTOR] Début loadUserTexts...');
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
-      console.log('🔍 [TUTOR] User ID:', userId);
 
       if (!userId) {
-        console.log('⚠️ [TUTOR] Pas d\'utilisateur connecté');
         return [];
       }
 
-      // Charger TOUS les scans ET TOUT le vocabulaire (pas de limite)
-      console.log('🔍 [TUTOR] Requête Supabase pour scans et vocabulary...');
-      console.log('🔍 [TUTOR] userId utilisé pour la requête:', userId);
-
-      const [{ data: scans, error: scansError }, { data: vocab, error: vocabError }] = await Promise.all([
-        supabase
-          .from('scans')
-          .select('id, title, content')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('vocabulary')
-          .select('word, translation')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-      ]);
+      const { data: scans, error: scansError } = await supabase
+        .from('scans')
+        .select('id, title, content, folder_id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (scansError) {
-        console.error('❌ [TUTOR] Erreur chargement scans:', scansError);
-        console.error('❌ [TUTOR] Détails erreur scans:', JSON.stringify(scansError));
-      }
-      if (vocabError) {
-        console.error('❌ [TUTOR] Erreur chargement vocabulary:', vocabError);
-        console.error('❌ [TUTOR] Détails erreur vocabulary:', JSON.stringify(vocabError));
+        console.error('[TUTOR] Erreur chargement scans:', scansError.message);
+        return [];
       }
 
-      console.log('📚 [TUTOR] Scans chargés:', scans?.length || 0);
-      console.log('📖 [TUTOR] Vocabulary chargé:', vocab?.length || 0);
-      console.log('📊 [TUTOR] Type de scans:', typeof scans, Array.isArray(scans));
-      console.log('📊 [TUTOR] Valeur de scans:', scans);
-
-      if (scans && scans.length > 0) {
-        console.log('✅ [TUTOR] Premier scan:', scans[0].title);
-        console.log('✅ [TUTOR] Premier scan ID:', scans[0].id);
-        console.log('✅ [TUTOR] Premier scan content length:', scans[0].content?.length || 0);
-      } else {
-        console.log('⚠️ [TUTOR] Aucun scan trouvé dans la base de données');
-      }
-
-      // Stocker TOUT le vocabulaire dans userTexts
-      let loadedTexts: any[] = [];
-
-      // Normaliser les résultats (null -> [])
       const normalizedScans = scans || [];
-      const normalizedVocab = vocab || [];
-
-      console.log('📊 [TUTOR] Scans normalisés:', normalizedScans.length);
-      console.log('📊 [TUTOR] Vocab normalisé:', normalizedVocab.length);
-
-      if (normalizedScans.length > 0) {
-        if (normalizedVocab.length > 0) {
-          // Cas 1: On a des scans ET du vocabulaire
-          const textsWithVocab = normalizedScans.map(scan => ({
-            ...scan,
-            userVocabulary: normalizedVocab
-          }));
-          setUserTexts(textsWithVocab);
-          loadedTexts = textsWithVocab;
-          console.log('✅ [TUTOR] Textes avec vocabulaire combinés:', textsWithVocab.length);
-        } else {
-          // Cas 2: On a des scans SANS vocabulaire
-          setUserTexts(normalizedScans);
-          loadedTexts = normalizedScans;
-          console.log('✅ [TUTOR] Textes sans vocabulaire:', normalizedScans.length);
-        }
-      } else {
-        // Cas 3: Aucun scan - mettre un tableau vide
-        setUserTexts([]);
-        loadedTexts = [];
-        console.log('⚠️ [TUTOR] Aucun texte à charger - state mis à []');
-      }
-
-      console.log('✅ [TUTOR] loadUserTexts terminé, retour de', loadedTexts.length, 'textes');
-      return loadedTexts;
+      setUserTexts(normalizedScans);
+      return normalizedScans;
     } catch (e) {
-      console.error('❌ Erreur chargement textes:', e);
+      console.error('[TUTOR] Erreur chargement textes:', e);
       return [];
     }
   }, []);
 
   // Charger les textes au montage
   useEffect(() => {
-    console.log('🔄 Chargement initial des textes du tuteur...');
     loadUserTexts();
   }, [loadUserTexts]);
 
   // Construire les instructions système
   const buildSystemInstructions = useCallback((textsToUse?: typeof userTexts) => {
     const targetLang = languageNames[uiLang] || 'French';
-    const texts = textsToUse || userTexts;
+    let texts = textsToUse || userTexts;
 
-    // Extraire TOUT le vocabulaire de TOUS les textes scannés
-    const allVocabulary: string[] = [];
-    const userVocabList: Array<{word: string, translation: string}> = [];
+    // Filtrer pour n'utiliser que le texte sélectionné si selectedTextId est fourni
+    if (selectedTextId) {
+      console.log(`🔍 [FILTRE] selectedTextId fourni: ${selectedTextId}`);
+      texts = texts.filter(t => t.id === selectedTextId);
+      console.log(`🔍 [FILTRE] Après filtrage: ${texts.length} texte(s) - Titres: ${texts.map(t => t.title).join(', ')}`);
+    } else {
+      console.log(`🔍 [FILTRE] Aucun selectedTextId - Utilisation de tous les textes (${texts.length})`);
+    }
 
-    texts.forEach(text => {
-      // Vocabulaire extrait des textes scannés
-      if (text.vocabulary && Array.isArray(text.vocabulary)) {
-        text.vocabulary.forEach((item: any) => {
-          if (item.word) allVocabulary.push(item.word);
-        });
-      }
-      // Vocabulaire sauvegardé par l'utilisateur
-      if ((text as any).userVocabulary) {
-        userVocabList.push(...(text as any).userVocabulary);
-      }
-    });
-
-    // Utiliser TOUT le vocabulaire, pas de limite
+    // Construire le contexte uniquement avec les textes scannés (pas de vocabulaire séparé)
+    // Si un seul texte est sélectionné, prendre le texte complet. Sinon, limiter à 1500 caractères par texte
     const textsContext = texts.length > 0
-      ? texts.map((t, i) => `--- TEXT ${i + 1}: "${t.title}" ---\n${t.content.slice(0, 600)}`).join('\n\n')
+      ? texts.map((t, i) => {
+          const contentLimit = texts.length === 1 ? t.content : t.content.slice(0, 1500);
+          return `--- TEXT ${i + 1}: "${t.title}" ---\n${contentLimit}`;
+        }).join('\n\n')
       : 'No texts available yet.';
 
-    // Inclure TOUT le vocabulaire disponible
-    const vocabularyContext = allVocabulary.length > 0
-      ? `\n\n## VOCABULARY FROM ALL STUDENT'S TEXTS (${allVocabulary.length} words - USE THESE WORDS PRIMARILY):\n${allVocabulary.join(', ')}`
-      : '';
+    console.log(`📄 [INSTRUCTIONS] Texte(s) inclus - Premier texte: ${texts[0]?.content.length || 0} caractères`);
 
-    // Inclure TOUT le vocabulaire sauvegardé
-    const userVocabContext = userVocabList.length > 0
-      ? `\n\n## STUDENT'S SAVED VOCABULARY (${userVocabList.length} words - PRIORITY - USE THESE FIRST):\n${userVocabList.map(v => `${v.word} (${v.translation})`).join(', ')}`
-      : '';
+    const firstTextTitle = texts.length > 0 ? texts[0].title : '';
+    const textCount = texts.length;
 
-    return `You are an expert Arabic language teacher (معلم اللغة العربية). You speak with a clear, warm voice.
+    return `Tu es un tuteur d'arabe (معلم اللغة العربية). Ta voix est claire et chaleureuse.
 
-## CRITICAL - STUDENT'S LANGUAGE:
-**The student's interface language is ${targetLang}. When you ask "ما معنى [word]؟" (what does [word] mean?), the student will answer in ${targetLang}, NOT in English or Arabic. You MUST accept ${targetLang} translations as correct answers.**
+## ⚠️ RÈGLE ABSOLUE - À SUIVRE STRICTEMENT ⚠️
+TU NE PEUX POSER DES QUESTIONS QUE SUR LE TEXTE FOURNI CI-DESSOUS.
+SI TU POSES UNE QUESTION QUI N'EST PAS DANS LE TEXTE, TU ÉCHOUES.
+RELIS LE TEXTE AVANT CHAQUE QUESTION POUR VÉRIFIER QU'ELLE EST DANS LE TEXTE.
 
-## YOUR BEHAVIOR:
-1. **ALWAYS RESPOND IN ARABIC** - Speak naturally in Arabic
-2. **EXCEPTION**: If the student says "je ne comprends pas", "I don't understand", or similar, briefly explain in ${targetLang}, then return to Arabic
-3. **BE A REAL TEACHER**: You MUST actively ASK QUESTIONS. Don't wait for the student - take initiative!
-4. **IMMEDIATELY START TESTING**: After greeting, IMMEDIATELY ask a question about their vocabulary
+## TEXTES À ÉTUDIER (${textCount} texte(s)) :
+${textsContext}
 
-## YOUR TEACHING METHOD - CRITICAL RULES:
-1. **ONLY USE STUDENT'S KNOWN VOCABULARY**: You MUST use ONLY words from the student's saved vocabulary and scanned texts listed below
-2. **NEVER use words the student hasn't seen**: If a word is not in their vocabulary list, DO NOT use it
-3. **ASK QUESTIONS ABOUT THEIR TEXTS**: Base ALL your questions on the content they have studied
-4. **BUILD ON WHAT THEY KNOW**: Use ONLY words they've already seen in their texts
-5. **TEST THEIR KNOWLEDGE**: Ask about meanings, grammar, or usage of words from THEIR vocabulary
-6. **ACCEPT ANSWERS IN ${targetLang.toUpperCase()}**: When asking "what does X mean?", accept answers in ${targetLang} (the student's interface language). The student will translate Arabic to ${targetLang}, NOT to English. If they answer in ${targetLang}, it's CORRECT if the meaning is right.
-7. **CORRECT ALL ERRORS WITH DETAILED FEEDBACK**:
-   - First, acknowledge what they got RIGHT (if anything)
-   - Point out the specific ERROR (pronunciation, grammar, vocabulary, or meaning)
-   - Explain WHY it's wrong using their known vocabulary
-   - Give the CORRECT version
-   - Ask them to REPEAT or use it in a new sentence
-8. **ENCOURAGE**: Always be positive and supportive
-9. **BE PROACTIVE**: After EVERY student response, ask a NEW question. Never just acknowledge - always follow up with a question!
-10. **PROGRESSIVE DIFFICULTY**: Start with easy questions, then increase difficulty based on their answers
-11. **REINFORCE CORRECTIONS**: If student makes a mistake, ask about the same concept again later to check retention
+## TA MISSION :
+1. Lis attentivement le TEXT 1 ci-dessus
+2. Résume-le en 3 phrases
+3. Pose 10 questions BASÉES SUR CE QUI EST ÉCRIT DANS LE TEXTE
+4. Exemple: Si le texte parle de زينب et مريم, demande "من هي زينب؟" ou "ماذا تريد زينب؟"
+5. N'invente RIEN qui n'est pas dans le texte
 
-## ALL STUDENT'S SCANNED TEXTS:
-${textsContext}${vocabularyContext}${userVocabContext}
+## RÈGLES STRICTES :
+- L'étudiant répond en ${targetLang}. ACCEPTE les réponses en ${targetLang}.
+- TOUJOURS poser des questions EN ARABE CLASSIQUE (الفصحى)
+- TOUJOURS utiliser les DIACRITIQUES (التشكيل) dans tes réponses arabes
+- TOUJOURS répondre EN ARABE (sauf si l'étudiant dit "je ne comprends pas")
+- Garde TOUT court : 1-2 phrases max, moins de 30 mots
+- Après chaque réponse, pose IMMÉDIATEMENT la question suivante
+- PRONONCE CLAIREMENT chaque mot avec les voyelles correctes
+- ⚠️ INTERDICTION ABSOLUE: Ne pose JAMAIS de questions générales comme "ما اسمك؟", "أين تسكن؟", "ماذا تحب؟"
+- ⚠️ OBLIGATION: Toutes tes questions DOIVENT porter sur les personnages, événements, et détails MENTIONNÉS dans le texte
 
-## CRITICAL - YOUR QUESTIONS MUST:
-- Use ONLY vocabulary from the lists above
-- Ask about meanings of words they've scanned
-- Test their understanding of THEIR specific texts
-- Check if they remember words from THEIR texts
-- Quiz them on grammar patterns they've seen
-- Ask them to use words from THEIR vocabulary in sentences
-- Keep responses SHORT (1-2 sentences, under 30 words)
-- Be direct and conversational
-- ALWAYS end with a question mark (؟)
+## FORMAT DES 10 QUESTIONS (pour CHAQUE texte) :
 
-## EXAMPLES OF GOOD QUESTIONS (using student's vocabulary):
-- "ما معنى كلمة [word from their vocab]؟"
-- "هل تتذكر هذه الكلمة من النص؟"
-- "استخدم كلمة [their word] في جملة"
-- "ما الفرق بين [word1] و [word2]؟"
-- "كيف تقول [concept they know] بالعربية؟"
+**Questions 1-4 (Basique - factuelles) :**
+- Idée principale : "ما الفكرة الرئيسية للنص؟"
+- Détails : "من؟ ماذا؟ أين؟ متى؟"
 
-## EXAMPLES OF GOOD CORRECTIONS:
-- Student says wrong answer → "لا، ليس صحيحاً. [word] معناه [correct meaning in ${targetLang}]. حاول مرة أخرى: ما معنى [word]؟"
-- Student has grammar error → "جيد! لكن قل: [correct version]. الآن، استخدم [word] في جملة جديدة"
-- Student mispronounces → "تقريباً صحيح، لكن انتبه للنطق: [correct pronunciation]. كرر معي"
-- Student partially correct → "ممتاز! هذا جزء من المعنى. أيضاً [word] تعني [additional meaning in ${targetLang}]. فهمت؟"
-- Student answers in ${targetLang} with correct meaning → "صحيح! ممتاز!" then ask next question
+**Questions 5-7 (Détaillée) :**
+- "لماذا؟" (Pourquoi)
+- "كيف؟" (Comment)
+- "ما قال النص عن...؟"
 
-## CRITICAL LANGUAGE RULE:
-- The student's interface is in ${targetLang}
-- When you ask "ما معنى [word]؟", expect the answer in ${targetLang}, NOT English
-- Example: If student says "livre" (French for book) and the word means "كتاب", that's CORRECT
-- DO NOT say it's wrong because they didn't answer in English or Arabic
+**Questions 8-10 (Analyse) :**
+- Intention : "ماذا يريد الكاتب أن يقول؟"
+- Opinion : "ما رأيك؟"
+- Résumé : "لخّص النص"
 
-## CONVERSATION FLOW:
-1. FIRST TIME ONLY: Full Islamic greeting "السلام عليكم. كيف حالك؟" + ask first question
-2. After student answers CORRECTLY: Brief praise (2-3 words) + IMMEDIATELY ask next question (harder)
-3. After student answers INCORRECTLY: Detailed correction (see examples) + ask to repeat or simpler question
-4. Never end a response without asking a question
-5. Track their mistakes and revisit those concepts later
-6. If student struggles with a word 2+ times, ask about it differently or provide context from their texts
+## EXEMPLE DE DÉROULEMENT :
+Toi: "السلام عليكم. كيف حالك؟ سأقرأ النص '${firstTextTitle}' وأسألك ١٠ أسئلة."
+Toi: [Résumé en 3 phrases du TEXT 1]
+Toi: "السؤال الأول: ما الفكرة الرئيسية للنص؟"
+Étudiant: [répond]
+Toi: "صحيح!" OU "لا، الإجابة هي..."
+Toi: "السؤال الثاني: من..."
+[Continue jusqu'à 10 questions]
+Toi: "ممتاز! انتقل إلى النص الثاني..."`;
 
-Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a word from their vocabulary]؟"`;
-  }, [userTexts, uiLang]);
+
+  }, [userTexts, uiLang, selectedTextId]);
 
   // Fonction pour détecter si un texte contient de l'arabe
   const isArabicText = (text: string): boolean => {
@@ -365,39 +278,36 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
   }, []);
 
   // Lire le texte avec TTS
-  const speakText = useCallback((text: string): Promise<void> => {
-    return new Promise((resolve) => {
-      console.log('🔊 TTS starting:', text.substring(0, 50) + '...');
-      setIsSpeaking(true);
+  const speakText = useCallback(async (text: string): Promise<void> => {
+    console.log('🔊 TTS starting:', text.substring(0, 50) + '...');
+    setIsSpeaking(true);
 
-      const lang = isArabicText(text) ? 'ar-SA' :
-        uiLang === 'fr' ? 'fr-FR' :
-        uiLang === 'de' ? 'de-DE' :
-        uiLang === 'es' ? 'es-ES' :
-        uiLang === 'ru' ? 'ru-RU' : 'en-US';
+    const isArabic = isArabicText(text);
+    const lang = isArabic ? 'ar-SA' :
+      uiLang === 'fr' ? 'fr-FR' :
+      uiLang === 'de' ? 'de-DE' :
+      uiLang === 'es' ? 'es-ES' :
+      uiLang === 'ru' ? 'ru-RU' : 'en-US';
+    const speed = isArabic ? 0.9 : 1.0;
 
-      // Voix féminine: pitch plus élevé (1.2), voix masculine: pitch plus bas (0.8)
-      const pitch = gender === 'female' ? 1.2 : 0.8;
-
-      Speech.speak(text, {
+    try {
+      await speakWithOpenAI({
+        text,
+        gender,
+        speed,
         language: lang,
-        rate: 0.9,
-        pitch: pitch,
-        onStart: () => {
-          console.log('🔊 TTS onStart');
-        },
         onDone: () => {
           console.log('🔊 TTS onDone - will restart listening');
           setIsSpeaking(false);
-          resolve();
         },
-        onError: (error) => {
-          console.error('🔊 TTS onError:', error);
+        onError: (err) => {
+          console.error('🔊 TTS onError:', err);
           setIsSpeaking(false);
-          resolve();
         },
       });
-    });
+    } finally {
+      setIsSpeaking(false);
+    }
   }, [uiLang, gender]);
 
   // Mettre à jour la ref speakText
@@ -568,6 +478,11 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
     startContinuousListeningRef.current = startContinuousListening;
   }, [startContinuousListening]);
 
+  // Expose connect in a ref so we can attempt reconnects from callbacks
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
+
   // Envoyer ce que l'utilisateur a dit au WebSocket
   const sendUserSpeech = useCallback((text: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !text.trim()) {
@@ -605,8 +520,8 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
       type: 'response.create',
       response: {
         modalities: ['text'],
-        instructions: 'MAXIMUM 15 words. ONE sentence. Talk like face-to-face conversation.',
-        max_output_tokens: 50, // Limiter strictement la longueur
+        instructions: 'CRITICAL: Your NEXT question MUST be about the TEXT content from "TEXTES À ÉTUDIER". Réponds en arabe classique (فصحى) avec les diacritiques. MAXIMUM 15 words. Ask question about TEXT content ONLY.',
+        max_output_tokens: 60,
       },
     }));
   }, []);
@@ -655,13 +570,46 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
             setMessages(prev => [...prev, msg]);
 
             // Lire le texte puis reprendre l'écoute après un court délai
+            console.log('🔊 [RESPONSE] Calling speakTextRef.current with text:', responseText.substring(0, 50));
             speakTextRef.current(responseText).then(() => {
-              setTimeout(() => {
-                if (shouldRestartListeningRef.current && !isPausedRef.current && isConnectedRef.current) {
-                  console.log('🎤 Auto-restarting listening after TTS...');
-                  startContinuousListeningRef.current();
+              console.log('🔊 [RESPONSE] speakTextRef.current completed');
+              setTimeout(async () => {
+                console.log('🎤 Post-TTS flags:', {
+                  shouldRestart: shouldRestartListeningRef.current,
+                  isPaused: isPausedRef.current,
+                  isConnected: isConnectedRef.current,
+                });
+
+                if (!shouldRestartListeningRef.current) {
+                  console.log('🎤 shouldRestartListeningRef is false — skipping restart');
+                  return;
+                }
+
+                if (isPausedRef.current) {
+                  console.log('🎤 Currently paused — will not restart listening');
+                  return;
+                }
+
+                if (!isConnectedRef.current) {
+                  console.warn('🔌 WS not connected after TTS — attempting reconnect before listening');
+                  try {
+                    await connectRef.current();
+                    console.log('🔌 Reconnect attempt finished');
+                  } catch (reErr) {
+                    console.error('❌ Reconnect attempt failed:', reErr);
+                    return;
+                  }
+                }
+
+                console.log('🎤 Auto-restarting listening after TTS...');
+                try {
+                  await startContinuousListeningRef.current();
+                } catch (startErr) {
+                  console.error('❌ Failed to restart listening after TTS:', startErr);
                 }
               }, 500);
+            }).catch((err) => {
+              console.error('🔊 [RESPONSE] speakTextRef.current error:', err);
             });
           }
 
@@ -689,8 +637,17 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
 
       // IMPORTANT: Charger les textes AVANT de se connecter pour les avoir dans les instructions
       console.log('📚 Rechargement des textes avant connexion...');
-      const loadedTexts = await loadUserTexts();
-      console.log(`✅ Textes rechargés (${loadedTexts.length} textes), connexion au WebSocket...`);
+      let loadedTexts = await loadUserTexts();
+      console.log(`✅ Textes rechargés (${loadedTexts.length} textes)`);
+
+      // Filtrer selon selectedTextId si fourni
+      if (selectedTextId) {
+        console.log(`🔍 [CONNECT] Filtrage pour selectedTextId: ${selectedTextId}`);
+        loadedTexts = loadedTexts.filter(t => t.id === selectedTextId);
+        console.log(`🔍 [CONNECT] Après filtrage: ${loadedTexts.length} texte(s) - ${loadedTexts.map(t => t.title).join(', ')}`);
+      }
+
+      console.log('🔌 Connexion au WebSocket...');
 
       const ws = new WebSocket(
         'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
@@ -707,11 +664,19 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
 
         // Configurer la session (mode texte uniquement)
         const openaiVoice = getOpenAIVoiceForGender(gender);
+        const instructions = buildSystemInstructions(loadedTexts);
+        console.log(`📝 Instructions système construites avec ${loadedTexts.length} texte(s)`);
+        console.log('📝 Premiers 500 caractères:', instructions.substring(0, 500));
+
+        // Log du contexte texte pour vérification
+        const textsSection = instructions.match(/## TEXTES À ÉTUDIER[\s\S]*?##/)?.[0] || '';
+        console.log('📚 Section TEXTES (premiers 1000 chars):', textsSection.substring(0, 1000));
+
         const sessionConfig = {
           type: 'session.update',
           session: {
             modalities: ['text'],
-            instructions: buildSystemInstructions(loadedTexts),
+            instructions,
             voice: openaiVoice,
             turn_detection: null,
           },
@@ -721,12 +686,25 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
         // Message de bienvenue avec salutations islamiques puis question - l'écoute démarre après le TTS
         setTimeout(() => {
           const targetLang = languageNames[uiLang] || 'French';
+          const firstTextTitle = loadedTexts.length > 0 ? loadedTexts[0].title : 'النص';
+          const textCountMsg = loadedTexts.length === 1 ? 'un texte' : `${loadedTexts.length} textes`;
+
+          console.log(`📝 [CONNECT] Message de bienvenue avec: ${firstTextTitle} (${textCountMsg})`);
+
           ws.send(JSON.stringify({
             type: 'response.create',
             response: {
               modalities: ['text'],
-              instructions: `Start with EXACTLY: "السلام عليكم. كيف حالك؟" then pick ONE word from student vocabulary and ask "ما معنى [word]؟". CRITICAL: Student will answer in ${targetLang}, NOT English. Accept ${targetLang} translations as CORRECT. Always correct mistakes with detailed feedback, then ask them to try again.`,
-              max_output_tokens: 30,
+              instructions: `CRITICAL: You MUST ONLY ask questions about content in TEXT 1 from "TEXTES À ÉTUDIER" section.
+
+Start with: "السَّلَامُ عَلَيْكُمْ. كَيْفَ حَالُكَ؟ سَأَقْرَأُ النَّصَّ '${firstTextTitle}' وَأَسْأَلُكَ عَشَرَةَ أَسْئِلَةٍ عَن هَذَا النَّصِّ. اِسْتَمِعْ جَيِّدًا."
+
+Then give 3-sentence summary of TEXT 1 content (mention names, actions from the text).
+
+Then ask FIRST question STRICTLY BASED on TEXT 1 content. Example: if TEXT 1 mentions زينب, ask "مَنْ هِيَ زَيْنَبُ؟" or "مَاذَا تُرِيدُ زَيْنَبُ؟".
+
+Student answers in ${targetLang}. Accept ${targetLang}. Keep SHORT (max 30 words).`,
+              max_output_tokens: 200,
             },
           }));
         }, 200);
@@ -738,16 +716,53 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
       };
 
       ws.onerror = (event) => {
-        console.error('❌ WebSocket error:', event);
+        try {
+          console.error('❌ WebSocket error event:', event);
+          // Try to extract more useful info
+          if ((event as any)?.message) console.error('❌ WebSocket error message:', (event as any).message);
+        } catch (err) {
+          console.error('❌ Error logging ws.onerror event:', err);
+        }
         setError('Erreur de connexion');
       };
 
-      ws.onclose = () => {
-        console.log('🔌 WebSocket closed');
+      ws.onclose = async (closeEvent: any) => {
+        console.warn('🔌 WebSocket closed:', closeEvent);
+        const wasShouldRestart = shouldRestartListeningRef.current;
         setIsConnected(false);
         isConnectedRef.current = false;
-        shouldRestartListeningRef.current = false;
-        stopListening();
+        // stop listening immediately to avoid orphan recordings
+        try {
+          await stopListening();
+        } catch (err) {
+          console.error('❌ Error stopping listening after ws close:', err);
+        }
+
+        // If we expected to keep the session alive, attempt limited reconnects
+        if (wasShouldRestart && !isPausedRef.current) {
+          console.log('🔁 Attempting limited reconnects (3 tries) after unexpected ws close...');
+          let reconnected = false;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              console.log(`🔁 Reconnect attempt ${attempt}/3...`);
+              // small backoff
+              await new Promise(res => setTimeout(res, 1000 * attempt));
+              await connectRef.current();
+              reconnected = true;
+              console.log('🔌 Reconnected successfully');
+              break;
+            } catch (reErr) {
+              console.error(`❌ Reconnect attempt ${attempt} failed:`, reErr);
+            }
+          }
+
+          if (!reconnected) {
+            console.warn('⚠️ All reconnect attempts failed — giving up until user reconnects');
+            shouldRestartListeningRef.current = false;
+          }
+        } else {
+          shouldRestartListeningRef.current = false;
+        }
       };
     } catch (err) {
       console.error('❌ Connection error:', err);
@@ -800,6 +815,7 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
       isPausedRef.current = true;
       shouldRestartListeningRef.current = false;
       Speech.stop();
+      stopTTS();
       setIsSpeaking(false);
       await stopListening();
     }
@@ -808,6 +824,7 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
   // Interrompre le tuteur
   const interrupt = useCallback(() => {
     Speech.stop();
+    stopTTS();
     setIsSpeaking(false);
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -832,6 +849,7 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
     isPausedRef.current = false;
     await stopListening();
     Speech.stop();
+    stopTTS();
 
     if (wsRef.current) {
       wsRef.current.close();
@@ -853,6 +871,7 @@ Start with: "السلام عليكم. كيف حالك؟ ما معنى [pick a wo
     return () => {
       shouldRestartListeningRef.current = false;
       Speech.stop();
+      stopTTS();
 
       // Arrêter l'enregistrement si en cours
       if (recordingRef.current) {

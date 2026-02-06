@@ -2,15 +2,15 @@
   "functions": [
     {
       "name": "extract-vocab",
-      "verify_jwt": false
+      "verify_jwt": true
     },
     {
       "name": "add-diacritics",
-      "verify_jwt": false
+      "verify_jwt": true
     },
     {
       "name": "tutor-chat",
-      "verify_jwt": false
+      "verify_jwt": true
     }
   ]
 }

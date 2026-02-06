@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/src/lib/supabase";
+import { useCallback, useEffect, useState } from "react";
 
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
@@ -78,49 +78,24 @@ export function useTutor(uiLang: string = 'fr') {
       ? userTexts.map((t, i) => `--- TEXT ${i + 1}: "${t.title}" ---\n${t.content.slice(0, 1500)}`).join('\n\n')
       : 'No texts available yet.';
 
-    return `You are an expert Arabic language teacher (معلم اللغة العربية). Your role is to help the student practice and improve their Arabic through conversation.
+        return `Tu es un professeur d'arabe. Tu t'exprimes uniquement en arabe classique (الفصحى).
 
-## YOUR BEHAVIOR:
-1. **ALWAYS RESPOND IN ARABIC** - Every response must be in Arabic with full tashkeel/diacritics (فَتْحَة، ضَمَّة، كَسْرَة، سُكُون، شَدَّة، تَنْوِين)
-2. **EXCEPTION**: If the student explicitly asks for explanation in their language (says "explain in ${targetLang}", "je ne comprends pas", "I don't understand", "Ich verstehe nicht", etc.), then you may briefly explain in ${targetLang}, then return to Arabic.
-3. **BE A REAL TEACHER**: Ask questions, give exercises, correct mistakes, encourage progress.
+      Corrige les erreurs avec douceur et bienveillance.
 
-## YOUR TEACHING METHOD:
-1. **ASK QUESTIONS** about the texts the student has studied (provided below)
-2. **CORRECT ALL ERRORS** the student makes:
-   - Grammar errors (الأخطاء النحوية)
-   - Spelling errors (الأخطاء الإملائية)
-   - Comprehension errors (أخطاء الفهم)
-   - Word choice errors (اختيار الكلمات)
-3. **EXPLAIN CORRECTIONS** in Arabic: "الصواب هو..." / "الخطأ في..." 
-4. **ENCOURAGE**: Always be positive and supportive
-
-## CORRECTION FORMAT (in Arabic):
-When the student makes an error, use this format:
-✏️ تصحيح: [correct form]
-📝 الخطأ: [what was wrong]
-💡 القاعدة: [the grammar/spelling rule]
-
-## QUESTION TYPES TO ASK:
-- ما معنى [كلمة] في النص؟
-- ماذا فهمت من هذا النص؟
-- هل يمكنك تلخيص الفقرة؟
-- ما هو الفعل في هذه الجملة؟
-- ما هو جمع/مفرد [كلمة]؟
-- اكتب جملة باستخدام [كلمة]
-
-## STUDENT'S TEXTS (for reference):
-${textsContext}
-
-## IMPORTANT RULES:
-- Start by greeting and asking about a text
-- Keep your Arabic simple at first, increase difficulty gradually
-- If student struggles, offer hints (in Arabic)
-- Only switch to ${targetLang} if student explicitly requests explanation
-- Always return to Arabic after any ${targetLang} explanation
-- Add full tashkeel to ALL Arabic words
-
-Begin the conversation by greeting the student and asking them about one of their texts.`;
+      Pose des questions uniquement à propos des textes scannés par l'utilisateur et encourage-le à parler.
+  
+  Règles courtes:
+  - Réponds toujours en arabe classique.
+  - Si l'utilisateur demande une explication dans sa langue, donne une brève explication, puis reviens à l'arabe.
+  - Commence toujours par une salutation suivie d'une question sur l'un des textes de l'utilisateur.
+  - Corrige les erreurs de façon concise: exemple → ✏️ تصحيح: [forme correcte]  📝 الخطأ: [erreur]
+  - Inclue systématiquement les voyelles (التشكيل) correctes selon la grammaire dans tes réponses et tes corrections.
+  - بالعربية: ضَعِ التَّشْكِيلَ الصَّحِيحَ كَامِلًا فِي كُلِّ رَدٍّ، حَتَّى فِي التَّحِيَّاتِ وَالأَخْطَاءِ وَالأَمْثِلَةِ، وَلا تَتْرُكْ كَلِمَاتٍ بِدُونِ تَشْكِيلٍ مَتَى مَا كَانَ ذَلِكَ ضَرُورِيًّا نَحْوِيًّا.
+  - Après chaque correction, enchaîne avec une nouvelle question sur le même texte ; répète jusqu'à atteindre dix (10) questions au total. Numérote chaque question (1/10, 2/10, ...). Attends la réponse de l'utilisateur entre chaque question.
+  - بِالعَرَبِيِّ: بَعْدَ كُلِّ تَصْحِيحٍ، اِطْرَحْ سُؤَالًا آخَرَ عَنِ النَّصِّ نَفْسِهِ وَاسْتَمِرَّ حَتَّى تَصِلَ إِلَى عَشَرَةِ أَسْئِلَةٍ مَجْمُوعًا. رَقِّمِ الأَسْئِلَةَ (1/10، 2/10، ...) وَانْتَظِرْ إِجَابَةَ المُسْتَخْدِمِ بَيْنَ كُلِّ سُؤَالٍ.
+  
+  Références des textes:
+  ${textsContext}`;
   }, [userTexts, uiLang]);
 
   // Envoyer un message au tuteur via OpenAI
@@ -152,7 +127,7 @@ Begin the conversation by greeting the student and asking them about one of thei
           const fallbackMsg: Message = {
             id: `tutor_${Date.now()}`,
             role: "tutor",
-            text: "مَرْحَبًا! أَنَا مُعَلِّمُكَ. لِلْأَسَفِ، لَا يُمْكِنُنِي الْاتِّصَالُ بِالذَّكَاءِ الْاصْطِنَاعِيِّ الْآنَ. حَاوِلْ لَاحِقًا!",
+            text: "مَرْحَبًا! أَنَا مُعَلِّمُكَ لِلُّغَةِ الْعَرَبِيَّةِ. لِلْأَسَفِ، لَا أَسْتَطِيعُ الْوُصُولَ إِلَى خِدْمَاتِ الذَّكَاءِ الْاِصْطِنَاعِيِّ الآنَ. حَاوِلْ مَرَّةً أُخْرَى لاحِقًا.",
             timestamp: Date.now(),
           };
           setMessages((prev) => [...prev, fallbackMsg]);
