@@ -34,16 +34,18 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
-    console.log('🔐 Tentative de connexion avec:', email);
+    if (__DEV__) console.log('🔐 Tentative de connexion avec:', email);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
-        console.log('🔐 Login error:', error);
-        console.log('🔐 Error status:', error.status);
-        console.log('🔐 Error code:', (error as any).code);
-        console.log('🔐 Error message complet:', JSON.stringify(error));
+        if (__DEV__) {
+          console.log('🔐 Login error:', error);
+          console.log('🔐 Error status:', error.status);
+          console.log('🔐 Error code:', (error as any).code);
+          console.log('🔐 Error message complet:', JSON.stringify(error));
+        }
 
         // Message d'erreur plus clair selon le type d'erreur
         let errorMessage = error.message;
@@ -63,13 +65,15 @@ export default function LoginScreen() {
         return;
       }
 
-      console.log('✅ Login successful:', data.user?.email);
-      console.log('✅ User ID:', data.user?.id);
-      console.log('✅ Email confirmed:', data.user?.email_confirmed_at);
+      if (__DEV__) {
+        console.log('✅ Login successful:', data.user?.email);
+        console.log('✅ User ID:', data.user?.id);
+        console.log('✅ Email confirmed:', data.user?.email_confirmed_at);
+      }
       // ✅ Redirection automatique via le hook useAuth
       // (pas besoin de router.replace ici)
     } catch (e: any) {
-      console.error('🔐 Login exception:', e);
+      if (__DEV__) console.error('🔐 Login exception:', e);
       Alert.alert(t('auth.error'), e?.message ?? t('auth.error'));
       setLoading(false);
     }
@@ -101,7 +105,7 @@ export default function LoginScreen() {
 
       // Sauvegarder la préférence de genre pour la voix
       await setGender(selectedGender);
-      console.log('✅ Préférence de genre sauvegardée:', selectedGender);
+      if (__DEV__) console.log('✅ Préférence de genre sauvegardée:', selectedGender);
 
       setLoading(false);
 
