@@ -18,24 +18,28 @@ CREATE INDEX IF NOT EXISTS idx_folders_user_id ON public.folders(user_id);
 ALTER TABLE public.folders ENABLE ROW LEVEL SECURITY;
 
 -- Politique : Les utilisateurs peuvent voir uniquement leurs propres dossiers
+DROP POLICY IF EXISTS "Users can view their own folders" ON public.folders;
 CREATE POLICY "Users can view their own folders"
   ON public.folders
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent créer leurs propres dossiers
+DROP POLICY IF EXISTS "Users can insert their own folders" ON public.folders;
 CREATE POLICY "Users can insert their own folders"
   ON public.folders
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent mettre à jour leurs propres dossiers
+DROP POLICY IF EXISTS "Users can update their own folders" ON public.folders;
 CREATE POLICY "Users can update their own folders"
   ON public.folders
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent supprimer leurs propres dossiers
+DROP POLICY IF EXISTS "Users can delete their own folders" ON public.folders;
 CREATE POLICY "Users can delete their own folders"
   ON public.folders
   FOR DELETE
@@ -50,6 +54,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_folders_updated_at ON public.folders;
 CREATE TRIGGER update_folders_updated_at
   BEFORE UPDATE ON public.folders
   FOR EACH ROW

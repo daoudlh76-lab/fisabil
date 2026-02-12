@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/src/lib/supabase';
 
 export type CardDifficulty = 'easy' | 'medium' | 'hard' | 'forgotten';
@@ -23,23 +23,20 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
   const [cards, setCards] = useState<VocabCard[]>(initialCards);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  // Garder une ref de la dernière initialCards appliquée
+  // pour ne synchroniser que lors d'un vrai rechargement externe
+  const lastAppliedRef = useRef<VocabCard[]>(initialCards);
 
-  // Synchroniser les cartes quand initialCards change (comparaison par contenu)
   useEffect(() => {
-    if (initialCards.length > 0) {
-      // Comparer le contenu pour détecter un vrai changement
-      const hasChanged = initialCards.some((card, idx) =>
-        !cards[idx] ||
-        card.wordFr !== cards[idx].wordFr ||
-        card.definition !== cards[idx].definition
-      );
-      if (hasChanged || cards.length !== initialCards.length) {
-        setCards(initialCards);
-        setCurrentIndex(0);
-        setIsFlipped(false);
-      }
+    // Ne synchroniser que si initialCards est un NOUVEAU tableau
+    // (rechargement depuis loadVocabulary), pas quand on retire des cartes localement
+    if (initialCards !== lastAppliedRef.current && initialCards.length > 0) {
+      lastAppliedRef.current = initialCards;
+      setCards(initialCards);
+      setCurrentIndex(0);
+      setIsFlipped(false);
     }
-  }, [initialCards, cards]);
+  }, [initialCards]);
 
   const currentCard = cards[currentIndex];
 
@@ -88,24 +85,20 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
         console.error('❌ Erreur:', e);
       }
 
-      // Mettre à jour l'état local
+      // Mettre à jour l'état local — retirer la carte révisée du deck
       setCards((prev) => {
-        const updated = [...prev];
-        updated[currentIndex] = {
-          ...updated[currentIndex],
-          difficulty,
-          lastReviewed: now,
-          nextReview: nextReviewDate,
-          reviewCount: updated[currentIndex].reviewCount + 1,
-        };
+        const updated = prev.filter((_, idx) => idx !== currentIndex);
         return updated;
       });
 
-      // Aller à la prochaine carte
-      if (currentIndex < cards.length - 1) {
-        setCurrentIndex(currentIndex + 1);
-        setIsFlipped(false);
-      }
+      // Ajuster l'index si nécessaire
+      setCurrentIndex((prevIdx) => {
+        // Si on a retiré la dernière carte du tableau, reculer d'un cran
+        const remaining = cards.length - 1;
+        if (remaining === 0) return 0;
+        return prevIdx >= remaining ? remaining - 1 : prevIdx;
+      });
+      setIsFlipped(false);
     },
     [currentIndex, cards]
   );

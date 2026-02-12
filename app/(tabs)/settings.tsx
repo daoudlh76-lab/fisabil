@@ -478,10 +478,7 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           style={styles.settingRow}
-          onPress={() => Alert.alert(
-            t('settings.about'),
-            `Fisabil - ${t('settings.arabicLearningApp')}\n\nVersion 1.0.0\n\n© 2026 Fisabil\ncontact@fisabil.fr`
-          )}
+          onPress={() => router.push('/(tabs)/settings/about')}
         >
           <View>
             <Text style={styles.settingLabel}>{t('settings.about')}</Text>
@@ -492,7 +489,7 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           style={styles.settingRow}
-          onPress={() => Linking.openURL('https://fisabil.fr/privacy')}
+          onPress={() => router.push('/(tabs)/settings/privacy')}
         >
           <View>
             <Text style={styles.settingLabel}>{t('settings.privacyPolicy')}</Text>
@@ -609,6 +606,17 @@ export default function SettingsScreen() {
             <Text style={styles.accountValue}>{t('settings.secureAccount')}</Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.accountRow}
+          onPress={() => router.push('/(tabs)/settings/delete-account')}
+        >
+          <View>
+            <Text style={[styles.accountLabel, { color: '#FF5722' }]}>{t('settings.deleteAccount')}</Text>
+            <Text style={[styles.accountValue, { color: '#FF5722' }]}>{t('settings.deleteAccountDescription')}</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#FF5722" />
         </TouchableOpacity>
       </View>
 

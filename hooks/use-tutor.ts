@@ -1,309 +1,306 @@
+/**
+ * Hook pour le tuteur IA - Architecture Edge Function
+ * Utilise Supabase Edge Function 'tutor-chat-ai' au lieu d'appels directs OpenAI
+ * Charge le vocabulaire de l'apprenant pour personnaliser les questions
+ */
+
 import { supabase } from "@/src/lib/supabase";
+import { invokeEdge } from "@/src/lib/edge-ai";
+import { loadLearnerWords, buildVocabSummary } from "@/src/lib/learner-vocabulary";
 import { useCallback, useEffect, useState } from "react";
-
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-
-export interface Message {
-  id: string;
-  role: "user" | "tutor" | "system";
-  text: string;
-  timestamp: number;
-}
 
 interface UserText {
   id: string;
   title: string;
   content: string;
+  folder_id: string | null;
+  created_at?: string;
 }
 
-// Mapping des langues
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+}
+
 const languageNames: Record<string, string> = {
   fr: 'French',
   en: 'English',
   de: 'German',
   es: 'Spanish',
   ru: 'Russian',
+  ms: 'Malay',
 };
 
 export function useTutor(uiLang: string = 'fr') {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userTexts, setUserTexts] = useState<UserText[]>([]);
   const [textsLoaded, setTextsLoaded] = useState(false);
+  const [vocabSummary, setVocabSummary] = useState<string>('');
 
-  // Charger les textes de l'utilisateur au démarrage
-  useEffect(() => {
-    loadUserTexts();
-  }, []);
-
-  const loadUserTexts = async () => {
+  // ═══ Load user texts from Supabase ═══
+  const refreshTexts = useCallback(async () => {
     try {
+      setLoading(true);
+      setError(null);
+
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
-      
+
       if (!userId) {
-        console.log('⚠️ Pas de session pour charger les textes');
+        console.warn('[TUTOR] No authenticated user');
+        setUserTexts([]);
         setTextsLoaded(true);
+        setLoading(false);
         return;
       }
 
-      const { data: scans, error } = await supabase
+      const { data: scans, error: scansError } = await supabase
         .from('scans')
-        .select('id, title, content')
+        .select('id, title, content, folder_id, created_at')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(10); // Limiter aux 10 derniers textes
+        .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('❌ Erreur chargement textes:', error);
-      } else {
-        setUserTexts(scans || []);
-        console.log('📚 Textes chargés pour le tuteur:', scans?.length || 0);
-      }
-      setTextsLoaded(true);
-    } catch (e) {
-      console.error('❌ Erreur:', e);
-      setTextsLoaded(true);
-    }
-  };
-
-  // Construire le prompt système pour le tuteur
-  const buildSystemPrompt = useCallback(() => {
-    const targetLang = languageNames[uiLang] || 'French';
-    
-    // Préparer un résumé des textes de l'utilisateur
-    const textsContext = userTexts.length > 0 
-      ? userTexts.map((t, i) => `--- TEXT ${i + 1}: "${t.title}" ---\n${t.content.slice(0, 1500)}`).join('\n\n')
-      : 'No texts available yet.';
-
-        return `Tu es un professeur d'arabe. Tu t'exprimes uniquement en arabe classique (الفصحى).
-
-      Corrige les erreurs avec douceur et bienveillance.
-
-      Pose des questions uniquement à propos des textes scannés par l'utilisateur et encourage-le à parler.
-  
-  Règles courtes:
-  - Réponds toujours en arabe classique.
-  - Si l'utilisateur demande une explication dans sa langue, donne une brève explication, puis reviens à l'arabe.
-  - Commence toujours par une salutation suivie d'une question sur l'un des textes de l'utilisateur.
-  - Corrige les erreurs de façon concise: exemple → ✏️ تصحيح: [forme correcte]  📝 الخطأ: [erreur]
-  - Inclue systématiquement les voyelles (التشكيل) correctes selon la grammaire dans tes réponses et tes corrections.
-  - بالعربية: ضَعِ التَّشْكِيلَ الصَّحِيحَ كَامِلًا فِي كُلِّ رَدٍّ، حَتَّى فِي التَّحِيَّاتِ وَالأَخْطَاءِ وَالأَمْثِلَةِ، وَلا تَتْرُكْ كَلِمَاتٍ بِدُونِ تَشْكِيلٍ مَتَى مَا كَانَ ذَلِكَ ضَرُورِيًّا نَحْوِيًّا.
-  - Après chaque correction, enchaîne avec une nouvelle question sur le même texte ; répète jusqu'à atteindre dix (10) questions au total. Numérote chaque question (1/10, 2/10, ...). Attends la réponse de l'utilisateur entre chaque question.
-  - بِالعَرَبِيِّ: بَعْدَ كُلِّ تَصْحِيحٍ، اِطْرَحْ سُؤَالًا آخَرَ عَنِ النَّصِّ نَفْسِهِ وَاسْتَمِرَّ حَتَّى تَصِلَ إِلَى عَشَرَةِ أَسْئِلَةٍ مَجْمُوعًا. رَقِّمِ الأَسْئِلَةَ (1/10، 2/10، ...) وَانْتَظِرْ إِجَابَةَ المُسْتَخْدِمِ بَيْنَ كُلِّ سُؤَالٍ.
-  
-  Références des textes:
-  ${textsContext}`;
-  }, [userTexts, uiLang]);
-
-  // Envoyer un message au tuteur via OpenAI
-  const sendMessage = useCallback(
-    async (userMessage: string, restrictedVocab: boolean = true) => {
-      if (!userMessage.trim()) return;
-
-      try {
-        setLoading(true);
-        setError(null);
-
-        console.log("📤 Sending message to tutor:", userMessage);
-
-        // Ajouter le message de l'utilisateur
-        const userMsg: Message = {
-          id: `user_${Date.now()}`,
-          role: "user",
-          text: userMessage,
-          timestamp: Date.now(),
-        };
-
-        setMessages((prev) => [...prev, userMsg]);
-
-        // Si pas de clé API, utiliser une réponse de fallback
-        if (!OPENAI_API_KEY) {
-          console.log('⚠️ No OpenAI API key, using fallback');
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          
-          const fallbackMsg: Message = {
-            id: `tutor_${Date.now()}`,
-            role: "tutor",
-            text: "مَرْحَبًا! أَنَا مُعَلِّمُكَ لِلُّغَةِ الْعَرَبِيَّةِ. لِلْأَسَفِ، لَا أَسْتَطِيعُ الْوُصُولَ إِلَى خِدْمَاتِ الذَّكَاءِ الْاِصْطِنَاعِيِّ الآنَ. حَاوِلْ مَرَّةً أُخْرَى لاحِقًا.",
-            timestamp: Date.now(),
-          };
-          setMessages((prev) => [...prev, fallbackMsg]);
-          return;
-        }
-
-        // Construire l'historique des messages pour OpenAI
-        const conversationHistory = messages.map(m => ({
-          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-          content: m.text,
-        }));
-
-        // Appeler l'API OpenAI avec retry
-        let response: Response | null = null;
-        let lastError: Error | null = null;
-
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            console.log(`🔄 Tentative ${attempt}/3...`);
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
-
-            response = await fetch(OPENAI_API_URL, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${OPENAI_API_KEY}`,
-              },
-              body: JSON.stringify({
-                model: 'gpt-4o',
-                messages: [
-                  { role: 'system', content: buildSystemPrompt() },
-                  ...conversationHistory,
-                  { role: 'user', content: userMessage },
-                ],
-                temperature: 0.7,
-                max_tokens: 1000,
-              }),
-              signal: controller.signal,
-            });
-
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-              break; // Succès, sortir de la boucle
-            }
-
-            // Si erreur 429 (rate limit), attendre avant de réessayer
-            if (response.status === 429) {
-              console.log('⏳ Rate limit atteint, attente de 5s...');
-              await new Promise(resolve => setTimeout(resolve, 5000));
-              continue;
-            }
-
-            // Autre erreur
-            lastError = new Error(`API error: ${response.status}`);
-          } catch (err) {
-            lastError = err instanceof Error ? err : new Error('Unknown error');
-            console.log(`❌ Tentative ${attempt} échouée:`, lastError.message);
-
-            if (attempt < 3) {
-              await new Promise(resolve => setTimeout(resolve, 2000)); // Attendre 2s avant retry
-            }
-          }
-        }
-
-        if (!response || !response.ok) {
-          throw lastError || new Error('Échec après 3 tentatives');
-        }
-
-        const data = await response.json();
-        const tutorResponse = data.choices?.[0]?.message?.content || 'عُذْرًا، حَدَثَ خَطَأٌ.';
-
-        console.log("🤖 Tutor response received");
-
-        const tutorMsg: Message = {
-          id: `tutor_${Date.now()}`,
-          role: "tutor",
-          text: tutorResponse,
-          timestamp: Date.now(),
-        };
-
-        setMessages((prev) => [...prev, tutorMsg]);
-      } catch (err) {
-        console.error("❌ Tutor error:", err);
-        setError(err instanceof Error ? err.message : "خطأ");
-        
-        // Message d'erreur en arabe
-        const errorMsg: Message = {
-          id: `tutor_${Date.now()}`,
-          role: "tutor",
-          text: "عُذْرًا، حَدَثَ خَطَأٌ فِي الِاتِّصَالِ. حَاوِلْ مَرَّةً أُخْرَى!",
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, errorMsg]);
-      } finally {
+      if (scansError) {
+        console.error('[TUTOR] Error loading scans:', scansError.message);
+        setError('Erreur de chargement des textes');
+        setUserTexts([]);
+        setTextsLoaded(true);
         setLoading(false);
+        return;
       }
-    },
-    [messages, buildSystemPrompt]
-  );
 
-  // Démarrer une nouvelle conversation
-  const startConversation = useCallback(async () => {
-    if (!OPENAI_API_KEY || userTexts.length === 0) {
-      // Message de bienvenue par défaut
-      const welcomeMsg: Message = {
-        id: `tutor_${Date.now()}`,
-        role: "tutor",
-        text: userTexts.length === 0 
-          ? "مَرْحَبًا! أَنَا مُعَلِّمُكَ لِلُّغَةِ الْعَرَبِيَّةِ. لَمْ تَقُمْ بِمَسْحِ أَيِّ نَصٍّ بَعْدُ. اِذْهَبْ إِلَى الْمَاسِحِ الضَّوْئِيِّ وَامْسَحْ نَصًّا لِنَبْدَأَ التَّعَلُّمَ!"
-          : "مَرْحَبًا! أَنَا مُعَلِّمُكَ. كَيْفَ حَالُكَ الْيَوْمَ؟",
-        timestamp: Date.now(),
-      };
-      setMessages([welcomeMsg]);
+      const normalizedScans = scans || [];
+      console.log(`[TUTOR] Loaded ${normalizedScans.length} texts`);
+      setUserTexts(normalizedScans);
+      setTextsLoaded(true);
+      setLoading(false);
+    } catch (e) {
+      console.error('[TUTOR] Exception loading texts:', e);
+      setError('Erreur de chargement des textes');
+      setUserTexts([]);
+      setTextsLoaded(true);
+      setLoading(false);
+    }
+  }, []);
+
+  // ═══ Load learner vocabulary on mount ═══
+  useEffect(() => {
+    const loadVocabulary = async () => {
+      try {
+        console.log('[TUTOR] Loading learner vocabulary...');
+        const words = await loadLearnerWords();
+        const summary = buildVocabSummary(words, 200); // Max 200 mots
+        setVocabSummary(summary);
+        console.log(`[TUTOR] Loaded ${words.length} known words`);
+      } catch (e) {
+        console.error('[TUTOR] Error loading vocabulary:', e);
+        setVocabSummary('');
+      }
+    };
+
+    loadVocabulary();
+  }, []);
+
+  // ═══ Load texts on mount ═══
+  useEffect(() => {
+    refreshTexts();
+  }, [refreshTexts]);
+
+  // ═══ Build system prompt with texts + vocabulary ═══
+  const buildSystemPrompt = useCallback((selectedTextId?: string): string => {
+    const targetLang = languageNames[uiLang] || 'French';
+    let filteredTexts = userTexts;
+
+    if (selectedTextId) {
+      filteredTexts = userTexts.filter(t => t.id === selectedTextId);
+    }
+
+    if (filteredTexts.length === 0) {
+      return `أنت أستاذٌ لِلعَرَبِيَّةِ الفُصْحَى، لَطِيفٌ وَصَبُورٌ. تَتَحَدَّثُ فَقَطْ بِالعَرَبِيَّةِ الفُصْحَى مَعَ التَّشْكِيلِ الكَامِلِ.
+
+الطَّالِبُ لَمْ يُقَدِّمْ نَصًّا بَعْدُ. اِطْلُبْ مِنْهُ أَنْ يَمْسَحَ نَصًّا أَوْ يُضِيفَ نَصًّا لِلدِّرَاسَةِ.
+
+الطَّالِبُ قَدْ يُجِيبُ بِالـ${targetLang}.`;
+    }
+
+    // Construire le contexte avec tous les textes disponibles
+    const textsContext = filteredTexts
+      .map((t, idx) => `${idx + 1}. "${t.title}"\n${t.content.substring(0, 500)}${t.content.length > 500 ? '...' : ''}`)
+      .join('\n\n');
+
+    // Injecter le vocabulaire connu si disponible
+    const vocabBlock = vocabSummary ? `
+
+## مُفْرَدَاتُ الطَّالِبِ المَعْرُوفَةُ (vocabulaire connu de l'apprenant) :
+${vocabSummary}
+
+⚠️ قَاعِدَةٌ مُهِمَّةٌ: اسْتَخْدِمْ أَقْصَى عَدَدٍ مِنْ هَذِهِ المُفْرَدَاتِ عِنْدَ طَرْحِ الأَسْئِلَةِ وَالتَّصْحِيحِ، لِتَسْهِيلِ فَهْمِ الطَّالِبِ. إِذَا اسْتَخْدَمْتَ كَلِمَةً جَدِيدَةً لَيْسَتْ فِي القَائِمَةِ، اشْرَحْهَا بِاخْتِصَارٍ.` : '';
+
+    return `أنت أستاذٌ لِلعَرَبِيَّةِ الفُصْحَى، لَطِيفٌ وَصَبُورٌ. تَتَحَدَّثُ فَقَطْ بِالعَرَبِيَّةِ الفُصْحَى مَعَ التَّشْكِيلِ الكَامِلِ.
+
+## النُّصُوصُ المَدْرُوسَةُ:
+${textsContext}
+
+## مُهِمَّتُكَ:
+١. اِطْرَحْ أَسْئِلَةً عَنْ مَعْنَى النُّصُوصِ وَمُفْرَدَاتِهَا
+٢. صَحِّحْ أَخْطَاءَ الفَهْمِ (المَعْنَى)
+٣. صَحِّحْ أَخْطَاءَ النَّحْوِ وَالصَّرْفِ
+٤. صَحِّحْ أَخْطَاءَ النُّطْقِ (بِنَاءً عَلَى كِتَابَةِ الطَّالِبِ)
+٥. اِشْرَحْ المُفْرَدَاتِ الصَّعْبَةَ
+٦. قَدِّمْ أَمْثِلَةً مِنَ النُّصُوصِ
+
+## القَوَاعِدُ:
+- كُلُّ كَلِمَةٍ بِالتَّشْكِيلِ الكَامِلِ
+- لِلمُثَنَّى: اسْتَخْدِمِ الصِّيغَةَ الصَّحِيحَةَ (تَسْكُنَانِ، تُرِيدَانِ، هُمَا)
+- كُنْ لَطِيفًا فِي التَّصْحِيحِ
+- لَا تَطْلُبْ نَصًّا أَوْ مَعْلُومَاتٍ إِضَافِيَّةً (النُّصُوصُ أَعْلَاهُ)
+- اِجْعَلْ أَجْوِبَتَكَ قَصِيرَةً وَمُرَكَّزَةً (٢-٣ جُمَلٍ كَحَدٍّ أَقْصَى)
+${vocabBlock}
+
+الطَّالِبُ قَدْ يُجِيبُ بِالـ${targetLang}.`;
+  }, [uiLang, userTexts, vocabSummary]);
+
+  // ═══ Send message to tutor via Edge Function ═══
+  const sendMessage = useCallback(async (userMessage: string, selectedTextId?: string) => {
+    if (!userMessage.trim()) {
+      console.warn('[TUTOR] Empty message, skipping');
       return;
     }
 
     try {
       setLoading(true);
-      
-      // Demander à l'IA de commencer la conversation
-      const response = await fetch(OPENAI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: buildSystemPrompt() },
-            { role: 'user', content: 'ابدأ المحادثة بتحية الطالب واسأله عن أحد النصوص التي درسها.' },
-          ],
-          temperature: 0.7,
-          max_tokens: 500,
-        }),
+      setError(null);
+
+      // Ajouter le message utilisateur immédiatement
+      const userMsg: ChatMessage = {
+        id: `user_${Date.now()}`,
+        role: 'user',
+        content: userMessage,
+        timestamp: Date.now(),
+      };
+      setMessages(prev => [...prev, userMsg]);
+
+      // Construire le prompt système avec le contexte
+      const systemPrompt = buildSystemPrompt(selectedTextId);
+
+      // Construire l'array de messages pour l'Edge Function
+      // Format: [system, ...history, user_message_actuel]
+      const messagesToSend = [
+        { role: 'system' as const, content: systemPrompt },
+        ...messages.map(m => ({
+          role: m.role as 'user' | 'assistant' | 'system',
+          content: m.content,
+        })),
+        { role: 'user' as const, content: userMessage.trim() },
+      ];
+
+      // Appeler l'Edge Function Supabase
+      console.log('[TUTOR] Calling Edge Function: tutor-chat-ai');
+      const response = await invokeEdge<{ content: string; modelUsed?: string; error?: string }>('tutor-chat-ai', {
+        messages: messagesToSend,
+        max_tokens: 500,
+        temperature: 0.2,
+        language: 'ar', // Force Arabic output
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+      if (response.error) {
+        console.error('[TUTOR] Edge Function error:', response.error);
+        setError(response.error);
+        setLoading(false);
+        return;
       }
 
-      const data = await response.json();
-      const greeting = data.choices?.[0]?.message?.content || 'مَرْحَبًا! كَيْفَ حَالُكَ الْيَوْمَ؟';
+      if (!response.content) {
+        console.error('[TUTOR] Empty response from Edge Function');
+        setError('Réponse vide du tuteur');
+        setLoading(false);
+        return;
+      }
 
-      const welcomeMsg: Message = {
-        id: `tutor_${Date.now()}`,
-        role: "tutor",
-        text: greeting,
+      // Ajouter la réponse du tuteur
+      const assistantMsg: ChatMessage = {
+        id: `assistant_${Date.now()}`,
+        role: 'assistant',
+        content: response.content,
         timestamp: Date.now(),
       };
-      setMessages([welcomeMsg]);
-    } catch (err) {
-      console.error('❌ Error starting conversation:', err);
-      const fallbackMsg: Message = {
-        id: `tutor_${Date.now()}`,
-        role: "tutor",
-        text: "مَرْحَبًا! أَنَا مُعَلِّمُكَ لِلُّغَةِ الْعَرَبِيَّةِ. تَعَالَ نَتَحَدَّثُ!",
-        timestamp: Date.now(),
-      };
-      setMessages([fallbackMsg]);
-    } finally {
+      setMessages(prev => [...prev, assistantMsg]);
+
+      console.log('[TUTOR] ✅ Response received:', response.content.substring(0, 100) + '...');
+      console.log('[TUTOR] Model used:', response.modelUsed || 'gpt-4o-mini');
+      setLoading(false);
+    } catch (err: any) {
+      console.error('[TUTOR] Exception in sendMessage:', err);
+      setError(err.message || 'Erreur de communication avec le tuteur');
       setLoading(false);
     }
-  }, [userTexts, buildSystemPrompt]);
+  }, [messages, buildSystemPrompt, uiLang]);
 
+  // ═══ Start a new conversation with a welcome message ═══
+  const startConversation = useCallback(async (selectedTextId?: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      setMessages([]);
+
+      // Vérifier qu'il y a des textes
+      if (userTexts.length === 0) {
+        const welcomeMsg: ChatMessage = {
+          id: `assistant_welcome_${Date.now()}`,
+          role: 'assistant',
+          content: 'السَّلَامُ عَلَيْكُمْ! لَمْ أَجِدْ أَيَّ نَصٍّ مَمْسُوحٍ. اِمْسَحْ نَصًّا أَوْ أَضِفْ نَصًّا لِنَبْدَأَ الدَّرْسَ.',
+          timestamp: Date.now(),
+        };
+        setMessages([welcomeMsg]);
+        setLoading(false);
+        return;
+      }
+
+      // Filtrer les textes si un ID est fourni
+      let filteredTexts = userTexts;
+      if (selectedTextId) {
+        filteredTexts = userTexts.filter(t => t.id === selectedTextId);
+      }
+
+      if (filteredTexts.length === 0) {
+        setError('Texte non trouvé');
+        setLoading(false);
+        return;
+      }
+
+      const text = filteredTexts[0];
+
+      // Générer un message de bienvenue personnalisé
+      const welcomeMessage = selectedTextId
+        ? `السَّلَامُ عَلَيْكُمْ! سَنَدْرُسُ مَعًا نَصَّ "${text.title}". اِسْأَلْنِي عَنْ أَيِّ شَيْءٍ فِي النَّصِّ أَوِ اطْلُبْ مِنِّي أَنْ أَطْرَحَ أَسْئِلَةً.`
+        : `السَّلَامُ عَلَيْكُمْ! لَدَيْكَ ${userTexts.length} نُصُوصٍ مَمْسُوحَةٍ. اِخْتَرْ نَصًّا أَوِ اسْأَلْنِي عَنْ أَيِّ نَصٍّ تُرِيدُ دِرَاسَتَهُ.`;
+
+      const welcomeMsg: ChatMessage = {
+        id: `assistant_welcome_${Date.now()}`,
+        role: 'assistant',
+        content: welcomeMessage,
+        timestamp: Date.now(),
+      };
+
+      setMessages([welcomeMsg]);
+      console.log(`[TUTOR] Conversation started with text: ${text.title}`);
+      setLoading(false);
+    } catch (err: any) {
+      console.error('[TUTOR] Error starting conversation:', err);
+      setError(err.message || 'Erreur de démarrage de la conversation');
+      setLoading(false);
+    }
+  }, [userTexts]);
+
+  // ═══ Clear messages ═══
   const clearMessages = useCallback(() => {
+    console.log('[TUTOR] Clearing messages');
     setMessages([]);
     setError(null);
-  }, []);
-
-  // Rafraîchir les textes
-  const refreshTexts = useCallback(() => {
-    loadUserTexts();
   }, []);
 
   return {

@@ -1,16 +1,35 @@
 /**
- * Hook pour le tuteur avec l'API Chat Completions d'OpenAI (GPT-4o-mini)
- * Flow complet : connect → welcome → résumé du texte → questions (10-20) → corrections → enchaînement auto
- * Utilise expo-av pour l'enregistrement et expo-speech pour la lecture
+ * Hook pour le tuteur vocal avec architecture Edge Function
+ * Flow complet : connect → welcome → résumé du texte → questions (15-20) → corrections → enchaînement auto
+ *
+ * Architecture:
+ * - 🎤 Reconnaissance vocale: expo-speech-recognition (LOCAL)
+ * - 🔊 TTS: expo-speech (LOCAL)
+ * - 🧠 IA: Supabase Edge Function 'tutor-chat-ai' (SERVEUR)
+ * - ❌ AUCUNE clé OpenAI côté client
  */
 
 import { useVoicePreference } from "@/contexts/voice-preference-context";
 import { supabase } from "@/src/lib/supabase";
-import { clearTTSCache, prefetchTTS, speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
-import { Audio } from 'expo-av';
+import { invokeEdge } from "@/src/lib/edge-ai";
+import { loadLearnerWords, buildVocabSummary } from "@/src/lib/learner-vocabulary";
+import * as Speech from 'expo-speech';
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+// Importer expo-speech-recognition de manière conditionnelle
+let ExpoSpeechRecognitionModule: any = null;
+let useSpeechRecognitionEvent: any = null;
+
+try {
+  const speechRecognition = require('expo-speech-recognition');
+  ExpoSpeechRecognitionModule = speechRecognition.ExpoSpeechRecognitionModule;
+  useSpeechRecognitionEvent = speechRecognition.useSpeechRecognitionEvent;
+} catch (e) {
+  console.log('⚠️ expo-speech-recognition not available (requires rebuild)');
+}
+
+// Hook factice si le module n'est pas disponible
+const useNoopEvent = (_event: string, _callback: any) => {};
 
 const languageNames: Record<string, string> = {
   fr: 'French',
@@ -49,8 +68,9 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
   const [userTranscript, setUserTranscript] = useState('');
   const [conversationHistory, setConversationHistory] = useState<Array<{role: string, content: string}>>([]);
   const [questionCount, setQuestionCount] = useState(0);
+  const [vocabSummary, setVocabSummary] = useState<string>('');
 
-  // ═══ QUESTION CACHE: useRef to avoid stale closures (was useState → BUG) ═══
+  // ═══ QUESTION CACHE: useRef to avoid stale closures ═══
   const questionsCacheRef = useRef<Record<string, string[]>>({});
   const questionsMetaRef = useRef<Record<string, { originalCount: number }>>({});
   const currentQuestionRef = useRef<{textId: string; question: string; askedNumber: number; total: number} | null>(null);
@@ -64,15 +84,32 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
     }).join('');
   }, []);
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
   const isListeningRef = useRef(false);
   const isPausedRef = useRef(false);
   const isConnectedRef = useRef(false);
-  const listeningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const questionCountRef = useRef(0);
+  const currentTranscriptRef = useRef<string>('');
 
   // Keep questionCountRef in sync with state
   useEffect(() => { questionCountRef.current = questionCount; }, [questionCount]);
+
+  // ═══ Load learner vocabulary on mount ═══
+  useEffect(() => {
+    const loadVocabulary = async () => {
+      try {
+        console.log('[TUTOR] Loading learner vocabulary...');
+        const words = await loadLearnerWords();
+        const summary = buildVocabSummary(words, 200); // Max 200 mots
+        setVocabSummary(summary);
+        console.log(`[TUTOR] Loaded ${words.length} known words`);
+      } catch (e) {
+        console.error('[TUTOR] Error loading vocabulary:', e);
+        setVocabSummary('');
+      }
+    };
+
+    loadVocabulary();
+  }, []);
 
   // ═══ Load user texts ═══
   const loadUserTexts = useCallback(async () => {
@@ -99,48 +136,93 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
     return totalChars > 0 && (arabicChars / totalChars) > 0.3;
   };
 
-  // ═══ TTS — device TTS (expo-speech) — gratuit, utilise les voix natives du téléphone ═══
+  // ═══ TTS — LOCAL device TTS (expo-speech) — gratuit, utilise les voix natives du téléphone ═══
   const speakText = useCallback(async (text: string): Promise<void> => {
-    console.log('🔊 TTS starting (device):', text.substring(0, 50) + '...');
-    setIsSpeaking(true);
-    const isArabic = isArabicText(text);
-    const lang = isArabic ? 'ar-SA' : uiLang === 'fr' ? 'fr-FR' : uiLang === 'de' ? 'de-DE' : uiLang === 'es' ? 'es-ES' : uiLang === 'ru' ? 'ru-RU' : 'en-US';
-    const speed = isArabic ? 0.9 : 1.0;
-    try {
-      await speakWithOpenAI({
-        text,
-        gender,
-        speed,
-        language: lang,
-        onDone: () => { console.log('🔊 TTS onDone'); setIsSpeaking(false); },
-        onError: (err) => { console.error('🔊 TTS onError:', err); setIsSpeaking(false); },
-      });
-    } finally {
-      setIsSpeaking(false);
-    }
-  }, [uiLang, gender]);
+    return new Promise((resolve) => {
+      console.log('🔊 TTS starting (local device):', text.substring(0, 50) + '...');
+      setIsSpeaking(true);
 
-  // ═══ Whisper transcription ═══
-  const transcribeWithWhisper = useCallback(async (audioUri: string): Promise<string | null> => {
-    try {
-      if (!OPENAI_API_KEY) { console.error('❌ OpenAI API key not configured'); return null; }
-      const formData = new FormData();
-      formData.append('file', { uri: audioUri, type: 'audio/m4a', name: 'audio.m4a' } as any);
-      formData.append('model', 'whisper-1');
-      formData.append('language', 'ar');
-      const startTime = Date.now();
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-        body: formData,
+      const isArabic = isArabicText(text);
+      const lang = isArabic ? 'ar' : uiLang === 'fr' ? 'fr' : uiLang === 'de' ? 'de' : uiLang === 'es' ? 'es' : uiLang === 'ru' ? 'ru' : 'en';
+      const rate = isArabic ? 0.85 : 0.95; // Slightly slower for clarity
+
+      Speech.speak(text, {
+        language: lang,
+        pitch: 1.0,
+        rate: rate,
+        onDone: () => {
+          console.log('🔊 TTS finished (device)');
+          setIsSpeaking(false);
+          resolve();
+        },
+        onError: (error) => {
+          console.error('🔊 TTS error (device):', error);
+          setIsSpeaking(false);
+          resolve();
+        },
       });
-      const duration = Date.now() - startTime;
-      if (!response.ok) { const errorText = await response.text(); console.error('❌ Whisper error:', response.status, errorText); return null; }
-      const data = await response.json();
-      console.log(`✅ Whisper transcription (${duration}ms):`, data.text);
-      return data.text;
-    } catch (error: any) { console.error('❌ Whisper exception:', error.message); return null; }
-  }, []);
+    });
+  }, [uiLang]);
+
+  // ═══ Expo Speech Recognition Event Listeners ═══
+  const eventHook = useSpeechRecognitionEvent || useNoopEvent;
+
+  // Écoute les résultats de transcription en temps réel
+  eventHook('result', (event: any) => {
+    console.log('🎤 Speech result:', event);
+    if (event && event.results && event.results[0]) {
+      const transcription = event.results[0].transcript;
+      currentTranscriptRef.current = transcription;
+      console.log('📝 Transcription partielle:', transcription);
+    }
+  });
+
+  // Écoute la fin de reconnaissance (déclenché automatiquement quand l'utilisateur arrête de parler)
+  eventHook('end', () => {
+    console.log('🎤 Speech recognition ended');
+    const finalTranscript = currentTranscriptRef.current;
+
+    if (finalTranscript && finalTranscript.trim()) {
+      console.log('✅ Transcription finale:', finalTranscript);
+      setUserTranscript(finalTranscript);
+      setIsListening(false);
+      isListeningRef.current = false;
+      setIsTranscribing(true);
+
+      // Traiter la transcription
+      if (currentQuestionRef.current) {
+        const cq = currentQuestionRef.current;
+        evaluateAnswer(cq.textId, cq.question, finalTranscript).finally(() => {
+          setIsTranscribing(false);
+          currentTranscriptRef.current = '';
+        });
+      } else {
+        sendMessageToGPT(finalTranscript).finally(() => {
+          setIsTranscribing(false);
+          currentTranscriptRef.current = '';
+        });
+      }
+    } else {
+      console.log('⚠️ Pas de transcription');
+      setIsListening(false);
+      isListeningRef.current = false;
+      setIsTranscribing(false);
+
+      // Redémarrer l'écoute si la session est active
+      if (isConnectedRef.current && !isPausedRef.current) {
+        setTimeout(() => startListening(), 500);
+      }
+    }
+  });
+
+  // Écoute les erreurs
+  eventHook('error', (event: any) => {
+    console.error('🎤 Speech recognition error:', event);
+    setError(event.message || 'Erreur de reconnaissance vocale');
+    setIsListening(false);
+    isListeningRef.current = false;
+    setIsTranscribing(false);
+  });
 
   // ═══ Build system prompt (updated for comprehension + grammar + pronunciation) ═══
   const buildSystemPrompt = useCallback((texts: UserText[]) => {
@@ -151,6 +233,14 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
 
     const textContent = filteredTexts[0].content;
     const textTitle = filteredTexts[0].title;
+
+    // Injecter le vocabulaire connu si disponible
+    const vocabBlock = vocabSummary ? `
+
+## مُفْرَدَاتُ الطَّالِبِ المَعْرُوفَةُ (vocabulaire connu de l'apprenant) :
+${vocabSummary}
+
+⚠️ قَاعِدَةٌ مُهِمَّةٌ: اسْتَخْدِمْ أَقْصَى عَدَدٍ مِنْ هَذِهِ المُفْرَدَاتِ عِنْدَ التَّلْخِيصِ وَطَرْحِ الأَسْئِلَةِ وَالتَّصْحِيحِ، لِتَسْهِيلِ فَهْمِ الطَّالِبِ. إِذَا اسْتَخْدَمْتَ كَلِمَةً جَدِيدَةً لَيْسَتْ فِي القَائِمَةِ، اشْرَحْهَا بِاخْتِصَارٍ.` : '';
 
     return `أنت أستاذٌ لِلعَرَبِيَّةِ الفُصْحَى، لَطِيفٌ وَصَبُورٌ. تَتَحَدَّثُ فَقَطْ بِالعَرَبِيَّةِ الفُصْحَى مَعَ التَّشْكِيلِ الكَامِلِ.
 
@@ -168,17 +258,13 @@ ${textContent}
 - لِلمُثَنَّى: اسْتَخْدِمِ الصِّيغَةَ الصَّحِيحَةَ (تَسْكُنَانِ، تُرِيدَانِ، هُمَا)
 - كُنْ لَطِيفًا فِي التَّصْحِيحِ
 - لَا تَطْلُبْ نَصًّا أَوْ مَعْلُومَاتٍ إِضَافِيَّةً
+${vocabBlock}
 
 الطَّالِبُ قَدْ يُجِيبُ بِالـ${targetLang}.`;
-  }, [uiLang, selectedTextId]);
+  }, [uiLang, selectedTextId, vocabSummary]);
 
-  // ═══ Generate 15-20 questions for a text using OpenAI ═══
+  // ═══ Generate 15-20 questions for a text using Edge Function ═══
   const generateQuestionsForText = useCallback(async (textId: string, title: string, content: string): Promise<string[]> => {
-    if (!OPENAI_API_KEY) {
-      console.warn('[TUTOR] OpenAI key missing; using local fallback');
-      return generateLocalQuestions(title, content);
-    }
-
     const prompt = `أنت مُعلّم عربي مُتقَن. قَدِّم لِي قَائِمَةً مِنْ بَيْنِ ١٥ وَ ٢٠ سُؤَالًا عَنْ مَعْنَى النَّصِّ التالي.
 كُلُّ سُؤَالٍ بِالْعَرَبِيَّةِ الْفُصْحَى مَعَ التَّشْكِيلِ الكَامِلِ.
 اِجْعَلْ الأَسْئِلَةَ عَنْ:
@@ -186,6 +272,7 @@ ${textContent}
 - شَرْحِ المُفْرَدَاتِ وَالتَّعْبِيرَاتِ
 - تَحْلِيلِ العَلاقَاتِ بَيْنَ الأَفْكَارِ
 - اسْتِخْلاصِ الدُّرُوسِ وَالعِبَرِ
+${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْرُوفَةُ:\n${vocabSummary}\n\n⚠️ اسْتَخْدِمْ هَذِهِ المُفْرَدَاتِ فِي الأَسْئِلَةِ.` : ''}
 
 لا تُعطِ أي شُرُوحٍ. أَعِدْ فَقَطْ JSON array of strings.
 
@@ -194,33 +281,41 @@ ${textContent}
 ${content}`;
 
     try {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'You are an assistant that returns clean JSON arrays when asked.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 1500, temperature: 0.3,
-        }),
+      console.log('[TUTOR] invokeEdge tutor-chat-ai (generate questions)');
+      const response = await invokeEdge<{ content?: string; message?: string }>('tutor-chat-ai', {
+        messages: [
+          { role: 'system', content: 'You are an assistant that returns clean JSON arrays when asked.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
       });
-      if (!resp.ok) { console.error('[TUTOR] generateQuestions API error', resp.status); return generateLocalQuestions(title, content); }
-      const data = await resp.json();
-      let txt = data.choices?.[0]?.message?.content ?? '';
+
+      const txt = response.content || response.message || '';
+      console.log('[TUTOR] ✅ Questions received (raw):', txt.substring(0, 100) + '...');
+
       try {
         const parsed = JSON.parse(txt);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(String).filter(Boolean);
       } catch {
         const jsonMatch = txt.match(/\[([\s\S]*)\]/);
-        if (jsonMatch) { try { const p2 = JSON.parse(jsonMatch[0]); if (Array.isArray(p2) && p2.length > 0) return p2.map(String).filter(Boolean); } catch {} }
+        if (jsonMatch) {
+          try {
+            const p2 = JSON.parse(jsonMatch[0]);
+            if (Array.isArray(p2) && p2.length > 0) return p2.map(String).filter(Boolean);
+          } catch {}
+        }
       }
       const lines = txt.split(/\r?\n/).map((l: string) => l.replace(/^\d+[\.\)\-]\s*/, '').trim()).filter((l: string) => l.length > 5);
       if (lines.length >= 5) return lines;
+
+      console.warn('[TUTOR] Failed to parse questions, using local fallback');
       return generateLocalQuestions(title, content);
-    } catch (err) { console.error('[TUTOR] generateQuestions exception', err); return generateLocalQuestions(title, content); }
-  }, []);
+    } catch (err) {
+      console.error('[TUTOR] generateQuestions exception', err);
+      return generateLocalQuestions(title, content);
+    }
+  }, [vocabSummary]);
 
   // Local fallback question generation
   const generateLocalQuestions = useCallback((title: string, content: string): string[] => {
@@ -265,32 +360,32 @@ ${content}`;
     return 0;
   }, [generateQuestionsForText]);
 
-  // ═══ Summarize the text using GPT ═══
+  // ═══ Summarize the text using Edge Function ═══
   const summarizeText = useCallback(async (title: string, content: string): Promise<string> => {
-    if (!OPENAI_API_KEY) return `هَذَا النَّصُّ بِعُنْوَانِ "${title}". لِنَبْدَأْ بِالأَسْئِلَةِ!`;
-    try {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'أنت مُعلّمٌ عربيٌّ. لَخِّصْ النَّصَّ التالِيَ فِي ٣-٤ جُمَلٍ قَصِيرَةٍ بالعَرَبِيَّةِ الفُصْحَى مَعَ التَّشْكِيلِ الكَامِلِ. اِبْدَأْ بِـ "يَتَحَدَّثُ هَذَا النَّصُّ عَنْ".' },
-            { role: 'user', content: `العُنْوَان: "${title}"\n\n${content}` }
-          ],
-          max_tokens: 300, temperature: 0.2,
-        }),
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        const summary = data.choices?.[0]?.message?.content ?? '';
-        if (summary.trim().length > 10) return summary.trim();
-      }
-    } catch (err) { console.error('[TUTOR] summarizeText error', err); }
-    return `هَذَا النَّصُّ بِعُنْوَانِ "${title}". لِنَبْدَأْ بِالأَسْئِلَةِ!`;
-  }, []);
+    const systemPrompt = `أنت مُعلّمٌ عربيٌّ. لَخِّصْ النَّصَّ التالِيَ فِي ٣-٤ جُمَلٍ قَصِيرَةٍ بالعَرَبِيَّةِ الفُصْحَى مَعَ التَّشْكِيلِ الكَامِلِ. اِبْدَأْ بِـ "يَتَحَدَّثُ هَذَا النَّصُّ عَنْ".
+${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْرُوفَةُ:\n${vocabSummary}\n\n⚠️ اسْتَخْدِمْ هَذِهِ المُفْرَدَاتِ فِي التَّلْخِيصِ.` : ''}`;
 
-  // ═══ Send a message to GPT-4o-mini (general fallback) ═══
+    try {
+      console.log('[TUTOR] invokeEdge tutor-chat-ai (summarize)');
+      const response = await invokeEdge<{ content?: string; message?: string }>('tutor-chat-ai', {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `العُنْوَان: "${title}"\n\n${content}` }
+        ],
+        max_tokens: 300,
+        temperature: 0.2,
+      });
+
+      const summary = response.content || response.message || '';
+      console.log('[TUTOR] ✅ Summary received:', summary.substring(0, 100) + '...');
+      if (summary.trim().length > 10) return summary.trim();
+    } catch (err) {
+      console.error('[TUTOR] summarizeText error', err);
+    }
+    return `هَذَا النَّصُّ بِعُنْوَانِ "${title}". لِنَبْدَأْ بِالأَسْئِلَةِ!`;
+  }, [vocabSummary]);
+
+  // ═══ Send a message to GPT-4o-mini via Edge Function (general fallback) ═══
   const sendMessageToGPT = useCallback(async (userMessage: string, textsParam?: UserText[]) => {
     try {
       setIsTranscribing(true);
@@ -299,20 +394,22 @@ ${content}`;
       const newHistory = [...conversationHistory, { role: 'user', content: userMessage }];
       const systemPrompt = buildSystemPrompt(filteredTexts);
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'system', content: systemPrompt }, ...newHistory],
-          max_tokens: 200, temperature: 0.1,
-        }),
+      console.log('[TUTOR] invokeEdge tutor-chat-ai (conversation)');
+      const response = await invokeEdge<{ content?: string; message?: string }>('tutor-chat-ai', {
+        messages: [{ role: 'system', content: systemPrompt }, ...newHistory],
+        max_tokens: 200,
+        temperature: 0.1,
       });
 
-      if (!response.ok) { console.error('❌ GPT-4o-mini error:', response.status); setError('Erreur de communication avec le tuteur'); setIsTranscribing(false); return; }
-      const data = await response.json();
-      const assistantMessage = data.choices[0].message.content;
-      console.log('🤖 GPT-4o-mini response:', assistantMessage);
+      const assistantMessage = response.content || response.message || '';
+      console.log('[TUTOR] ✅ Conversation response:', assistantMessage.substring(0, 100) + '...');
+
+      if (!assistantMessage) {
+        console.error('[TUTOR] Empty response from Edge Function');
+        setError('Erreur de communication avec le tuteur');
+        setIsTranscribing(false);
+        return;
+      }
 
       setConversationHistory([...newHistory, { role: 'assistant', content: assistantMessage }]);
       const userMsg: ChatMessage = { id: `user_${Date.now()}`, role: 'user', text: userMessage, timestamp: Date.now() };
@@ -325,58 +422,89 @@ ${content}`;
       if (isConnectedRef.current && !isPausedRef.current) {
         setTimeout(() => startListening(), 500);
       }
-    } catch (error: any) { console.error('❌ Error in sendMessageToGPT:', error); setError(error.message); setIsTranscribing(false); }
+    } catch (error: any) {
+      console.error('[TUTOR] Error in sendMessageToGPT:', error);
+      setError(error.message);
+      setIsTranscribing(false);
+    }
   }, [conversationHistory, buildSystemPrompt, userTexts, speakText]);
 
-  // ═══ Start recording ═══
+  // ═══ Start speech recognition (LOCAL - no server) ═══
   const startListening = useCallback(async () => {
+    if (!ExpoSpeechRecognitionModule) {
+      console.error('❌ expo-speech-recognition not available (requires native rebuild)');
+      setError('Reconnaissance vocale non disponible. Rebuild nécessaire.');
+      return;
+    }
+
     try {
-      console.log('🎤 Starting recording...');
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') { console.error('❌ Audio permission denied'); return; }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
-      recordingRef.current = recording;
+      console.log('🎤 Starting speech recognition (local)...');
+
+      // Vérifier et demander la permission
+      const permissionResult = await ExpoSpeechRecognitionModule.getPermissionsAsync();
+      console.log('🎤 Permission status:', permissionResult);
+
+      if (!permissionResult.granted) {
+        if (permissionResult.canAskAgain) {
+          const requestResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+          if (!requestResult.granted) {
+            console.error('❌ Microphone permission denied');
+            setError('Permission microphone refusée. Allez dans Réglages → Fisabil → Microphone.');
+            return;
+          }
+        } else {
+          console.error('❌ Cannot ask for permission again');
+          setError('Permission microphone refusée. Allez dans Réglages → Fisabil → Microphone.');
+          return;
+        }
+      }
+
+      // Réinitialiser la transcription
+      currentTranscriptRef.current = '';
+      setTranscript('');
+      setError(null);
+
+      // Démarrer la reconnaissance vocale en arabe
+      console.log('🎤 Starting recognition with lang: ar-SA');
+      await ExpoSpeechRecognitionModule.start({
+        lang: 'ar-SA',
+        interimResults: true,
+        continuous: false, // S'arrête automatiquement quand l'utilisateur arrête de parler
+        maxAlternatives: 1,
+      });
+
       isListeningRef.current = true;
       setIsListening(true);
-      listeningTimeoutRef.current = setTimeout(() => { console.log('⏱️ Auto-stopping recording'); stopListening(); }, 10000);
-    } catch (error: any) { console.error('❌ Error starting recording:', error); }
+      console.log('✅ Speech recognition started (local)');
+    } catch (error: any) {
+      console.error('❌ Error starting speech recognition:', error);
+      setError('Impossible de démarrer la reconnaissance vocale: ' + error.message);
+      setIsListening(false);
+      isListeningRef.current = false;
+    }
   }, []);
 
-  // ═══ Stop recording and transcribe ═══
+  // ═══ Stop speech recognition (LOCAL) ═══
   const stopListening = useCallback(async () => {
+    if (!ExpoSpeechRecognitionModule) {
+      console.log('⚠️ Speech recognition module not available');
+      return;
+    }
+
     try {
-      console.log('🎤 Stopping recording...');
-      if (listeningTimeoutRef.current) { clearTimeout(listeningTimeoutRef.current); listeningTimeoutRef.current = null; }
-      if (!recordingRef.current) { console.log('🎤 No recording to stop'); return; }
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
+      console.log('🎤 Stopping speech recognition...');
+      await ExpoSpeechRecognitionModule.stop();
       isListeningRef.current = false;
       setIsListening(false);
-      if (!uri) { console.error('❌ No recording URI'); return; }
+      console.log('✅ Speech recognition stopped');
 
-      console.log('📤 Transcribing audio...');
-      setIsTranscribing(true);
-      const transcription = await transcribeWithWhisper(uri);
-
-      if (transcription && transcription.trim()) {
-        setUserTranscript(transcription);
-        if (currentQuestionRef.current) {
-          const cq = currentQuestionRef.current;
-          await evaluateAnswer(cq.textId, cq.question, transcription);
-        } else {
-          await sendMessageToGPT(transcription);
-        }
-      } else {
-        console.log('⚠️ No transcription result');
-        setIsTranscribing(false);
-        if (isConnectedRef.current && !isPausedRef.current) setTimeout(() => startListening(), 500);
-      }
-    } catch (error: any) { console.error('❌ Error stopping recording:', error); setIsTranscribing(false); }
-  }, [transcribeWithWhisper, sendMessageToGPT]);
+      // Le traitement de la transcription se fait dans l'event listener 'end'
+    } catch (error: any) {
+      console.error('❌ Error stopping speech recognition:', error);
+      setIsListening(false);
+      isListeningRef.current = false;
+    }
+  }, []);
 
   // ═══ Ask the next prepared question (reads from REF, never stale) ═══
   const askPreparedQuestion = useCallback(async (textId: string) => {
@@ -397,12 +525,11 @@ ${content}`;
       return;
     }
 
-    // Pick next question sequentially (better pedagogical flow)
-    const question = pool[0];
-    questionsCacheRef.current[textId] = pool.slice(1);
+    const question = pool.shift()!;
+    questionsCacheRef.current[textId] = pool;
     setCacheVersion(v => v + 1);
 
-    const total = questionsMetaRef.current[textId]?.originalCount ?? 15;
+    const total = questionsMetaRef.current[textId]?.originalCount ?? 20;
     const askedNumber = count + 1;
     currentQuestionRef.current = { textId, question, askedNumber, total };
 
@@ -411,14 +538,7 @@ ${content}`;
     setMessages(prev => [...prev, assistantMsg]);
     setQuestionCount(prev => prev + 1);
 
-    // Prefetch NEXT question's audio in background while this one plays + student answers
-    const nextPool = questionsCacheRef.current[textId] ?? [];
-    if (nextPool.length > 0) {
-      const nextQ = nextPool[0];
-      const nextNumber = askedNumber + 1;
-      const nextText = `السُّؤَالُ ${intToArabicIndic(nextNumber)}/${intToArabicIndic(total)}: ${nextQ}`;
-      prefetchTTS(nextText, gender, 0.9).catch(() => {});
-    }
+    // Note: Prefetch not needed with local TTS (instant playback)
 
     await speakText(assistantMsgText);
 
@@ -429,36 +549,33 @@ ${content}`;
     }
   }, [intToArabicIndic, speakText, sendMessageToGPT, startListening]);
 
-  // ═══ Evaluate student's answer: correct → auto-chain next (optimized for speed) ═══
+  // ═══ Evaluate student's answer via Edge Function: correct → auto-chain next ═══
   const evaluateAnswer = useCallback(async (textId: string, question: string, studentAnswer: string) => {
     try {
       setIsTranscribing(true);
       const textData = userTexts.find(t => t.id === textId);
-      const textContent = textData ? `\nالنَّصُّ: "${textData.title}"\n${textData.content.substring(0, 500)}` : '';
+      const textContext = textData ? `\nالنَّصُّ: "${textData.title}"\n${textData.content.substring(0, 500)}` : '';
 
       const correctionPrompt = `صَحِّحْ إِجَابَةَ الطَّالِبِ بِإِيجَازٍ (جُمْلَتَيْنِ كَحَدٍّ أَقْصَى) مَعَ التَّشْكِيلِ.
 
 السُّؤَالُ: ${question}
-الإِجَابَةُ: "${studentAnswer}"${textContent}
+الإِجَابَةُ: "${studentAnswer}"${textContext}
+${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْرُوفَةُ:\n${vocabSummary}\n\n⚠️ اسْتَخْدِمْ هَذِهِ المُفْرَدَاتِ فِي التَّصْحِيحِ.` : ''}
 
 إِذَا صَحِيحَة: "أَحْسَنْتَ!" + مُلاحَظَة قَصِيرَة.
 إِذَا خَاطِئَة: صَحِّحْ بِلُطْفٍ + الإِجَابَة الصَّحِيحَة.`;
 
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'system', content: correctionPrompt }],
-          max_tokens: 150, temperature: 0.1,
-        }),
+      console.log('[TUTOR] invokeEdge tutor-chat-ai (evaluate answer)');
+      const response = await invokeEdge<{ content?: string; message?: string }>('tutor-chat-ai', {
+        messages: [{ role: 'system', content: correctionPrompt }],
+        max_tokens: 150,
+        temperature: 0.1,
       });
 
-      let correction = '';
-      if (resp.ok) {
-        const data = await resp.json();
-        correction = data.choices?.[0]?.message?.content ?? '';
-      } else {
+      let correction = response.content || response.message || '';
+      console.log('[TUTOR] ✅ Correction received:', correction.substring(0, 100) + '...');
+
+      if (!correction) {
         correction = 'لِنَنْتَقِلْ إِلَى السُّؤَالِ التَّالِي.';
       }
 
@@ -485,8 +602,11 @@ ${content}`;
         setMessages(prev => [...prev, endAssistant]);
         await speakText(endMsg);
       }
-    } catch (err) { console.error('[TUTOR] evaluateAnswer error', err); setIsTranscribing(false); }
-  }, [userTexts, speakText, askPreparedQuestion]);
+    } catch (err) {
+      console.error('[TUTOR] evaluateAnswer error', err);
+      setIsTranscribing(false);
+    }
+  }, [userTexts, speakText, askPreparedQuestion, vocabSummary]);
 
   // Load texts on mount
   useEffect(() => { loadUserTexts(); }, [loadUserTexts]);
@@ -549,9 +669,17 @@ ${content}`;
   // ═══ Disconnect ═══
   const disconnect = useCallback(() => {
     console.log('🔌 Disconnecting...');
-    if (recordingRef.current) { recordingRef.current.stopAndUnloadAsync(); recordingRef.current = null; }
-    stopTTS();
-    clearTTSCache();
+
+    // Arrêter la reconnaissance vocale locale si active
+    if (ExpoSpeechRecognitionModule && isListeningRef.current) {
+      ExpoSpeechRecognitionModule.stop().catch((err: any) =>
+        console.log('⚠️ Error stopping speech recognition:', err)
+      );
+    }
+
+    // Arrêter le TTS local
+    Speech.stop();
+
     setIsConnected(false);
     isConnectedRef.current = false;
     setIsListening(false);
@@ -559,6 +687,7 @@ ${content}`;
     setIsTranscribing(false);
     isListeningRef.current = false;
     currentQuestionRef.current = null;
+    currentTranscriptRef.current = '';
   }, []);
 
   useEffect(() => { return () => { disconnect(); }; }, [disconnect]);
@@ -606,6 +735,13 @@ ${content}`;
     startDialogue: askPreparedQuestion,
     preparedCount: getPreparedCount,
     prepareNow,
-    interrupt: () => stopTTS(),
+    interrupt: () => {
+      Speech.stop(); // Arrêter TTS local
+      if (ExpoSpeechRecognitionModule && isListeningRef.current) {
+        ExpoSpeechRecognitionModule.stop().catch((err: any) =>
+          console.log('⚠️ Error stopping speech:', err)
+        );
+      }
+    },
   };
 };

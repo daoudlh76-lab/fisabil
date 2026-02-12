@@ -1,5 +1,5 @@
-import { useVoicePreference } from '@/contexts/voice-preference-context';
-import { speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
+import { useVoicePreference, getVoiceOptionsForGender } from '@/contexts/voice-preference-context';
+import * as Speech from 'expo-speech';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface DictationEntry {
@@ -43,20 +43,61 @@ export const useDictation = () => {
     genderRef.current = gender;
   }, [gender]);
 
-  // Découper le texte en segments (mots groupés par ~5)
+  // Découper le texte en segments respectant la ponctuation
   const splitIntoSegments = useCallback((text: string): string[] => {
-    const words = text.trim().split(/\s+/);
+    // D'abord, séparer aux signes de ponctuation arabes et latins
+    // On garde la ponctuation attachée au segment précédent
+    const punctuationSplit = text
+      .split(/(?<=[.،؟!؛:\n。])\s*/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
     const segments: string[] = [];
-    const wordsPerSegment = 5;
-    
-    for (let i = 0; i < words.length; i += wordsPerSegment) {
-      segments.push(words.slice(i, i + wordsPerSegment).join(' '));
+    const maxWordsPerSegment = 12;
+
+    for (const part of punctuationSplit) {
+      const wordCount = part.split(/\s+/).length;
+      if (wordCount <= maxWordsPerSegment) {
+        // Segment court → garder tel quel
+        segments.push(part);
+      } else {
+        // Segment trop long → sous-découper par groupes de mots
+        const words = part.split(/\s+/);
+        for (let i = 0; i < words.length; i += maxWordsPerSegment) {
+          const chunk = words.slice(i, i + maxWordsPerSegment).join(' ');
+          if (chunk.length > 0) segments.push(chunk);
+        }
+      }
     }
-    
-    return segments;
+
+    // Fusionner les segments trop courts (< 3 mots) avec le suivant
+    const merged: string[] = [];
+    let buffer = '';
+    for (const seg of segments) {
+      if (buffer) {
+        buffer += ' ' + seg;
+        if (buffer.split(/\s+/).length >= 3) {
+          merged.push(buffer);
+          buffer = '';
+        }
+      } else if (seg.split(/\s+/).length < 3 && merged.length > 0) {
+        // Segment trop court, l'ajouter au précédent
+        merged[merged.length - 1] += ' ' + seg;
+      } else if (seg.split(/\s+/).length < 3) {
+        buffer = seg;
+      } else {
+        merged.push(seg);
+      }
+    }
+    if (buffer) {
+      if (merged.length > 0) merged[merged.length - 1] += ' ' + buffer;
+      else merged.push(buffer);
+    }
+
+    return merged.length > 0 ? merged : [text];
   }, []);
 
-  // Lire un segment spécifique (OpenAI TTS natural voice)
+  // Lire un segment spécifique (expo-speech LOCAL - même voix que le tuteur)
   const speakSegmentInternal = useCallback((index: number) => {
     if (index < 0 || index >= segmentsRef.current.length) {
       console.log('✅ Lecture terminée (tous les segments)');
@@ -74,11 +115,13 @@ export const useDictation = () => {
       console.log('▶️ Lecture démarrée');
     }
 
-    speakWithOpenAI({
-      text: segment,
-      gender: genderRef.current,
-      speed: speedRef.current,
-      language: 'ar-SA',
+    // Utiliser les mêmes options de voix que le tuteur
+    const voiceOptions = getVoiceOptionsForGender(genderRef.current);
+
+    Speech.speak(segment, {
+      language: 'ar',
+      pitch: voiceOptions.pitch,
+      rate: speedRef.current * 0.85, // Ajuster le rate avec la vitesse sélectionnée
       onDone: () => {
         if (isPlayingRef.current) {
           // Passer au segment suivant
@@ -91,11 +134,6 @@ export const useDictation = () => {
         setIsPaused(false);
         isPlayingRef.current = false;
       },
-    }).catch((err) => {
-      console.error('❌ Erreur segment TTS:', err);
-      setIsSpeaking(false);
-      setIsPaused(false);
-      isPlayingRef.current = false;
     });
   }, []);
 
@@ -109,7 +147,7 @@ export const useDictation = () => {
     console.log('🔊 Lecture du texte:', text.substring(0, 50) + '...');
     
     // Arrêter toute lecture en cours
-    stopTTS();
+    Speech.stop();
     
     // Préparer les segments
     segmentsRef.current = splitIntoSegments(text);
@@ -127,8 +165,8 @@ export const useDictation = () => {
   // Mettre en pause
   const pause = useCallback(() => {
     console.log('⏸️ Pause');
-    stopTTS();
     isPlayingRef.current = false;
+    Speech.stop();
     setIsPaused(true);
     setIsSpeaking(false);
   }, []);
@@ -154,8 +192,8 @@ export const useDictation = () => {
   // Arrêter complètement
   const stop = useCallback(() => {
     console.log('⏹️ Stop');
-    stopTTS();
     isPlayingRef.current = false;
+    Speech.stop();
     setIsSpeaking(false);
     setIsPaused(false);
     currentIndexRef.current = 0;
@@ -167,15 +205,21 @@ export const useDictation = () => {
     const newIndex = Math.max(0, currentIndexRef.current - segments);
     console.log(`⏪ Retour de ${segments} segments vers ${newIndex}`);
     
-    stopTTS();
+    // IMPORTANT : désactiver isPlaying AVANT Speech.stop pour éviter que le onDone
+    // de l'ancienne lecture ne déclenche le segment suivant
+    isPlayingRef.current = false;
+    Speech.stop();
+    
     currentIndexRef.current = newIndex;
     setCurrentSegmentIndex(newIndex);
     
-    // Toujours reprendre la lecture après le retour
-    isPlayingRef.current = true;
-    setIsSpeaking(true);
-    setIsPaused(false);
-    speakSegmentInternal(newIndex);
+    // Redémarrer la lecture après un petit délai pour laisser le stop se terminer
+    setTimeout(() => {
+      isPlayingRef.current = true;
+      setIsSpeaking(true);
+      setIsPaused(false);
+      speakSegmentInternal(newIndex);
+    }, 150);
   }, [speakSegmentInternal]);
 
   // Reculer de 5 secondes (~1 segment)
@@ -192,10 +236,12 @@ export const useDictation = () => {
     
     // Si en cours de lecture, redémarrer avec la nouvelle vitesse
     if (isPlayingRef.current) {
-      stopTTS();
+      isPlayingRef.current = false;
+      Speech.stop();
       setTimeout(() => {
+        isPlayingRef.current = true;
         speakSegmentInternal(currentIndexRef.current);
-      }, 100);
+      }, 150);
     }
   }, [speakSegmentInternal]);
 

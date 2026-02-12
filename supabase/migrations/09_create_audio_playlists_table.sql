@@ -25,24 +25,28 @@ CREATE INDEX IF NOT EXISTS idx_audio_tracks_created_at ON public.audio_tracks(us
 ALTER TABLE public.audio_tracks ENABLE ROW LEVEL SECURITY;
 
 -- Politique : Les utilisateurs peuvent voir uniquement leurs propres pistes
+DROP POLICY IF EXISTS "Users can view their own tracks" ON public.audio_tracks;
 CREATE POLICY "Users can view their own tracks"
   ON public.audio_tracks
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent insérer leurs propres pistes
+DROP POLICY IF EXISTS "Users can insert their own tracks" ON public.audio_tracks;
 CREATE POLICY "Users can insert their own tracks"
   ON public.audio_tracks
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent mettre à jour leurs propres pistes
+DROP POLICY IF EXISTS "Users can update their own tracks" ON public.audio_tracks;
 CREATE POLICY "Users can update their own tracks"
   ON public.audio_tracks
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent supprimer leurs propres pistes
+DROP POLICY IF EXISTS "Users can delete their own tracks" ON public.audio_tracks;
 CREATE POLICY "Users can delete their own tracks"
   ON public.audio_tracks
   FOR DELETE
@@ -57,6 +61,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_audio_tracks_updated_at ON public.audio_tracks;
 CREATE TRIGGER update_audio_tracks_updated_at
   BEFORE UPDATE ON public.audio_tracks
   FOR EACH ROW

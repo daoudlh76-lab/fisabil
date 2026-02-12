@@ -22,24 +22,28 @@ CREATE INDEX IF NOT EXISTS idx_scans_created_at ON public.scans(user_id, created
 ALTER TABLE public.scans ENABLE ROW LEVEL SECURITY;
 
 -- Politique : Les utilisateurs peuvent voir uniquement leurs propres scans
+DROP POLICY IF EXISTS "Users can view their own scans" ON public.scans;
 CREATE POLICY "Users can view their own scans"
   ON public.scans
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent insérer leurs propres scans
+DROP POLICY IF EXISTS "Users can insert their own scans" ON public.scans;
 CREATE POLICY "Users can insert their own scans"
   ON public.scans
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent mettre à jour leurs propres scans
+DROP POLICY IF EXISTS "Users can update their own scans" ON public.scans;
 CREATE POLICY "Users can update their own scans"
   ON public.scans
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent supprimer leurs propres scans
+DROP POLICY IF EXISTS "Users can delete their own scans" ON public.scans;
 CREATE POLICY "Users can delete their own scans"
   ON public.scans
   FOR DELETE
@@ -54,6 +58,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_scans_updated_at ON public.scans;
 CREATE TRIGGER update_scans_updated_at
   BEFORE UPDATE ON public.scans
   FOR EACH ROW
@@ -63,5 +68,6 @@ CREATE TRIGGER update_scans_updated_at
 COMMENT ON TABLE public.scans IS 'Textes scannés avec OCR (Coran, Hadith, etc.)';
 COMMENT ON COLUMN public.scans.title IS 'Titre du texte scanné';
 COMMENT ON COLUMN public.scans.content IS 'Contenu du texte extrait par OCR';
-COMMENT ON COLUMN public.scans.image_url IS 'URL de l''image scannée (optionnel)';
+-- Note: image_url column may not exist in older versions
+-- COMMENT ON COLUMN public.scans.image_url IS 'URL de l''image scannée (optionnel)';
 COMMENT ON COLUMN public.scans.folder_id IS 'Dossier dans lequel le texte est rangé (NULL = pas de dossier)';

@@ -1,7 +1,6 @@
 /**
- * OpenAI Text-to-Speech utility
- * Uses the tts-1 API for natural, high-quality voices.
- * Falls back to expo-speech (device TTS) if the API call fails.
+ * Text-to-Speech utility using Supabase Edge Function (tts-generate)
+ * Falls back to expo-speech (device TTS) if the Edge Function fails.
  *
  * Voices:  alloy | echo | fable | onyx | nova | shimmer
  *   - alloy:   neutral, warm
@@ -13,10 +12,9 @@
  */
 
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as Speech from 'expo-speech';
-
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+import { invokeEdge, base64ToTempAudioFile } from '@/src/lib/edge-ai';
 
 export type TTSVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 export type TTSGender = 'male' | 'female';
@@ -40,7 +38,7 @@ export async function stopTTS(): Promise<void> {
   // Bump generation so any in-flight speakWithOpenAI calls are cancelled
   generationId++;
   try {
-    // Stop OpenAI-based audio
+    // Stop Edge Function-based audio
     if (currentSound) {
       const s = currentSound;
       currentSound = null;
@@ -69,12 +67,12 @@ export interface SpeakOptions {
   onError?: (err: unknown) => void;
   /** Language hint for expo-speech fallback */
   language?: string;
-  /** Force device TTS (expo-speech) instead of OpenAI API — FREE */
+  /** Force device TTS (expo-speech) instead of Edge Function — FREE */
   forceDevice?: boolean;
 }
 
 /**
- * Speak text using OpenAI TTS.
+ * Speak text using Supabase Edge Function (tts-generate).
  * Returns a Promise that resolves when playback completes.
  * Falls back to expo-speech on failure.
  */
@@ -87,15 +85,14 @@ export async function speakWithOpenAI(opts: SpeakOptions): Promise<void> {
     onDone,
     onError,
     language = 'ar-SA',
-    forceDevice = true,
+    forceDevice = false,
   } = opts;
 
   // Stop anything currently playing and get our generation token
   await stopTTS();
   const myGeneration = generationId;
 
-  if (!OPENAI_API_KEY || forceDevice) {
-    if (!OPENAI_API_KEY) console.warn('[TTS] No OpenAI API key – falling back to device TTS');
+  if (forceDevice) {
     return fallbackSpeak(text, gender, speed, language, onDone, onError);
   }
 
@@ -138,53 +135,55 @@ export async function speakWithOpenAI(opts: SpeakOptions): Promise<void> {
       });
     }
 
-    console.log(`🔊 OpenAI TTS: voice=${selectedVoice}, speed=${speed}, len=${text.length}`);
+    console.log(`🔊 Edge Function TTS: voice=${selectedVoice}, speed=${speed}, len=${text.length}`);
     const startTime = Date.now();
 
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'tts-1',
-        input: text,
-        voice: selectedVoice,
-        speed,
-        response_format: 'mp3',
-      }),
-    });
+    // Call Supabase Edge Function
 
-    // ── Check if cancelled while waiting for API ──
+    let data: any = null;
+    let error: any = null;
+    try {
+      data = await invokeEdge('tts-generate', {
+        text,
+        voice: selectedVoice,
+        format: 'mp3',
+        speed,
+      });
+    } catch (err: any) {
+      error = err;
+    }
+
+    // ── Check if cancelled while waiting for Edge Function ──
     if (myGeneration !== generationId) {
-      console.log('[TTS] Cancelled (generation changed during API call)');
+      console.log('[TTS] Cancelled (generation changed during Edge Function call)');
       onDone?.();
       return;
     }
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.error(`[TTS] OpenAI error ${response.status}:`, errText);
+    if (error || !data) {
+      console.error('[TTS] Edge Function error:', error);
       if (myGeneration !== generationId) { onDone?.(); return; }
       return fallbackSpeak(text, gender, speed, language, onDone, onError);
     }
 
-    // Read the audio response as a blob, convert to base64, save to a temp file
-    const arrayBuffer = await response.arrayBuffer();
+    // Edge Function returns: { audioBase64, format, size }
 
-    // ── Check if cancelled while reading response ──
+    const audioBase64 = data?.audioBase64;
+    if (!audioBase64) {
+      console.error('[TTS] No audio data returned');
+      if (myGeneration !== generationId) { onDone?.(); return; }
+      return fallbackSpeak(text, gender, speed, language, onDone, onError);
+    }
+
+    // ── Check if cancelled while processing response ──
     if (myGeneration !== generationId) {
-      console.log('[TTS] Cancelled (generation changed during response read)');
+      console.log('[TTS] Cancelled (generation changed during response processing)');
       onDone?.();
       return;
     }
 
-    const base64 = arrayBufferToBase64(arrayBuffer);
-    const tempFile = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
-    await FileSystem.writeAsStringAsync(tempFile, base64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    // Save base64 audio to temp file (via util commun)
+    const tempFile = await base64ToTempAudioFile(audioBase64, 'mp3');
 
     // ── Check if cancelled while writing file ──
     if (myGeneration !== generationId) {
@@ -195,7 +194,7 @@ export async function speakWithOpenAI(opts: SpeakOptions): Promise<void> {
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`🔊 OpenAI TTS audio ready (${elapsed}ms), playing...`);
+    console.log(`🔊 TTS audio ready (${elapsed}ms), playing...`);
 
     // Configure audio mode for playback
     await Audio.setAudioModeAsync({
@@ -244,7 +243,7 @@ export async function speakWithOpenAI(opts: SpeakOptions): Promise<void> {
       });
     });
   } catch (err) {
-    console.error('[TTS] OpenAI TTS error, falling back to device:', err);
+    console.error('[TTS] Edge Function error, falling back to device:', err);
     if (myGeneration !== generationId) { onDone?.(); return; }
     return fallbackSpeak(text, gender, speed, language, onDone, onError);
   }
@@ -262,7 +261,7 @@ function hashText(text: string, voice: TTSVoice, speed: number): string {
  * Call this in the background while the student is answering.
  */
 export async function prefetchTTS(text: string, gender: TTSGender = 'male', speed: number = 1.0): Promise<string | null> {
-  if (!OPENAI_API_KEY || !text) return null;
+  if (!text) return null;
   const voice = voiceForGender(gender);
   const key = hashText(text, voice, speed);
   if (audioCache.has(key)) {
@@ -272,19 +271,15 @@ export async function prefetchTTS(text: string, gender: TTSGender = 'male', spee
 
   try {
     console.log(`[TTS] Prefetching audio (${text.length} chars)...`);
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ model: 'tts-1', input: text, voice, speed, response_format: 'mp3' }),
+
+    const data = await invokeEdge('tts-generate', {
+      text,
+      voice,
+      format: 'mp3',
+      speed,
     });
-    if (!response.ok) return null;
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = arrayBufferToBase64(arrayBuffer);
-    const tempFile = `${FileSystem.cacheDirectory}tts_pre_${Date.now()}.mp3`;
-    await FileSystem.writeAsStringAsync(tempFile, base64, { encoding: FileSystem.EncodingType.Base64 });
+    if (!data?.audioBase64) return null;
+    const tempFile = await base64ToTempAudioFile(data.audioBase64, 'mp3');
     audioCache.set(key, tempFile);
     console.log('[TTS] Prefetch done, cached:', key.substring(0, 30));
     return tempFile;
@@ -331,17 +326,4 @@ function fallbackSpeak(
       },
     });
   });
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-/** Convert ArrayBuffer to base64 string */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  // React Native global btoa
-  return btoa(binary);
 }

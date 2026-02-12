@@ -27,24 +27,28 @@ CREATE INDEX IF NOT EXISTS idx_dictations_created_at ON public.dictations(user_i
 ALTER TABLE public.dictations ENABLE ROW LEVEL SECURITY;
 
 -- Politique : Les utilisateurs peuvent voir uniquement leurs propres dictées
+DROP POLICY IF EXISTS "Users can view their own dictations" ON public.dictations;
 CREATE POLICY "Users can view their own dictations"
   ON public.dictations
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent insérer leurs propres dictées
+DROP POLICY IF EXISTS "Users can insert their own dictations" ON public.dictations;
 CREATE POLICY "Users can insert their own dictations"
   ON public.dictations
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent mettre à jour leurs propres dictées
+DROP POLICY IF EXISTS "Users can update their own dictations" ON public.dictations;
 CREATE POLICY "Users can update their own dictations"
   ON public.dictations
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent supprimer leurs propres dictées
+DROP POLICY IF EXISTS "Users can delete their own dictations" ON public.dictations;
 CREATE POLICY "Users can delete their own dictations"
   ON public.dictations
   FOR DELETE
@@ -59,6 +63,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_dictations_updated_at ON public.dictations;
 CREATE TRIGGER update_dictations_updated_at
   BEFORE UPDATE ON public.dictations
   FOR EACH ROW

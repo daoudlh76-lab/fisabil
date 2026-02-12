@@ -26,6 +26,16 @@ export interface Subscription {
   expiryDate: Date | null;
   isActive: boolean;
   daysRemaining: number;
+  storeProvider?: 'apple' | 'google' | 'manual' | null;
+  autoRenew?: boolean;
+}
+
+export interface StoreReceiptPayload {
+  store: 'apple' | 'google';
+  receipt: string;       // Apple: base64 receipt data, Google: purchaseToken
+  productId: string;     // Store product ID
+  transactionId?: string;
+  packageName?: string;  // Required for Google Play
 }
 
 export interface PlanInfo {
@@ -113,7 +123,7 @@ export const useSubscription = () => {
         daysRemaining: sub.daysRemaining,
       }));
     } catch (e) {
-      console.error('[SUB] Error saving to local:', e);
+      if (__DEV__) console.error('[SUB] Error saving to local:', e);
     }
   }, []);
 
@@ -136,7 +146,7 @@ export const useSubscription = () => {
           });
         }
       } catch (e) {
-        console.error('[SUB] Error loading local cache:', e);
+        if (__DEV__) console.error('[SUB] Error loading local cache:', e);
       } finally {
         setIsLoaded(true);
       }
@@ -153,11 +163,11 @@ export const useSubscription = () => {
         const { data: session } = await supabase.auth.getSession();
         const userId = session.session?.user?.id;
         if (!userId) {
-          console.log('[SUB] No user session, using local cache');
+          if (__DEV__) console.log('[SUB] No user session, using local cache');
           return;
         }
 
-        console.log('[SUB] Syncing subscription from Supabase...');
+        if (__DEV__) console.log('[SUB] Syncing subscription from Supabase...');
         const { data, error } = await supabase
           .from('subscriptions')
           .select('*')
@@ -166,7 +176,7 @@ export const useSubscription = () => {
 
         if (error && error.code === 'PGRST116') {
           // No row found → create default subscription in Supabase
-          console.log('[SUB] No subscription found, creating default...');
+          if (__DEV__) console.log('[SUB] No subscription found, creating default...');
           const defaultSub = makeDefaultSubscription();
 
           const { error: insertError } = await supabase
@@ -180,9 +190,9 @@ export const useSubscription = () => {
             });
 
           if (insertError) {
-            console.error('[SUB] Error creating subscription:', insertError.message);
+            if (__DEV__) console.error('[SUB] Error creating subscription:', insertError.message);
           } else {
-            console.log('[SUB] Default subscription created in Supabase');
+            if (__DEV__) console.log('[SUB] Default subscription created in Supabase');
             setSubscription(defaultSub);
             await saveToLocal(defaultSub);
           }
@@ -190,17 +200,17 @@ export const useSubscription = () => {
         }
 
         if (error) {
-          console.error('[SUB] Supabase read error:', error.message);
+          if (__DEV__) console.error('[SUB] Supabase read error:', error.message);
           return; // Keep local cache
         }
 
         // Cloud data found → use it as source of truth
         const cloudSub = rowToSubscription(data);
-        console.log('[SUB] Cloud subscription loaded:', cloudSub.plan, 'active:', cloudSub.isActive, 'days:', cloudSub.daysRemaining);
+        if (__DEV__) console.log('[SUB] Cloud subscription loaded:', cloudSub.plan, 'active:', cloudSub.isActive, 'days:', cloudSub.daysRemaining);
         setSubscription(cloudSub);
         await saveToLocal(cloudSub);
       } catch (e) {
-        console.error('[SUB] Sync error (using local cache):', e);
+        if (__DEV__) console.error('[SUB] Sync error (using local cache):', e);
       }
     };
 
@@ -221,7 +231,7 @@ export const useSubscription = () => {
       const { data: session } = await supabase.auth.getSession();
       const userId = session.session?.user?.id;
       if (!userId) {
-        console.warn('[SUB] No user session, saved locally only');
+        if (__DEV__) console.warn('[SUB] No user session, saved locally only');
         return;
       }
 
@@ -236,12 +246,12 @@ export const useSubscription = () => {
         }, { onConflict: 'user_id' });
 
       if (error) {
-        console.error('[SUB] Supabase write error:', error.message);
+        if (__DEV__) console.error('[SUB] Supabase write error:', error.message);
       } else {
-        console.log('[SUB] ✅ Subscription synced to Supabase:', newSub.plan);
+        if (__DEV__) console.log('[SUB] ✅ Subscription synced to Supabase:', newSub.plan);
       }
     } catch (e) {
-      console.error('[SUB] Cloud save error:', e);
+      if (__DEV__) console.error('[SUB] Cloud save error:', e);
     } finally {
       isSyncing.current = false;
     }
@@ -262,7 +272,7 @@ export const useSubscription = () => {
 
   // ═══ Upgrade to plan → writes to Supabase + local ═══
   const upgradeToPlan = useCallback((plan: SubscriptionPlan) => {
-    console.log('🚀 upgradeToPlan called with:', plan);
+    if (__DEV__) console.log('🚀 upgradeToPlan called with:', plan);
     const now = new Date();
     let expiryDate: Date | null = null;
     let daysRemaining = FREE_TRIAL_DAYS;
@@ -283,9 +293,77 @@ export const useSubscription = () => {
       daysRemaining,
     };
 
-    console.log('💾 Saving subscription (cloud + local):', newSub);
+    if (__DEV__) console.log('💾 Saving subscription (cloud + local):', newSub);
     saveToCloud(newSub);
   }, [saveToCloud]);
+
+  // ═══ Verify Store Receipt (App Store / Google Play) ═══
+  // After IAP purchase, call this to validate the receipt server-side
+  const verifyStoreReceipt = useCallback(async (payload: StoreReceiptPayload): Promise<{
+    success: boolean;
+    plan?: SubscriptionPlan;
+    expiresDate?: string;
+    error?: string;
+  }> => {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const accessToken = session.session?.access_token;
+      if (!accessToken) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const res = await fetch(`${supabaseUrl}/functions/v1/verify-store-receipt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok || !result.success) {
+        if (__DEV__) console.error('[SUB] Store receipt verification failed:', result);
+        return { success: false, error: result.error || 'Verification failed' };
+      }
+
+      if (__DEV__) console.log('[SUB] ✅ Store receipt verified:', result.subscription);
+
+      // Refresh subscription from Supabase (source of truth)
+      const { data: subData } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', session.session?.user?.id)
+        .single();
+
+      if (subData) {
+        const updatedSub = rowToSubscription(subData);
+        setSubscription(updatedSub);
+        await saveToLocal(updatedSub);
+      }
+
+      return {
+        success: true,
+        plan: result.subscription?.plan as SubscriptionPlan,
+        expiresDate: result.subscription?.expiresDate,
+      };
+    } catch (e: any) {
+      if (__DEV__) console.error('[SUB] verifyStoreReceipt error:', e);
+      return { success: false, error: e?.message || 'Unknown error' };
+    }
+  }, [saveToLocal]);
+
+  // ═══ Restore Purchases (re-validate existing store subscription) ═══
+  const restorePurchases = useCallback(async (payload: StoreReceiptPayload): Promise<{
+    success: boolean;
+    error?: string;
+  }> => {
+    if (__DEV__) console.log('[SUB] Restoring purchases...');
+    const result = await verifyStoreReceipt(payload);
+    return { success: result.success, error: result.error };
+  }, [verifyStoreReceipt]);
 
   // ═══ Getters ═══
   const getFeatures = useCallback(() => FEATURES, []);
@@ -298,6 +376,8 @@ export const useSubscription = () => {
     subscription,
     hasFeatureAccess,
     upgradeToPlan,
+    verifyStoreReceipt,
+    restorePurchases,
     getFeatures,
     getPlans,
     getCurrentPlanInfo,

@@ -212,6 +212,7 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
+      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <Text style={styles.title}>{t('library.title')}</Text>
         <TouchableOpacity
@@ -232,7 +233,7 @@ export default function LibraryScreen() {
         autoCorrect={false}
       />
 
-      <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+      <View>
         {/* Dossiers créés par l'apprenant */}
         {folders.length > 0 && (
           <View style={styles.section}>
@@ -290,6 +291,7 @@ export default function LibraryScreen() {
             </Text>
           </View>
         )}
+      </View>
       </ScrollView>
 
       {/* Modal de création de dossier */}
@@ -359,7 +361,9 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "transparent" },
+  container: { flex: 1, backgroundColor: "transparent" },
+  scrollContainer: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 120 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -496,9 +500,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "white",
-  },
-  content: {
-    flex: 1,
   },
   section: {
     marginBottom: 24,

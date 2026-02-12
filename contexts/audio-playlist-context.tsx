@@ -1,6 +1,5 @@
-import { useVoicePreference } from '@/contexts/voice-preference-context';
+import { useVoicePreference, getVoiceOptionsForGender } from '@/contexts/voice-preference-context';
 import { supabase } from "@/src/lib/supabase";
-import { speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
 import * as Speech from 'expo-speech';
@@ -23,6 +22,7 @@ export interface AudioTrack {
   createdAt: Date;
   uri: string | null;
   folderId?: string | null; // Dossier dans lequel est rangé l'audio
+  scanId?: string | null;  // Lien vers le scan source (pour sync auto)
 }
 
 export interface PlaylistState {
@@ -35,7 +35,7 @@ export interface PlaylistState {
 
 interface AudioPlaylistContextType {
   playlist: PlaylistState;
-  addTrack: (title: string, text: string, audioUri: string | null, folderId?: string | null) => Promise<AudioTrack>;
+  addTrack: (title: string, text: string, audioUri: string | null, folderId?: string | null, scanId?: string | null) => Promise<AudioTrack>;
   removeTrack: (trackId: string) => void;
   selectTrack: (index: number) => void;
   togglePlayPause: () => Promise<void>;
@@ -46,6 +46,9 @@ interface AudioPlaylistContextType {
   formatTime: (seconds: number) => string;
   loadPlaylist: () => Promise<void>;
   updateTrackFolder: (trackId: string, folderId: string | null) => void;
+  updateTracksByScanId: (scanId: string, newTitle: string, newText: string, oldTitle?: string) => void;
+  updateTrackScanId: (trackId: string, scanId: string) => void;
+  updateTrackContent: (trackId: string, newTitle: string, newText: string) => void;
 }
 
 const AudioPlaylistContext = createContext<AudioPlaylistContextType | undefined>(undefined);
@@ -75,6 +78,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const speechIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isLoopingRef = useRef(false);
 
   const savePlaylist = useCallback(async (tracks: AudioTrack[]) => {
     try {
@@ -137,7 +141,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         speechIntervalRef.current = null;
       }
       Speech.stop().catch(() => {});
-      stopTTS().catch(() => {});
+      Speech.stop().catch(() => {});
     };
   }, []);
 
@@ -222,7 +226,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
   }, [playlist.tracks, playlist.currentTrackIndex, playlist.isLooping]);
 
   const addTrack = useCallback(
-    async (title: string, text: string, audioUri: string | null, folderId?: string | null) => {
+    async (title: string, text: string, audioUri: string | null, folderId?: string | null, scanId?: string | null) => {
       const newTrack: AudioTrack = {
         id: Date.now().toString(),
         title,
@@ -231,6 +235,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         createdAt: new Date(),
         uri: audioUri,
         folderId: folderId || null,
+        scanId: scanId || null,
       };
 
       console.log('🎵 addTrack appelé:', { id: newTrack.id, title, textLength: text.length, uri: audioUri });
@@ -276,6 +281,76 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
           t.id === trackId ? { ...t, folderId } : t
         );
         savePlaylist(newTracks);
+        return { ...prev, tracks: newTracks };
+      });
+    },
+    [savePlaylist]
+  );
+
+  // Met à jour le titre et le texte de toutes les pistes liées à un scan
+  const updateTracksByScanId = useCallback(
+    (scanId: string, newTitle: string, newText: string, oldTitle?: string) => {
+      setPlaylist((prev) => {
+        // 1. Chercher par scanId
+        const hasMatch = prev.tracks.some((t) => t.scanId === scanId);
+
+        if (hasMatch) {
+          const newTracks = prev.tracks.map((t) =>
+            t.scanId === scanId ? { ...t, title: newTitle, text: newText } : t
+          );
+          savePlaylist(newTracks);
+          console.log('🔄 Pistes audio mises à jour pour scanId:', scanId);
+          return { ...prev, tracks: newTracks };
+        }
+
+        // 2. Fallback : chercher par titre (pour les pistes créées avant le linkage scanId)
+        const titleToMatch = oldTitle || newTitle;
+        const titleMatch = prev.tracks.some(
+          (t) => !t.scanId && t.title === titleToMatch
+        );
+
+        if (titleMatch) {
+          const newTracks = prev.tracks.map((t) =>
+            !t.scanId && t.title === titleToMatch
+              ? { ...t, title: newTitle, text: newText, scanId }
+              : t
+          );
+          savePlaylist(newTracks);
+          console.log('🔄 Pistes mises à jour par titre (fallback) + scanId lié:', scanId);
+          return { ...prev, tracks: newTracks };
+        }
+
+        console.log('⚠️ Aucune piste trouvée pour scanId:', scanId, 'ni titre:', titleToMatch);
+        return prev;
+      });
+    },
+    [savePlaylist]
+  );
+
+  // Associe un scanId à une piste existante (après sauvegarde du scan)
+  const updateTrackScanId = useCallback(
+    (trackId: string, scanId: string) => {
+      setPlaylist((prev) => {
+        const newTracks = prev.tracks.map((t) =>
+          t.id === trackId ? { ...t, scanId } : t
+        );
+        savePlaylist(newTracks);
+        console.log('🔗 Piste', trackId, 'liée au scan:', scanId);
+        return { ...prev, tracks: newTracks };
+      });
+    },
+    [savePlaylist]
+  );
+
+  // Met à jour le titre et le texte d'une piste par son ID
+  const updateTrackContent = useCallback(
+    (trackId: string, newTitle: string, newText: string) => {
+      setPlaylist((prev) => {
+        const newTracks = prev.tracks.map((t) =>
+          t.id === trackId ? { ...t, title: newTitle, text: newText } : t
+        );
+        savePlaylist(newTracks);
+        console.log('📝 Piste', trackId, 'mise à jour:', newTitle);
         return { ...prev, tracks: newTracks };
       });
     },
@@ -355,7 +430,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         if (playlist.isPlaying) {
           // Arrêter la synthèse vocale
           console.log('⏸️ Stopping speech...');
-          await stopTTS();
+          await Speech.stop();
           if (speechIntervalRef.current) {
             clearInterval(speechIntervalRef.current);
             speechIntervalRef.current = null;
@@ -365,7 +440,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         } else {
           // Démarrer la synthèse vocale (OpenAI TTS natural voice)
           console.log('▶️ Starting speech (OpenAI TTS)...');
-          await stopTTS(); // Arrêter d'abord toute lecture en cours
+          await Speech.stop(); // Arrêter d'abord toute lecture en cours
 
           console.log(`🔊 Using ${gender === 'female' ? 'female' : 'male'} voice (OpenAI TTS)`);
 
@@ -399,39 +474,76 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
             });
           }, 1000);
 
-          await speakWithOpenAI({
-            text: track.text,
-            gender,
-            speed: 0.9,
-            language: 'ar-SA',
-            onDone: () => {
-              console.log('🔊 Speech finished');
-              if (speechIntervalRef.current) {
-                clearInterval(speechIntervalRef.current);
-                speechIntervalRef.current = null;
-              }
-              setPlaylist((prev) => ({ ...prev, isPlaying: false, currentPosition: 0 }));
+          const replaySpeech = () => {
+            // Clear previous timer
+            if (speechIntervalRef.current) {
+              clearInterval(speechIntervalRef.current);
+              speechIntervalRef.current = null;
+            }
 
-              // Passer à la piste suivante si looping activé
-              if (playlist.isLooping && playlist.tracks.length > 1) {
-                const nextIndex = (playlist.currentTrackIndex + 1) % playlist.tracks.length;
-                setPlaylist((prev) => ({
-                  ...prev,
-                  currentTrackIndex: nextIndex,
-                  currentPosition: 0,
-                  isPlaying: true
-                }));
-              }
-            },
-            onError: (err) => {
-              console.error('❌ Speech error:', err);
-              if (speechIntervalRef.current) {
-                clearInterval(speechIntervalRef.current);
-                speechIntervalRef.current = null;
-              }
-              setPlaylist((prev) => ({ ...prev, isPlaying: false }));
-            },
-          });
+            // Re-estimate duration
+            const wc = track.text.split(/\s+/).length;
+            const estDur = Math.ceil((wc / 150) * 60);
+            let pos = 0;
+            speechIntervalRef.current = setInterval(() => {
+              pos += 1;
+              setPlaylist((prev) => {
+                if (pos >= estDur || !prev.isPlaying) {
+                  if (speechIntervalRef.current) {
+                    clearInterval(speechIntervalRef.current);
+                    speechIntervalRef.current = null;
+                  }
+                  return { ...prev, currentPosition: estDur };
+                }
+                return { ...prev, currentPosition: pos };
+              });
+            }, 1000);
+
+            // Utiliser expo-speech LOCAL - même voix que le tuteur et la dictée
+            const voiceOptions = getVoiceOptionsForGender(gender);
+
+            Speech.speak(track.text, {
+              language: 'ar',
+              pitch: voiceOptions.pitch,
+              rate: 0.9 * 0.85, // Ajuster le rate avec la vitesse
+              onDone: () => {
+                console.log('🔊 Speech finished');
+                if (speechIntervalRef.current) {
+                  clearInterval(speechIntervalRef.current);
+                  speechIntervalRef.current = null;
+                }
+
+                // Utiliser la ref pour éviter la stale closure
+                if (isLoopingRef.current) {
+                  console.log('🔄 Looping: relance de la lecture');
+                  setPlaylist((prev) => {
+                    if (prev.tracks.length > 1) {
+                      // Plusieurs pistes → passer à la suivante
+                      const nextIdx = (prev.currentTrackIndex + 1) % prev.tracks.length;
+                      return { ...prev, currentTrackIndex: nextIdx, currentPosition: 0, isPlaying: true };
+                    } else {
+                      // Une seule piste → relire la même
+                      return { ...prev, currentPosition: 0, isPlaying: true };
+                    }
+                  });
+                  // Relancer la lecture après un court délai
+                  setTimeout(() => replaySpeech(), 500);
+                } else {
+                  setPlaylist((prev) => ({ ...prev, isPlaying: false, currentPosition: 0 }));
+                }
+              },
+              onError: (err) => {
+                console.error('❌ Speech error:', err);
+                if (speechIntervalRef.current) {
+                  clearInterval(speechIntervalRef.current);
+                  speechIntervalRef.current = null;
+                }
+                setPlaylist((prev) => ({ ...prev, isPlaying: false }));
+              },
+            }).catch(console.error);
+          };
+
+          replaySpeech();
 
           console.log('✅ Speech started');
         }
@@ -466,6 +578,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
   const toggleLooping = useCallback(() => {
     setPlaylist((prev) => {
       const newLooping = !prev.isLooping;
+      isLoopingRef.current = newLooping;
       // Applique immédiatement au player si chargé
       if (soundRef.current) {
         soundRef.current.setIsLoopingAsync(newLooping).catch(() => {});
@@ -485,7 +598,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         await soundRef.current.setPositionAsync(0).catch(() => {});
       }
       // Stop TTS playback
-      await stopTTS();
+      await Speech.stop();
       // Stop speech interval timer
       if (speechIntervalRef.current) {
         clearInterval(speechIntervalRef.current);
@@ -519,6 +632,9 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
       formatTime,
       loadPlaylist,
       updateTrackFolder,
+      updateTracksByScanId,
+      updateTrackScanId,
+      updateTrackContent,
     }),
     [
       playlist,
@@ -533,6 +649,9 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
       formatTime,
       loadPlaylist,
       updateTrackFolder,
+      updateTracksByScanId,
+      updateTrackScanId,
+      updateTrackContent,
     ]
   );
 

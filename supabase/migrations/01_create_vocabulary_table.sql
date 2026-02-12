@@ -18,24 +18,28 @@ CREATE INDEX IF NOT EXISTS idx_vocabulary_word ON public.vocabulary(word);
 ALTER TABLE public.vocabulary ENABLE ROW LEVEL SECURITY;
 
 -- Politique : Les utilisateurs peuvent voir uniquement leur propre vocabulaire
+DROP POLICY IF EXISTS "Users can view their own vocabulary" ON public.vocabulary;
 CREATE POLICY "Users can view their own vocabulary"
   ON public.vocabulary
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent insérer leur propre vocabulaire
+DROP POLICY IF EXISTS "Users can insert their own vocabulary" ON public.vocabulary;
 CREATE POLICY "Users can insert their own vocabulary"
   ON public.vocabulary
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent mettre à jour leur propre vocabulaire
+DROP POLICY IF EXISTS "Users can update their own vocabulary" ON public.vocabulary;
 CREATE POLICY "Users can update their own vocabulary"
   ON public.vocabulary
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent supprimer leur propre vocabulaire
+DROP POLICY IF EXISTS "Users can delete their own vocabulary" ON public.vocabulary;
 CREATE POLICY "Users can delete their own vocabulary"
   ON public.vocabulary
   FOR DELETE
@@ -50,6 +54,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_vocabulary_updated_at ON public.vocabulary;
 CREATE TRIGGER update_vocabulary_updated_at
   BEFORE UPDATE ON public.vocabulary
   FOR EACH ROW

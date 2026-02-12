@@ -1,249 +1,330 @@
-import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+// supabase/functions/extract-vocab/index.ts
+// Edge Function Supabase (Deno)
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+type RequestBody = {
+  scan_id: string;
+  ui_lang?: string;
 };
 
-// Mapping des langues pour les traductions
-const languageNames: Record<string, string> = {
-  fr: "French",
-  en: "English",
-  de: "German",
-  es: "Spanish",
-  ru: "Russian",
-};
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
 
-serve(async (req) => {
-  // Handle CORS
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...corsHeaders(),
+    },
+  });
+}
+
+Deno.serve(async (req) => {
+  // ✅ CORS preflight
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders() });
+
+  if (req.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405);
   }
 
   try {
-    // 1) Récupérer le token d'auth
+    // ✅ ENV
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
+
+    console.log("[extract-vocab] OPENAI_API_KEY present?", Boolean(OPENAI_API_KEY));
+    console.log("[extract-vocab] SUPABASE_URL present?", Boolean(SUPABASE_URL));
+    console.log("[extract-vocab] OPENAI_MODEL:", OPENAI_MODEL);
+
+    if (!SUPABASE_URL) return json({ error: "Missing env SUPABASE_URL" }, 500);
+    if (!SUPABASE_SERVICE_ROLE_KEY) return json({ error: "Missing env SUPABASE_SERVICE_ROLE_KEY" }, 500);
+    if (!OPENAI_API_KEY) {
+      return json(
+        {
+          error: "Missing env OPENAI_API_KEY",
+          hint: "Supabase Dashboard > Edge Functions > Secrets: ajouter OPENAI_API_KEY puis redeploy.",
+        },
+        500
+      );
+    }
+
+    // ✅ Auth check
     const authHeader = req.headers.get("Authorization") || "";
-    const token = authHeader.replace("Bearer ", "");
-
-    if (!token) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!authHeader.toLowerCase().startsWith("bearer ")) {
+      return json({ error: "Missing Authorization Bearer token" }, 401);
     }
 
-    // 2) Parser le body
-    const { scan_id, ui_lang = "fr" } = await req.json();
+    // Dynamic import for Supabase client
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.38.4");
 
-    if (!scan_id) {
-      return new Response(
-        JSON.stringify({ error: "Missing scan_id" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Create admin client with SERVICE_ROLE_KEY (without Authorization header)
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    // Extract and verify user from JWT manually
+    const jwt = authHeader.replace(/^bearer\s+/i, "");
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(jwt);
+    if (userError || !userData?.user) {
+      console.log("[extract-vocab] Auth error:", userError?.message);
+      return json({ error: "Unauthorized", details: userError?.message ?? "Invalid token" }, 401);
     }
 
-    // 3) Créer client Supabase
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    console.log("[extract-vocab] Authenticated user:", userData.user.id);
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Use admin client for DB operations (RLS will still apply based on user_id checks)
+    const supabase = supabaseAdmin;
 
-    // 4) Récupérer le scan
+    // ✅ Parse body
+    const body = (await req.json()) as RequestBody;
+
+    if (!body?.scan_id || typeof body.scan_id !== "string") {
+      return json({ error: "Invalid payload: scan_id required" }, 400);
+    }
+
     const { data: scan, error: scanError } = await supabase
       .from("scans")
       .select("id, title, content, user_id")
-      .eq("id", scan_id)
+      .eq("id", body.scan_id)
       .single();
 
     if (scanError || !scan) {
-      return new Response(
-        JSON.stringify({ error: "Scan not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({ error: "Scan not found" }, 404);
     }
 
-    // 5) Vérifier que l'utilisateur connecté est le propriétaire
-    const { data: userData, error: userError } = await supabase.auth.getUser(token);
-    if (userError || userData.user?.id !== scan.user_id) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (userData.user.id !== scan.user_id) {
+      return json({ error: "Forbidden - You don't own this scan" }, 403);
     }
 
-    // 6) EXTRACTION AVEC OPENAI GPT-4
-    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
-    
-    if (!openaiApiKey) {
-      console.error("❌ OPENAI_API_KEY not configured");
-      return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const uiLang = body.ui_lang || "fr";
+    const targetLang = uiLang === "fr" ? "French" : "English";
 
-    const targetLanguage = languageNames[ui_lang] || "French";
-    
-    const systemPrompt = `You are an expert Arabic linguist and grammarian. Extract EVERY SINGLE WORD from the text with FULL TASHKEEL.
+    const systemPrompt = `You are an expert Arabic linguist specialized in exhaustive vocabulary extraction for language learners.
 
-## CRITICAL: ADD VOWELS IF MISSING
-The input text may or may not have diacritics (tashkeel). You MUST:
-1. If the word already has diacritics → preserve them
-2. If the word has NO diacritics → ADD FULL TASHKEEL based on Arabic grammar rules:
-   - Fatha (فَتْحَة), Damma (ضَمَّة), Kasra (كَسْرَة)
-   - Sukun (سُكُون), Shadda (شَدَّة)
-   - Tanween (تَنْوِين): ً ٌ ٍ
+TASK: Extract EVERY UNIQUE WORD from the Arabic text without exception.
 
-Example: "الحمد لله رب العالمين" → Extract as "الْحَمْدُ"، "لِلَّهِ"، "رَبُّ"، "الْعَالَمِينَ"
+CRITICAL RULES:
+- Extract EVERY word that appears in the text (nouns, verbs, adjectives, particles, pronouns)
+- NO DUPLICATES - each unique word appears only once
+- Do NOT filter or skip any words - extract EVERYTHING
+- Add full tashkeel (diacritics) to ALL Arabic words
+- Provide accurate ${targetLang} translations
 
-## DECOMPOSE COMPOUND WORDS
-- بالكتاب → بِ (particle) + الْ (particle) + كِتَابٌ (noun)
-- وقال → وَ (particle) + قَالَ (verb)
-- ربهم → رَبٌّ (noun) + note suffix ـهُمْ in remarque
+⚠️ ABSOLUTE CATEGORIZATION RULES - VIOLATION = CRITICAL ERROR:
 
-## PREFIXES TO EXTRACT AS PARTICLES:
-وَ، فَ، بِ، لِ، كَ، الْ، سَ، أَ، هَلْ
+1. "vocabulaire" array = ONLY nouns (اسم) and adjectives (صفة)
+   ✅ CORRECT: كِتَابٌ (book), مَدْرَسَةٌ (school), كَبِيرٌ (big), جَمِيلٌ (beautiful)
+   ✅ Test: Can you ask "What is this?" → It's a noun/adjective
+   ❌ FORBIDDEN: ANY word that shows action (verb)
+   ❌ FORBIDDEN: ANY word with verb conjugations (ذَهَبَ, يَذْهَبُ, etc.)
 
-## WHAT TO EXTRACT:
-1. **vocabulaire**: ALL nouns, adjectives, adverbs (base form with full tashkeel)
-2. **verbes**: ALL verbs (past 3rd masc sing with tashkeel)
-3. **particules**: ALL particles with tashkeel
+   🔴 MANDATORY FIELDS - NEVER LEAVE NULL UNLESS IMPOSSIBLE:
+   - "pluriel": REQUIRED for ALL nouns (only null for invariable words like أَمْسِ)
+   - "contraire": REQUIRED for ALL adjectives and quality nouns
+     Examples requiring contraire:
+     • كَبِيرٌ → صَغِيرٌ (big → small)
+     • جَمِيلٌ → قَبِيحٌ (beautiful → ugly)
+     • طَوِيلٌ → قَصِيرٌ (tall → short)
+     • حَارٌّ → بَارِدٌ (hot → cold)
+     • سَهْلٌ → صَعْبٌ (easy → difficult)
+     • نَظِيفٌ → قَذِرٌ (clean → dirty)
+     • جَدِيدٌ → قَدِيمٌ (new → old)
+     • سَرِيعٌ → بَطِيءٌ (fast → slow)
+   - If you cannot find an obvious antonym, provide a related opposite concept
+   - Only use null for contraire if the word is truly non-opposable (proper nouns, unique concepts)
 
-## SINGULIER/PLURIEL - CRITICAL:
-For EVERY noun in vocabulaire, you MUST provide:
-- **traduction**: Translation of the SINGULAR form in ${targetLanguage}
-- **singulier**: The SINGULAR form WITH FULL TASHKEEL (e.g., "كِتَابٌ")
-- **pluriel**: The plural form WITH FULL TASHKEEL (e.g., "كُتُبٌ")
-- **contraire**: The opposite/antonym WITH FULL TASHKEEL or null
-- **remarque**: If word appeared as plural in text, note it: "Appeared as [plural] in text"
+2. "verbes" array = ONLY verbs (فعل) - words that express ACTION
+   ✅ CORRECT: ذَهَبَ (went/to go), كَتَبَ (wrote/to write), قَالَ (said/to say)
+   ✅ Test: Does it express an action? Can you conjugate it? → It's a verb
+   ❌ FORBIDDEN: Nouns (كِتَابٌ), adjectives (كَبِيرٌ), particles (مِنْ)
 
-Examples:
-- Text has "الْعَالَمِينَ" (plural) → traduction: "world", singulier: "عَالَمٌ", pluriel: "عَالَمُونَ / عَوَالِمُ", remarque: "Appeared as الْعَالَمِينَ in text"
-- Text has "كِتَابٌ" (singular) → traduction: "book", singulier: "كِتَابٌ", pluriel: "كُتُبٌ"
-- Text has "رِجَالٌ" (plural) → traduction: "man", singulier: "رَجُلٌ", pluriel: "رِجَالٌ", remarque: "Appeared as رِجَالٌ in text"
+   🔴 CRITICAL VERB FORM RULES - ERRORS HERE ARE UNACCEPTABLE:
+   - "passe_3ms": MUST be فَعَلَ form (past tense, 3rd person masculine singular)
+     ✅ CORRECT examples:
+     • ذَهَبَ (he went) - NOT يَذْهَبُ or اِذْهَبْ
+     • كَتَبَ (he wrote) - NOT يَكْتُبُ or اُكْتُبْ
+     • قَرَأَ (he read) - NOT يَقْرَأُ or اِقْرَأْ
+     • جَلَسَ (he sat) - NOT يَجْلِسُ or اِجْلِسْ
+     • شَرِبَ (he drank) - NOT يَشْرَبُ or اِشْرَبْ
+     ❌ WRONG: Using present (يَفْعَلُ) or imperative (اِفْعَلْ) in passe_3ms field
 
-## RULES:
-- EVERY Arabic word in output MUST have FULL TASHKEEL
-- NO duplicates (each unique singular form once)
-- Include EVERY word - proper nouns, numbers, everything
-- For nouns: traduction translates the SINGULAR, singulier is the singular form
-- For verbs: NO verbe_ar field, use passe_3ms, present_3ms, imperatif
-- ALWAYS fill singulier AND pluriel for nouns
-- ALWAYS provide contraire when it exists
-- Return ONLY valid JSON, no markdown
+   - "present_3ms": MUST be يَفْعَلُ form (present tense, 3rd person masculine singular)
+     ✅ CORRECT: يَذْهَبُ, يَكْتُبُ, يَقْرَأُ, يَجْلِسُ, يَشْرَبُ
 
-## JSON FORMAT:
+   - "imperatif": MUST be فِعْلْ/اِفْعَلْ form (imperative, 2nd person masculine singular)
+     ✅ CORRECT: اِذْهَبْ, اُكْتُبْ, اِقْرَأْ, اِجْلِسْ, اِشْرَبْ
+
+   🔴 VERIFICATION: Before adding a verb, verify that:
+   - passe_3ms does NOT start with يَ or contain ـُ/ـِ/ـَ at the end
+   - present_3ms MUST start with يَ
+   - All three forms are DIFFERENT from each other
+
+3. "particules" array = ONLY function words (حرف) - prepositions, conjunctions, pronouns
+   ✅ CORRECT: مِنْ (from), إِلَى (to), فِي (in), هُوَ (he), هِيَ (she), وَ (and), لِ (for)
+   ✅ Test: Is it a grammatical particle? A pronoun? → It's a particle
+   ❌ FORBIDDEN: Nouns, verbs, adjectives
+
+⚠️ DOUBLE-CHECK BEFORE ADDING:
+- If a word describes ACTION → "verbes" ONLY
+- If a word is a THING or QUALITY → "vocabulaire" ONLY
+- If a word is a FUNCTION WORD → "particules" ONLY
+
+OUTPUT FORMAT (JSON only, no markdown):
 {
-  "vocabulaire": [{"traduction":"${targetLanguage} translation of singular", "singulier":"singular WITH tashkeel", "pluriel":"plural WITH tashkeel or null", "contraire":"opposite WITH tashkeel or null", "remarque":"note or null"}],
-  "verbes": [{"traduction":"${targetLanguage} translation", "passe_3ms":"past WITH tashkeel", "present_3ms":"present WITH tashkeel", "imperatif":"imperative WITH tashkeel", "remarque":"note or null"}],
-  "particules": [{"particule_ar":"particle WITH tashkeel", "type":"type", "traduction":"${targetLanguage} meaning", "exemple":"example or null"}]
+  "vocabulaire": [
+    {
+      "singulier": "noun/adjective with full tashkeel",
+      "traduction": "${targetLang} translation",
+      "pluriel": "plural form with tashkeel (null only if word has no plural)",
+      "contraire": "opposite/antonym with tashkeel (null only if no opposite exists)",
+      "remarque": "grammatical note or context (null if not needed)"
+    }
+  ],
+  "verbes": [
+    {
+      "passe_3ms": "past 3ms with tashkeel",
+      "present_3ms": "present 3ms with tashkeel",
+      "imperatif": "imperative with tashkeel",
+      "traduction": "${targetLang} infinitive",
+      "remarque": "verb pattern or note (null if not needed)"
+    }
+  ],
+  "particules": [
+    {
+      "particule_ar": "particle with tashkeel",
+      "type": "preposition/conjunction/pronoun/demonstrative/etc",
+      "traduction": "${targetLang} meaning",
+      "exemple": "usage example with the particle (null if not needed)"
+    }
+  ]
 }`;
 
-    const userPrompt = `Extract EVERY SINGLE WORD from this Arabic text with FULL TASHKEEL (vowels).
+    const userPrompt = `Extract EVERY UNIQUE WORD from this Arabic text. Do not skip any words. Include ALL nouns, ALL verbs, ALL particles, ALL pronouns.
 
-CRITICAL: If a word has no diacritics, ADD THEM according to Arabic grammar.
+Title: "${scan.title}"
 
-Steps for each word:
-1. Read the word
-2. If it has no tashkeel → ADD full tashkeel based on grammar
-3. If compound (وَ، فَ، بِ، لِ، الْ prefix or ـهُ suffix) → decompose it
-4. Add base word (WITH tashkeel) to vocabulaire/verbes
-5. Add particles (WITH tashkeel) to particules
-
-TEXT:
-"""
+Text:
 ${scan.content}
-"""
 
-IMPORTANT:
-- Text has ~${scan.content.split(/\s+/).length} words - extract ALL of them
-- EVERY Arabic word in output MUST have FULL TASHKEEL
-- Example: "كتاب" without vowels → output as "كِتَابٌ" with vowels
-Return complete JSON.`;
+CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:
+1. Read the entire text word by word
+2. Extract EVERY unique word (no duplicates)
+3. For EACH word, ask yourself:
+   a) Does it express an ACTION? → Put in "verbes" array with 3 forms
+   b) Is it a THING or QUALITY (noun/adjective)? → Put in "vocabulaire" array
+   c) Is it a FUNCTION WORD (preposition/pronoun)? → Put in "particules" array
+4. VERIFICATION STEP - Before finalizing:
+   - Check "vocabulaire" array: Are there ANY verbs? → MOVE THEM to "verbes"
+   - Check "verbes" array: Are there ANY nouns? → MOVE THEM to "vocabulaire"
+   - A verb in "vocabulaire" is a CRITICAL ERROR - NEVER ALLOW THIS
+5. Add full tashkeel to each word
+6. Provide ${targetLang} translation
+7. VERB FORMS VERIFICATION - CRITICAL:
+   For EVERY verb in "verbes" array, verify:
+   - "passe_3ms" is فَعَلَ form (past 3ms): ذَهَبَ, كَتَبَ, قَرَأَ, جَلَسَ, شَرِبَ
+     • MUST NOT start with يَ
+     • MUST NOT be present or imperative form
+   - "present_3ms" is يَفْعَلُ form (present 3ms): يَذْهَبُ, يَكْتُبُ, يَقْرَأُ
+     • MUST start with يَ
+   - "imperatif" is اِفْعَلْ form (imperative): اِذْهَبْ, اُكْتُبْ, اِقْرَأْ
+   - All 3 forms are DIFFERENT from each other
+8. For EVERY WORD in "vocabulaire":
+   - MANDATORY "pluriel": Provide plural form for ALL nouns (null only for invariable words)
+   - MANDATORY "contraire": Provide antonym for ALL adjectives and quality nouns
+   - Examples of required antonyms:
+     • كَبِيرٌ MUST have صَغِيرٌ
+     • جَمِيلٌ MUST have قَبِيحٌ
+     • طَوِيلٌ MUST have قَصِيرٌ
+     • سَهْلٌ MUST have صَعْبٌ
+     • حَارٌّ MUST have بَارِدٌ
+   - If direct antonym doesn't exist, provide related opposite concept
+   - Only use null if word is truly non-opposable (proper nouns, unique entities)
 
-    console.log("📡 Calling OpenAI GPT-4 for vocabulary extraction...");
+EXAMPLES OF COMMON MISTAKES TO AVOID:
+❌ WRONG: Putting ذَهَبَ (went) in "vocabulaire" → ✅ CORRECT: Put in "verbes"
+❌ WRONG: Putting كِتَابٌ (book) in "verbes" → ✅ CORRECT: Put in "vocabulaire"
+❌ WRONG: Using يَذْهَبُ in "passe_3ms" field → ✅ CORRECT: Use ذَهَبَ (past form)
+❌ WRONG: Using اِذْهَبْ in "passe_3ms" field → ✅ CORRECT: Use ذَهَبَ (past form)
+❌ WRONG: Verb forms that are all identical → ✅ CORRECT: 3 different forms
 
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+Return ONLY the JSON object, no markdown, no comments, no explanation.`;
+
+    // ✅ Call OpenAI with higher token limit for complete extraction
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${openaiApiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
+        max_tokens: 16000,  // ✅ Maximum pour gpt-4o-mini (128k context, 16k output)
         temperature: 0.1,
-        max_tokens: 16384,
+        response_format: { type: "json_object" },  // ✅ Force JSON valide
       }),
     });
 
-    if (!openaiResponse.ok) {
-      const errorData = await openaiResponse.json();
-      console.error("❌ OpenAI API error:", errorData);
-      return new Response(
-        JSON.stringify({ error: errorData.error?.message || "OpenAI API error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    if (!r.ok) {
+      const raw = await r.text();
+      console.log("[extract-vocab] OpenAI status:", r.status);
+      console.log("[extract-vocab] OpenAI body:", raw.slice(0, 500));
 
-    const openaiData = await openaiResponse.json();
-    const content = openaiData.choices?.[0]?.message?.content || "";
-
-    console.log("✅ OpenAI response received, parsing JSON...");
-
-    // Parser la réponse JSON
-    let extractedData;
-    try {
-      // Nettoyer la réponse (enlever les backticks markdown si présents)
-      let cleanContent = content.trim();
-      if (cleanContent.startsWith("```json")) {
-        cleanContent = cleanContent.slice(7);
-      }
-      if (cleanContent.startsWith("```")) {
-        cleanContent = cleanContent.slice(3);
-      }
-      if (cleanContent.endsWith("```")) {
-        cleanContent = cleanContent.slice(0, -3);
-      }
-      cleanContent = cleanContent.trim();
-
-      extractedData = JSON.parse(cleanContent);
-    } catch (parseError) {
-      console.error("❌ JSON parsing error:", parseError);
-      console.error("Raw content:", content);
-      return new Response(
-        JSON.stringify({ error: "Failed to parse AI response" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // 7) Retourner le résultat
-    return new Response(
-      JSON.stringify({
-        meta: {
-          ui_lang,
-          title: scan.title,
-          source: "extract-vocab-v1",
-          model: "gpt-4o",
+      return json(
+        {
+          error: "OpenAI failed",
+          status: r.status,
+          details: raw.slice(0, 500),
         },
-        vocabulaire: extractedData.vocabulaire || [],
-        verbes: extractedData.verbes || [],
-        particules: extractedData.particules || [],
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  } catch (error) {
-    console.error("Error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+        500
+      );
+    }
+
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content ?? "";
+
+    console.log("[extract-vocab] OpenAI response length:", content.length);
+    console.log("[extract-vocab] Content preview:", content.slice(0, 200));
+
+    if (!content || content.trim().length === 0) {
+      console.log("[extract-vocab] Empty response from OpenAI");
+      return json({
+        error: "Empty response from OpenAI",
+        data: data
+      }, 500);
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(content.replace(/```json\n?/g, "").replace(/```\n?/g, ""));
+    } catch (parseError) {
+      console.log("[extract-vocab] Parse error:", String(parseError));
+      console.log("[extract-vocab] Raw content:", content.slice(0, 1000));
+      return json({
+        error: "Failed to parse OpenAI response",
+        parseError: String(parseError),
+        contentPreview: content.slice(0, 500)
+      }, 500);
+    }
+
+    return json({
+      vocabulaire: parsed.vocabulaire || [],
+      verbes: parsed.verbes || [],
+      particules: parsed.particules || [],
+    });
+  } catch (e) {
+    console.log("[extract-vocab] Runtime error:", String(e));
+    return json({ error: "Runtime error", message: String(e) }, 500);
   }
 });

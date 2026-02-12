@@ -1,0 +1,148 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║              🚀 FISABIL - CHECKLIST DÉPLOIEMENT FINAL                        ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 1: DÉPLOYER EDGE FUNCTION (OBLIGATOIRE)                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Commande:
+  ─────────
+  cd /Users/daoudlh/fisabil
+  npx supabase functions deploy delete-account
+
+  Vérification:
+  ─────────────
+  npx supabase functions list
+  → Doit afficher "delete-account" avec status ACTIVE
+
+  Documentation:
+  ──────────────
+  Voir: ACCOUNT_DELETION_DEPLOYMENT.md
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 2: TESTER LA SUPPRESSION                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  1. Créer compte test:
+     Email: test-delete@fisabil.fr
+     Password: TestDelete123!
+
+  2. Tester dans l'app:
+     Settings → "Supprimer mon compte"
+     → Suivre toutes les étapes
+     → Compte doit être supprimé + déconnexion auto
+
+  3. Vérifier suppression:
+     → Essayer de se reconnecter (doit échouer)
+     → Supabase Dashboard → Auth (compte absent)
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 3: DÉPLOYER PRIVACY POLICY                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Fichier: privacy-policy.html
+  Upload sur: Hostinger
+  URL: https://fisabil.fr/privacy
+
+  Guide: PRIVACY_POLICY_DEPLOYMENT.md
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 4: CRÉER COMPTE REVIEWER                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Dans Supabase Dashboard → Authentication:
+  Email: reviewer@fisabil.fr
+  Password: TestReview2026!
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 5: BUILD PRODUCTION                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  iOS:
+  ────
+  eas build --platform ios --profile production
+
+  Android:
+  ────────
+  eas build --platform android --profile production
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 6: SOUMETTRE STORES                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  App Store Connect:
+  ──────────────────
+  → Privacy Policy URL: https://fisabil.fr/privacy
+  → AI Disclosure: Copier depuis COMPLIANCE_CHECKLIST.md section 9
+  → Review Notes: Copier depuis COMPLIANCE_CHECKLIST.md section 10
+  → Sign-in: reviewer@fisabil.fr / TestReview2026!
+
+  Google Play Console:
+  ────────────────────
+  → Privacy Policy: https://fisabil.fr/privacy
+  → Data Safety: Remplir depuis COMPLIANCE_CHECKLIST.md
+  → AI Disclosure: Copier depuis COMPLIANCE_CHECKLIST.md section 9
+  → App Access: reviewer@fisabil.fr / TestReview2026!
+
+  Guide complet: COMPLIANCE_SUMMARY.md
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ CONFORMITÉ - STATUS FINAL                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Apple App Store:
+  ────────────────
+  ✅ Account Deletion (server-side Edge Function)
+  ✅ Privacy Policy URL publique
+  ✅ AI Transparency screen
+  ✅ No hardcoded API keys
+  ✅ Server-side OpenAI calls only
+  ✅ Permissions descriptions
+  ✅ Dark mode support
+
+  Google Play:
+  ────────────
+  ✅ Privacy Policy URL
+  ✅ Data Safety form ready
+  ✅ AI Disclosure ready
+  ✅ Account deletion feature
+  ✅ Minimal permissions
+
+  → CONFORMITÉ: 100% ✅
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ DOCUMENTATION                                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Démarrage rapide:
+  ─────────────────
+  📄 DEPLOYMENT_CHECKLIST.txt (ce fichier)
+  📄 COMPLIANCE_STATUS.txt
+
+  Guides techniques:
+  ──────────────────
+  📄 ACCOUNT_DELETION_DEPLOYMENT.md    → Déploiement Edge Function
+  📄 COMPLIANCE_SUMMARY.md             → Guide soumission stores
+  📄 COMPLIANCE_CHECKLIST.md           → Checklist + textes stores
+  
+  Documentation Edge Function:
+  ────────────────────────────
+  📄 supabase/functions/delete-account/README.md
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║  NEXT: npx supabase functions deploy delete-account                         ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝

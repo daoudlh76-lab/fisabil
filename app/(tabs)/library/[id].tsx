@@ -15,7 +15,8 @@ import {
 import { supabase } from "@/src/lib/supabase";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
-import { extractVocabulary, isVocabExtractionConfigured, completeWordInfo, VocabItem, VerbItem, ParticleItem } from "@/src/lib/extract-vocabulary";
+import { useAudioPlaylistContext } from "@/contexts/audio-playlist-context";
+import { extractVocabularyFromText, VocabItem, VerbItem, ParticleItem } from "@/src/lib/extract-vocabulary";
 import { migrateExtractVocabResult, needsMigration } from "@/src/lib/migrate-vocab-data";
 
 type ScanRow = {
@@ -34,12 +35,17 @@ type Folder = {
   icon: string;
 };
 
+// Incrémenter cette version quand le prompt d'extraction change
+// pour invalider les caches obsolètes (ex: traductions en mauvaise langue)
+const VOCAB_PROMPT_VERSION = 2;
+
 type ExtractResponse = {
   meta?: {
     ui_lang?: string;
     title?: string;
     source?: string;
     model?: string;
+    prompt_version?: number;
   };
   vocabulaire: VocabItem[];
   verbes: VerbItem[];
@@ -71,6 +77,7 @@ export default function LibraryItemScreen() {
   // --- Diacritics
   const { addDiacriticsToWord } = useDiacritics();
   const { t, language } = useLanguage();
+  const { updateTracksByScanId } = useAudioPlaylistContext();
   // Langue UI
   const uiLang = language;
 
@@ -167,9 +174,15 @@ export default function LibraryItemScreen() {
 
         if (cached?.payload) {
           const data = cached.payload as ExtractResponse;
-          // Migrer automatiquement si nécessaire
-          const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
-          setAiData(migratedData);
+          // Ignorer le cache si le prompt a changé (ex: fix des traductions en mauvaise langue)
+          if ((data.meta?.prompt_version || 0) < VOCAB_PROMPT_VERSION) {
+            console.log('🔄 Cache obsolète (v' + (data.meta?.prompt_version || 0) + ' < v' + VOCAB_PROMPT_VERSION + '), régénération...');
+            // Ne pas charger le cache obsolète — generateVocab sera appelé par le useEffect
+          } else {
+            // Migrer automatiquement si nécessaire
+            const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
+            setAiData(migratedData);
+          }
         }
       } catch {
         // si table cache non créée, pas grave
@@ -226,11 +239,16 @@ export default function LibraryItemScreen() {
 
           if (cached?.payload) {
             const data = cached.payload as ExtractResponse;
-            // Migrer automatiquement si nécessaire
-            const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
-            setAiData(migratedData);
+            // Ignorer le cache si le prompt a changé
+            if ((data.meta?.prompt_version || 0) < VOCAB_PROMPT_VERSION) {
+              console.log('🔄 Cache obsolète, régénération...');
+              generateVocab();
+            } else {
+              const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
+              setAiData(migratedData);
+            }
           } else {
-            // Pas de cache pour cette langue, régénérer avec les données mock
+            // Pas de cache pour cette langue, régénérer
             generateVocab();
           }
         } catch {
@@ -325,7 +343,10 @@ export default function LibraryItemScreen() {
       setScan(updated);
       setEditing(false);
 
-      // 💡 Quand on modifie le texte, on invalide le résultat IA (optionnel)
+      // � Synchroniser le texte modifié avec les pistes audio liées
+      updateTracksByScanId(scan.id, updated.title, updated.content, scan.title);
+
+      // �💡 Quand on modifie le texte, on invalide le résultat IA (optionnel)
       setAiData(null);
 
       Alert.alert(`✅ ${t('library.saved')}`, t('libraryDetail.savedSuccess'));
@@ -480,29 +501,30 @@ export default function LibraryItemScreen() {
 
       setAiLoading(true);
 
-      // Utiliser l'extraction directe via OpenAI (côté client)
+      // Utiliser l'extraction via Edge Function (sécurisée)
       let payload: ExtractResponse;
-      
-      if (isVocabExtractionConfigured()) {
-        console.log('📡 Extraction du vocabulaire via OpenAI...');
-        const result = await extractVocabulary(scan.content, uiLang, scan.title);
-        
-        if (result.error) {
-          console.warn('⚠️ OpenAI extraction error:', result.error);
-          console.log('📋 Utilisant mock data...');
-          payload = getMockVocabData();
-        } else {
-          payload = result;
-          console.log('✅ Vocabulaire extrait:', {
-            vocab: result.vocabulaire.length,
-            verbes: result.verbes.length,
-            particules: result.particules.length,
-          });
-        }
-      } else {
-        console.warn('⚠️ OpenAI API non configurée');
+
+      console.log('📡 Extraction du vocabulaire via Edge Function...');
+      const result = await extractVocabularyFromText(scan.id, uiLang);
+
+      if (!result) {
+        console.warn('⚠️ Edge Function extraction failed');
         console.log('📋 Utilisant mock data...');
         payload = getMockVocabData();
+      } else {
+        payload = result;
+        console.log('✅ Vocabulaire extrait:', {
+          vocab: result.vocabulaire.length,
+          verbes: result.verbes.length,
+          particules: result.particules.length,
+        });
+      }
+
+      // Ajouter la version du prompt au meta
+      if (payload.meta) {
+        payload.meta.prompt_version = VOCAB_PROMPT_VERSION;
+      } else {
+        payload.meta = { ui_lang: uiLang, source: 'openai-client', model: 'gpt-4o', prompt_version: VOCAB_PROMPT_VERSION };
       }
 
       setAiData(payload);
@@ -553,7 +575,7 @@ export default function LibraryItemScreen() {
                 console.log('🗑️ Cache supprimé:', cacheKey);
 
                 // Supprimer aussi les caches des autres langues
-                const allLangs = ['fr', 'en', 'de', 'es', 'ru'];
+                const allLangs = ['fr', 'en', 'de', 'es', 'ru', 'ms', 'ar'];
                 for (const lang of allLangs) {
                   if (lang !== uiLang) {
                     await supabase.from('ai_cache').delete().eq('key', `ai_vocab_${scan.id}_${lang}`);
@@ -734,15 +756,36 @@ export default function LibraryItemScreen() {
 
     setCompletingWord(true);
     try {
-      const completed = await completeWordInfo(newWordInput.trim(), type, uiLang);
+      // Créer un objet basique sans auto-complétion IA
+      // L'utilisateur devra remplir les détails manuellement
+      let completed: VocabItem | VerbItem | ParticleItem;
 
-      if (!completed) {
-        Alert.alert(t('libraryDetail.error'), t('libraryDetail.completionError'));
-        setCompletingWord(false);
-        return;
+      if (type === 'word') {
+        completed = {
+          singulier: newWordInput.trim(),
+          traduction: '', // À remplir par l'utilisateur
+          pluriel: null,
+          contraire: null,
+          remarque: null,
+        } as VocabItem;
+      } else if (type === 'verb') {
+        completed = {
+          passe_3ms: newWordInput.trim(),
+          traduction: '', // À remplir par l'utilisateur
+          present_3ms: '',
+          imperatif: '',
+          remarque: null,
+        } as VerbItem;
+      } else {
+        completed = {
+          particule_ar: newWordInput.trim(),
+          traduction: '', // À remplir par l'utilisateur
+          type: null,
+          exemple: null,
+        } as ParticleItem;
       }
 
-      // Vérifier aussi avec le mot complété (peut avoir un tashkeel différent)
+      // Vérifier avec le mot de base
       const completedWord = type === 'word'
         ? (completed as VocabItem).singulier
         : type === 'verb'

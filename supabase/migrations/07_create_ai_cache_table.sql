@@ -23,24 +23,28 @@ CREATE INDEX IF NOT EXISTS idx_ai_cache_expires_at ON public.ai_cache(expires_at
 ALTER TABLE public.ai_cache ENABLE ROW LEVEL SECURITY;
 
 -- Politique : Les utilisateurs peuvent voir uniquement leur propre cache
+DROP POLICY IF EXISTS "Users can view their own cache" ON public.ai_cache;
 CREATE POLICY "Users can view their own cache"
   ON public.ai_cache
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent insérer leur propre cache
+DROP POLICY IF EXISTS "Users can insert their own cache" ON public.ai_cache;
 CREATE POLICY "Users can insert their own cache"
   ON public.ai_cache
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent mettre à jour leur propre cache
+DROP POLICY IF EXISTS "Users can update their own cache" ON public.ai_cache;
 CREATE POLICY "Users can update their own cache"
   ON public.ai_cache
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent supprimer leur propre cache
+DROP POLICY IF EXISTS "Users can delete their own cache" ON public.ai_cache;
 CREATE POLICY "Users can delete their own cache"
   ON public.ai_cache
   FOR DELETE
@@ -55,6 +59,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_ai_cache_updated_at ON public.ai_cache;
 CREATE TRIGGER update_ai_cache_updated_at
   BEFORE UPDATE ON public.ai_cache
   FOR EACH ROW

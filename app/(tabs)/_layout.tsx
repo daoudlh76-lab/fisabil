@@ -149,6 +149,29 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* Sous-routes de Settings - cachées de la barre */}
+      <Tabs.Screen
+        name="settings/about"
+        options={{
+          title: t("settings.about"),
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="settings/privacy"
+        options={{
+          title: t("settings.privacyPolicy"),
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="settings/delete-account"
+        options={{
+          title: t("settings.deleteAccount"),
+          href: null,
+        }}
+      />
+
       {/* Statistiques - cachée de la barre */}
       <Tabs.Screen
         name="statistics"

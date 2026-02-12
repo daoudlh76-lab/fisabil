@@ -59,12 +59,14 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_store_tx
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- 1. L'utilisateur ne peut LIRE que sa propre subscription
+DROP POLICY IF EXISTS "Users can read own subscription" ON subscriptions;
 CREATE POLICY "Users can read own subscription"
   ON subscriptions FOR SELECT
   USING (auth.uid() = user_id);
 
 -- 2. L'utilisateur peut CRÉER sa subscription initiale (plan free uniquement)
 --    Empêche un client de se créer directement un plan premium.
+DROP POLICY IF EXISTS "Users can insert own free subscription" ON subscriptions;
 CREATE POLICY "Users can insert own free subscription"
   ON subscriptions FOR INSERT
   WITH CHECK (
@@ -77,6 +79,7 @@ CREATE POLICY "Users can insert own free subscription"
 --    Seul le serveur (service_role key, bypasses RLS) peut changer le plan.
 --    On autorise l'UPDATE pour que le cache local puisse se resync,
 --    mais on bloque les modifications de plan via un trigger.
+DROP POLICY IF EXISTS "Users can update own subscription (restricted)" ON subscriptions;
 CREATE POLICY "Users can update own subscription (restricted)"
   ON subscriptions FOR UPDATE
   USING (auth.uid() = user_id)
@@ -113,6 +116,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS trigger_prevent_client_plan_change ON subscriptions;
 CREATE TRIGGER trigger_prevent_client_plan_change
   BEFORE UPDATE ON subscriptions
   FOR EACH ROW
@@ -127,6 +131,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_subscriptions_updated_at ON subscriptions;
 CREATE TRIGGER trigger_subscriptions_updated_at
   BEFORE UPDATE ON subscriptions
   FOR EACH ROW

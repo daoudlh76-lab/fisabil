@@ -1,0 +1,43 @@
+═══════════════════════════════════════════════════════════════════════════════
+  COMMANDES TERMINAL - Déploiement Edge Function delete-account
+═══════════════════════════════════════════════════════════════════════════════
+
+📦 DÉPLOYER LA FONCTION
+───────────────────────────────────────────────────────────────────────────────
+npx supabase functions deploy delete-account
+
+
+✅ VÉRIFIER LE DÉPLOIEMENT
+───────────────────────────────────────────────────────────────────────────────
+npx supabase functions list | grep delete-account
+
+
+📋 VOIR LES LOGS EN TEMPS RÉEL
+───────────────────────────────────────────────────────────────────────────────
+npx supabase functions logs delete-account --tail
+
+
+🔍 VÉRIFIER LE FICHIER CONFIG
+───────────────────────────────────────────────────────────────────────────────
+cat supabase/functions/delete-account/config.toml
+
+
+🧪 TESTER DANS L'APP
+───────────────────────────────────────────────────────────────────────────────
+1. Dans le simulateur iOS: cmd + R
+2. Settings → Supprimer mon compte
+3. Suivre le flow complet
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  STATUS ACTUEL
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ config.toml créé (verify_jwt = false)
+✅ index.ts modifié (authHeader fallback)
+✅ Edge Function déployée (version 12, ACTIVE)
+✅ Code client déjà conforme
+
+⏳ ACTION SUIVANTE: Tester dans l'app (cmd+R puis Settings → Supprimer compte)
+
+═══════════════════════════════════════════════════════════════════════════════

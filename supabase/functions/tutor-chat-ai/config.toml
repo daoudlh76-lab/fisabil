@@ -1,0 +1,3 @@
+# Disable automatic JWT verification
+# The function handles auth manually with supabase.auth.getUser()
+verify_jwt = false

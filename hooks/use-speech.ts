@@ -1,11 +1,9 @@
 import { useVoicePreference } from "@/contexts/voice-preference-context";
 import { speakWithOpenAI, stopTTS } from '@/src/utils/openai-tts';
+import { invokeEdge, fileUriToBase64 } from '@/src/lib/edge-ai';
 import { Audio } from "expo-audio";
-import * as FileSystem from "expo-file-system";
 import { useCallback, useRef, useState } from "react";
 import { useLanguage } from "./use-language";
-
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
 export function useSpeech() {
   const { language } = useLanguage();
@@ -21,10 +19,41 @@ export function useSpeech() {
   // Demander les permissions pour le microphone
   const requestMicrophonePermission = useCallback(async () => {
     try {
-      const { status } = await Audio.requestPermissionsAsync();
-      return status === "granted";
+      // Vérifier d'abord le statut actuel
+      console.log("🎤 Checking microphone permission status...");
+      const permissionResult = await Audio.getPermissionsAsync();
+      console.log("🎤 Permission result:", JSON.stringify(permissionResult));
+      const { status: currentStatus, canAskAgain } = permissionResult;
+
+      if (currentStatus === "granted") {
+        console.log("✅ Microphone permission already granted");
+        return true;
+      }
+
+      // Si on ne peut plus demander (permission refusée définitivement)
+      if (!canAskAgain) {
+        console.warn("⚠️ Microphone permission was denied. User must enable it in system settings.");
+        setError("Permission microphone refusée. Allez dans Réglages → Fisabil → Microphone pour l'activer.");
+        return false;
+      }
+
+      // Demander la permission
+      console.log("🎤 Requesting microphone permission...");
+      const requestResult = await Audio.requestPermissionsAsync();
+      console.log("🎤 Request result:", JSON.stringify(requestResult));
+
+      if (requestResult.status === "granted") {
+        console.log("✅ Microphone permission granted");
+        return true;
+      } else {
+        console.error("❌ Microphone permission denied");
+        setError("Permission microphone refusée. Allez dans Réglages → Fisabil → Microphone pour l'activer.");
+        return false;
+      }
     } catch (err) {
-      console.error("Permission error:", err);
+      console.error("❌ Permission error:", err);
+      console.error("❌ Error stack:", err instanceof Error ? err.stack : String(err));
+      setError("Erreur lors de la demande de permission microphone.");
       return false;
     }
   }, []);
@@ -138,56 +167,25 @@ export function useSpeech() {
     }
   }, []);
 
-  // Transcrire l'audio avec l'API Whisper d'OpenAI
+  // Transcrire l'audio avec Supabase Edge Function (speech-to-text)
   const transcribeWithWhisper = async (audioUri: string): Promise<string | null> => {
     try {
-      if (!OPENAI_API_KEY) {
-        console.error("❌ OpenAI API key not configured");
-        return null;
-      }
+      console.log("📤 Transcribing audio via Edge Function...");
 
       // Lire le fichier audio en base64
-      const audioBase64 = await FileSystem.readAsStringAsync(audioUri, {
-        encoding: FileSystem.EncodingType.Base64,
+      const audioBase64 = await fileUriToBase64(audioUri);
+
+      // Appeler l'Edge Function via invokeEdge
+      const data = await invokeEdge<{ text: string; language?: string }>('speech-to-text', {
+        audioBase64,
+        language: 'ar',
+        prompt: 'Ceci est une phrase en arabe. بسم الله الرحمن الرحيم',
       });
 
-      // Créer un FormData avec le fichier audio
-      const formData = new FormData();
-      
-      // Créer un blob à partir du base64
-      const audioBlob = {
-        uri: audioUri,
-        type: 'audio/m4a',
-        name: 'audio.m4a',
-      };
-      
-      formData.append('file', audioBlob as any);
-      formData.append('model', 'whisper-1');
-      formData.append('language', 'ar'); // Priorité à l'arabe
-      formData.append('prompt', 'Ceci est une phrase en arabe. بسم الله الرحمن الرحيم'); // Aide le modèle
-
-      console.log("📤 Sending audio to Whisper API...");
-
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Whisper API error:", response.status, errorText);
-        return null;
-      }
-
-      const result = await response.json();
-      console.log("✅ Whisper transcription result:", result);
-      
-      return result.text || null;
+      console.log("✅ Transcription result:", data.text);
+      return data.text || null;
     } catch (err) {
-      console.error("❌ Whisper transcription error:", err);
+      console.error("❌ Transcription error:", err);
       return null;
     }
   };

@@ -1,10 +1,9 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 // Configuration - Clés API
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+// ⚠️ SECURITY: OpenAI key REMOVED from client - use Edge Functions instead
 const GOOGLE_VISION_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_VISION_API_KEY || '';
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const GOOGLE_VISION_API_URL = 'https://vision.googleapis.com/v1/images:annotate';
 
 export interface OcrResult {
@@ -14,15 +13,72 @@ export interface OcrResult {
 }
 
 /**
- * Effectue l'OCR sur une image en utilisant OpenAI GPT-4 Vision
+ * Lit une image en base64 pour l'OCR.
+ * La compression est gérée par ImagePicker (quality: 0.5).
+ */
+async function prepareImageForOcr(imageUri: string): Promise<string> {
+  const base64 = await FileSystem.readAsStringAsync(imageUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  if (__DEV__) {
+    const sizeMB = (base64.length / (1024 * 1024)).toFixed(2);
+    console.log(`📏 Image base64: ${sizeMB} MB`);
+  }
+
+  return base64;
+}
+
+/**
+ * Effectue un fetch avec retry automatique.
+ * Contourne le bug QUIC/HTTP3 du simulateur iOS (-1017 "cannot parse response")
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        const delay = attempt * 1500; // 1.5s, 3s, 4.5s
+        console.log(`🔄 Retry ${attempt}/${maxRetries} après ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      const response = await fetch(url, options);
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const isNetworkError = lastError.message.includes('Network request failed') ||
+                             lastError.message.includes('cannot parse response') ||
+                             lastError.message.includes('Connection reset by peer') ||
+                             lastError.message.includes('timed out');
+      if (!isNetworkError || attempt === maxRetries) {
+        throw lastError;
+      }
+      console.warn(`⚠️ Erreur réseau (tentative ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
+    }
+  }
+
+  throw lastError || new Error('fetchWithRetry: toutes les tentatives ont échoué');
+}
+
+/**
+ * Effectue l'OCR sur une image en utilisant Google Vision API
+ *
+ * ⚠️ IMPORTANT: OpenAI OCR a été désactivé pour des raisons de sécurité.
+ * La clé OpenAI ne doit jamais être exposée côté client.
+ *
  * @param imageUri - URI de l'image (file:// ou content://)
  * @returns Le texte extrait de l'image
  */
 export async function performOcr(imageUri: string): Promise<OcrResult> {
   try {
-    // Vérifier si la clé API est configurée
-    if (!OPENAI_API_KEY) {
-      console.warn('⚠️ OpenAI API key not configured, using mock OCR');
+    // Vérifier si Google Vision est configuré
+    if (!GOOGLE_VISION_API_KEY) {
+      console.warn('⚠️ Google Vision API key not configured');
       return {
         text: '',
         confidence: 0,
@@ -30,190 +86,40 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
       };
     }
 
-    // Lire l'image et la convertir en base64
-    const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    // Convertir en base64
+    const base64Image = await prepareImageForOcr(imageUri);
 
-    // Déterminer le type MIME
-    const mimeType = imageUri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    console.log('📡 Envoi de la requête à Google Vision...');
 
-    console.log('📡 Envoi de la requête à OpenAI GPT-4 Vision...');
-
-    // Préparer la requête pour OpenAI - avec ajout automatique des voyelles
+    // Préparer la requête pour Google Vision
     const requestBody = {
-      model: 'gpt-4o',
-      messages: [
+      requests: [
         {
-          role: 'system',
-          content: `You are a precise OCR system. Your task is to extract Arabic text from images with 100% character-level accuracy.
-
-CORE PRINCIPLE: You are a camera, not an editor. Copy what you see, letter by letter.
-
-RULES:
-1. Extract EVERY character EXACTLY as written - same shape, same form
-2. Preserve letter endings: if you see ـة keep ـة, if you see ـت keep ـت
-3. Preserve all vowel variations: if you see ا keep ا, if you see ى keep ى
-4. DO NOT substitute similar-looking words
-5. DO NOT fix typos or "correct" the text
-6. DO NOT change verb forms or grammatical structures
-7. After extraction, add diacritics (َ ُ ِ ْ ّ ً ٌ ٍ) to the EXACT letters you extracted
-
-PROCESS:
-- Read each character carefully (including dots, hamza position, letter shape)
-- Write the SAME character you saw
-- Add appropriate diacritics
-- Move to next character
-
-Return only the extracted text with diacritics. No explanations.`,
-        },
-        {
-          role: 'user',
-          content: [
+          image: {
+            content: base64Image,
+          },
+          features: [
             {
-              type: 'text',
-              text: `Extract the Arabic text from this image. Follow these steps:
-
-1. Look at the first word - what are the EXACT letters? (not what word you think it is, but what letters are actually written)
-2. Copy those EXACT letters
-3. Add diacritics to those letters
-4. Repeat for each word
-
-CRITICAL MISTAKES TO AVOID:
-❌ Changing word endings (ة/ت, ا/ى, ي/ى)
-❌ Replacing words with synonyms
-❌ "Fixing" what looks like errors
-❌ Using context to guess different words
-❌ Changing verb conjugations
-
-Remember: You are copying letters, not interpreting meaning. Character-by-character precision is mandatory.
-
-Extract the text now:`,
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${base64Image}`,
-              },
+              type: 'DOCUMENT_TEXT_DETECTION',
+              maxResults: 1,
             },
           ],
+          imageContext: {
+            languageHints: ['ar'], // Arabic
+          },
         },
       ],
-      max_tokens: 8192,
-      temperature: 0.1,
     };
 
-    const response = await fetch(OPENAI_API_URL, {
+    const url = `${GOOGLE_VISION_API_URL}?key=${GOOGLE_VISION_API_KEY}`;
+
+    const response = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('❌ Erreur OpenAI:', errorData);
-      throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // Extraire le texte de la réponse
-    const extractedText = data.choices?.[0]?.message?.content?.trim() || '';
-
-    // Vérifier si l'API a refusé de traiter l'image
-    if (extractedText.toLowerCase().includes("i'm sorry") ||
-        extractedText.toLowerCase().includes("i can't") ||
-        extractedText.toLowerCase().includes("i cannot")) {
-      console.error('❌ OpenAI a refusé de traiter cette image');
-      return {
-        text: '',
-        confidence: 0,
-        error: 'CONTENT_POLICY_VIOLATION',
-      };
-    }
-
-    console.log('✅ OCR OpenAI réussi, texte extrait:', extractedText.substring(0, 100) + '...');
-
-    return {
-      text: extractedText,
-      confidence: 0.95,
-    };
-
-  } catch (error) {
-    console.error('❌ Erreur OCR:', error);
-    return {
-      text: '',
-      confidence: 0,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-/**
- * Version mock de l'OCR pour les tests sans API
- */
-export function performMockOcr(): OcrResult {
-  return {
-    text: 'الحمد لله رب العالمين\nالرحمن الرحيم\nمالك يوم الدين',
-    confidence: 1.0,
-  };
-}
-
-/**
- * Effectue l'OCR avec Google Cloud Vision API
- * @param imageUri - URI de l'image
- * @returns Le texte extrait de l'image
- */
-export async function performGoogleVisionOcr(imageUri: string): Promise<OcrResult> {
-  try {
-    // Vérifier si la clé API est configurée
-    if (!GOOGLE_VISION_API_KEY) {
-      console.warn('⚠️ Google Cloud Vision API key not configured');
-      return {
-        text: '',
-        confidence: 0,
-        error: 'GOOGLE_API_KEY_MISSING',
-      };
-    }
-
-    // Lire l'image et la convertir en base64
-    const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    console.log('📡 Envoi de la requête à Google Cloud Vision...');
-
-    // Appel à Google Cloud Vision
-    const response = await fetch(
-      `${GOOGLE_VISION_API_URL}?key=${GOOGLE_VISION_API_KEY}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          requests: [
-            {
-              image: {
-                content: base64Image,
-              },
-              features: [
-                {
-                  type: 'TEXT_DETECTION',
-                  maxResults: 1,
-                },
-              ],
-              imageContext: {
-                languageHints: ['ar'], // Arabe
-              },
-            },
-          ],
-        }),
-      }
-    );
+    }, 3);
 
     if (!response.ok) {
       const errorData = await response.json();
@@ -223,94 +129,86 @@ export async function performGoogleVisionOcr(imageUri: string): Promise<OcrResul
 
     const data = await response.json();
 
-    // Vérifier les erreurs dans la réponse
-    if (data.responses?.[0]?.error) {
-      const error = data.responses[0].error;
-      console.error('❌ Erreur Google Vision:', error);
-      throw new Error(error.message || 'Unknown error');
-    }
-
-    // Extraire le texte détecté
-    const detectedText = data.responses?.[0]?.fullTextAnnotation?.text || '';
-
-    if (!detectedText || detectedText.trim().length === 0) {
+    // Extraire le texte et la confiance
+    const textAnnotations = data.responses?.[0]?.textAnnotations;
+    if (!textAnnotations || textAnnotations.length === 0) {
       console.warn('⚠️ Aucun texte détecté dans l\'image');
       return {
         text: '',
         confidence: 0,
-        error: 'NO_TEXT_DETECTED',
+        error: 'NO_TEXT_FOUND',
       };
     }
 
-    console.log('✅ OCR Google Vision réussi, texte extrait:', detectedText.substring(0, 100) + '...');
+    // Le premier élément contient tout le texte détecté
+    const fullText = textAnnotations[0].description || '';
+
+    // Calculer une confiance moyenne (Google Vision ne fournit pas de score global)
+    const confidence = 0.85; // Valeur conservative pour Google Vision
+
+    console.log(`✅ OCR terminé avec succès (${fullText.length} caractères)`);
 
     return {
-      text: detectedText,
-      confidence: 0.95,
+      text: fullText,
+      confidence,
     };
 
   } catch (error) {
-    console.error('❌ Erreur Google Vision OCR:', error);
+    console.error('❌ Erreur lors de l\'OCR:', error);
     return {
       text: '',
       confidence: 0,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
     };
   }
 }
 
 /**
- * Effectue l'OCR avec fallback: Google Vision → OpenAI
+ * Ajoute automatiquement les diacritiques (tashkeel) au texte arabe
+ *
+ * ⚠️ DEPRECATED: OpenAI API désactivée côté client pour sécurité.
+ * Cette fonction retourne maintenant le texte original sans modification.
+ *
+ * Pour ajouter les diacritiques, utilisez l'Edge Function Supabase:
+ * `supabase.functions.invoke('add-diacritics', { body: { text } })`
+ *
+ * @param arabicText - Texte arabe sans diacritiques
+ * @returns Le texte original (diacritics non ajoutés)
+ */
+export async function addDiacritics(arabicText: string): Promise<string> {
+  if (__DEV__) {
+    console.warn('⚠️ addDiacritics: OpenAI client-side calls disabled for security.');
+    console.warn('💡 Use Supabase Edge Function instead: supabase.functions.invoke("add-diacritics")');
+  }
+
+  // Return original text unchanged
+  return arabicText;
+}
+
+/**
+ * Effectue l'OCR et ajoute automatiquement les voyelles
+ *
+ * ⚠️ Note: Diacritics auto-add disabled. Use Google Vision OCR only.
+ *
  * @param imageUri - URI de l'image
- * @returns Le texte extrait de l'image
+ * @returns Le texte extrait (sans diacritiques ajoutés)
  */
-export async function performOcrWithFallback(imageUri: string): Promise<OcrResult> {
-  // Essayer d'abord Google Cloud Vision (pas de restriction religieuse)
-  if (GOOGLE_VISION_API_KEY) {
-    console.log('🔍 Tentative avec Google Cloud Vision...');
-    const googleResult = await performGoogleVisionOcr(imageUri);
+export async function performOcrWithDiacritics(imageUri: string): Promise<OcrResult> {
+  // Perform OCR with Google Vision
+  const ocrResult = await performOcr(imageUri);
 
-    if (!googleResult.error) {
-      console.log('✅ Google Vision a réussi');
-      return googleResult;
-    }
-
-    console.warn('⚠️ Google Vision a échoué, tentative avec OpenAI...');
+  if (ocrResult.error || !ocrResult.text) {
+    return ocrResult;
   }
 
-  // Fallback vers OpenAI si Google Vision n'est pas configuré ou a échoué
-  if (OPENAI_API_KEY) {
-    console.log('🔍 Tentative avec OpenAI Vision...');
-    const openaiResult = await performOcr(imageUri);
-
-    if (!openaiResult.error) {
-      console.log('✅ OpenAI Vision a réussi');
-      return openaiResult;
-    }
-
-    console.warn('⚠️ OpenAI Vision a aussi échoué');
-    return openaiResult;
-  }
-
-  // Aucune API configurée
-  console.error('❌ Aucune API OCR configurée');
-  return {
-    text: '',
-    confidence: 0,
-    error: 'NO_API_CONFIGURED',
-  };
+  // Return OCR result without diacritics enhancement
+  // (OpenAI client-side calls disabled for security)
+  return ocrResult;
 }
 
 /**
- * Vérifie si au moins une API OCR est configurée
+ * Vérifie si au moins un service OCR est disponible
  */
-export function isOcrConfigured(): boolean {
-  return !!(OPENAI_API_KEY || GOOGLE_VISION_API_KEY);
-}
-
-/**
- * Vérifie si Google Cloud Vision est configuré
- */
-export function isGoogleVisionConfigured(): boolean {
+export function isOcrAvailable(): boolean {
   return !!GOOGLE_VISION_API_KEY;
 }

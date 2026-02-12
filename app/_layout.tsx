@@ -3,8 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { AudioPlaylistProvider } from '@/contexts/audio-playlist-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AudioPlaylistProvider } from '@/contexts/audio-playlist-context';
 import { SubscriptionProvider } from '@/contexts/subscription-context';
 import { VoicePreferenceProvider } from '@/contexts/voice-preference-context';
 import { useAuth } from '@/hooks/use-auth';

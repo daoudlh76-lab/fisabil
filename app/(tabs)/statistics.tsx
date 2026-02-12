@@ -107,15 +107,16 @@ export default function StatisticsScreen() {
         }
       }
 
-      // Éliminer les doublons (basé sur le mot arabe)
+      // Éliminer les doublons (basé sur le mot arabe SANS diacritiques pour éviter les faux doublons)
+      const stripDiacritics = (w: string) => w.replace(/[\u064B-\u0652]/g, '').trim();
       const uniqueVocab = Array.from(
-        new Map(allVocab.map(item => [item.word, item])).values()
+        new Map(allVocab.map(item => [stripDiacritics(item.word), item])).values()
       );
       const uniqueVerbs = Array.from(
-        new Map(allVerbs.map(item => [item.word, item])).values()
+        new Map(allVerbs.map(item => [stripDiacritics(item.word), item])).values()
       );
       const uniqueParticles = Array.from(
-        new Map(allParticles.map(item => [item.word, item])).values()
+        new Map(allParticles.map(item => [stripDiacritics(item.word), item])).values()
       );
 
       // Trier par ordre alphabétique arabe
@@ -179,6 +180,7 @@ export default function StatisticsScreen() {
         <Text style={styles.title}>{t('settings.statistics')}</Text>
       </View>
 
+      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
       {/* RÉSUMÉ */}
       <View style={styles.summary}>
         {/* Première ligne : Mots totaux et Vocabulaire */}
@@ -267,7 +269,7 @@ export default function StatisticsScreen() {
           <Text style={styles.loadingText}>{t('statistics.loading')}</Text>
         </View>
       ) : (
-        <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+        <View style={styles.list}>
           {filteredData.length > 0 ? (
             filteredData.map((item, index) => (
               <View key={`${item.word}-${index}`} style={styles.wordCard}>
@@ -311,8 +313,9 @@ export default function StatisticsScreen() {
               </Text>
             </View>
           )}
-        </ScrollView>
+        </View>
       )}
+      </ScrollView>
     </View>
   );
 }
@@ -321,6 +324,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 120,
   },
   header: {
     backgroundColor: '#2E7D32',
@@ -426,11 +435,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   list: {
-    flex: 1,
     paddingHorizontal: 16,
-  },
-  listContent: {
-    paddingBottom: 120,
   },
   wordCard: {
     backgroundColor: 'white',

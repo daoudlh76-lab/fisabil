@@ -25,24 +25,28 @@ CREATE INDEX IF NOT EXISTS idx_vocab_cards_progress_next_review ON public.vocab_
 ALTER TABLE public.vocab_cards_progress ENABLE ROW LEVEL SECURITY;
 
 -- Politique : Les utilisateurs peuvent voir uniquement leur propre progression
+DROP POLICY IF EXISTS "Users can view their own progress" ON public.vocab_cards_progress;
 CREATE POLICY "Users can view their own progress"
   ON public.vocab_cards_progress
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent insérer leur propre progression
+DROP POLICY IF EXISTS "Users can insert their own progress" ON public.vocab_cards_progress;
 CREATE POLICY "Users can insert their own progress"
   ON public.vocab_cards_progress
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent mettre à jour leur propre progression
+DROP POLICY IF EXISTS "Users can update their own progress" ON public.vocab_cards_progress;
 CREATE POLICY "Users can update their own progress"
   ON public.vocab_cards_progress
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Politique : Les utilisateurs peuvent supprimer leur propre progression
+DROP POLICY IF EXISTS "Users can delete their own progress" ON public.vocab_cards_progress;
 CREATE POLICY "Users can delete their own progress"
   ON public.vocab_cards_progress
   FOR DELETE
@@ -57,6 +61,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_vocab_cards_progress_updated_at ON public.vocab_cards_progress;
 CREATE TRIGGER update_vocab_cards_progress_updated_at
   BEFORE UPDATE ON public.vocab_cards_progress
   FOR EACH ROW

@@ -11,6 +11,10 @@
     {
       "name": "tutor-chat",
       "verify_jwt": true
+    },
+    {
+      "name": "verify-store-receipt",
+      "verify_jwt": true
     }
   ]
 }
