@@ -47,7 +47,7 @@ export const useOfflineQueue = () => {
 
       // Si on vient de se reconnecter, traiter la queue
       if (wasOffline && isNowOnline && queue.length > 0) {
-        console.log('📡 Connexion rétablie, traitement de la queue...');
+        __DEV__ && console.log('📡 Connexion rétablie, traitement de la queue...');
         processQueue();
       }
     });
@@ -64,10 +64,10 @@ export const useOfflineQueue = () => {
       if (stored) {
         const parsed: QueueItem[] = JSON.parse(stored);
         setQueue(parsed);
-        console.log(`📋 Queue chargée: ${parsed.length} actions en attente`);
+        __DEV__ && console.log(`📋 Queue chargée: ${parsed.length} actions en attente`);
       }
     } catch (error) {
-      console.error('Erreur chargement queue:', error);
+      __DEV__ && console.error('Erreur chargement queue:', error);
     }
   }, []);
 
@@ -79,7 +79,7 @@ export const useOfflineQueue = () => {
       await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(items));
       setQueue(items);
     } catch (error) {
-      console.error('Erreur sauvegarde queue:', error);
+      __DEV__ && console.error('Erreur sauvegarde queue:', error);
     }
   }, []);
 
@@ -98,7 +98,7 @@ export const useOfflineQueue = () => {
       const newQueue = [...queue, item];
       await saveQueue(newQueue);
 
-      console.log('➕ Action ajoutée à la queue:', action.type, action.table);
+      __DEV__ && console.log('➕ Action ajoutée à la queue:', action.type, action.table);
 
       // Si en ligne, traiter immédiatement
       if (isOnline) {
@@ -117,7 +117,7 @@ export const useOfflineQueue = () => {
       const userId = session?.user?.id;
 
       if (!userId) {
-        console.warn('Pas d\'utilisateur connecté, impossible d\'exécuter l\'action');
+        __DEV__ && console.warn('Pas d\'utilisateur connecté, impossible d\'exécuter l\'action');
         return false;
       }
 
@@ -130,7 +130,7 @@ export const useOfflineQueue = () => {
           const { error } = await supabase.from(action.table).insert(payload);
 
           if (error) {
-            console.error('Erreur insert:', error);
+            __DEV__ && console.error('Erreur insert:', error);
             return false;
           }
           break;
@@ -144,7 +144,7 @@ export const useOfflineQueue = () => {
             .eq('user_id', userId);
 
           if (error) {
-            console.error('Erreur update:', error);
+            __DEV__ && console.error('Erreur update:', error);
             return false;
           }
           break;
@@ -158,7 +158,7 @@ export const useOfflineQueue = () => {
             .eq('user_id', userId);
 
           if (error) {
-            console.error('Erreur delete:', error);
+            __DEV__ && console.error('Erreur delete:', error);
             return false;
           }
           break;
@@ -172,17 +172,17 @@ export const useOfflineQueue = () => {
           const { error } = await supabase.from(action.table).upsert(payload);
 
           if (error) {
-            console.error('Erreur upsert:', error);
+            __DEV__ && console.error('Erreur upsert:', error);
             return false;
           }
           break;
         }
       }
 
-      console.log('✅ Action exécutée:', action.type, action.table);
+      __DEV__ && console.log('✅ Action exécutée:', action.type, action.table);
       return true;
     } catch (error) {
-      console.error('Erreur executeAction:', error);
+      __DEV__ && console.error('Erreur executeAction:', error);
       return false;
     }
   }, []);
@@ -196,7 +196,7 @@ export const useOfflineQueue = () => {
     }
 
     setIsProcessing(true);
-    console.log(`🔄 Traitement de ${queue.length} actions en queue...`);
+    __DEV__ && console.log(`🔄 Traitement de ${queue.length} actions en queue...`);
 
     const remainingQueue: QueueItem[] = [];
 
@@ -212,7 +212,7 @@ export const useOfflineQueue = () => {
             error: `Échec tentative ${item.retryCount + 1}/${MAX_RETRIES}`,
           });
         } else {
-          console.error('❌ Action abandonnée après', MAX_RETRIES, 'tentatives:', item.action);
+          __DEV__ && console.error('❌ Action abandonnée après', MAX_RETRIES, 'tentatives:', item.action);
         }
       }
     }
@@ -221,9 +221,9 @@ export const useOfflineQueue = () => {
     setIsProcessing(false);
 
     if (remainingQueue.length === 0) {
-      console.log('✅ Queue vidée avec succès');
+      __DEV__ && console.log('✅ Queue vidée avec succès');
     } else {
-      console.log(`⚠️ ${remainingQueue.length} actions restantes en queue`);
+      __DEV__ && console.log(`⚠️ ${remainingQueue.length} actions restantes en queue`);
     }
   }, [isProcessing, queue, isOnline, executeAction, saveQueue]);
 
@@ -232,7 +232,7 @@ export const useOfflineQueue = () => {
    */
   const clearQueue = useCallback(async () => {
     await saveQueue([]);
-    console.log('🗑️ Queue vidée');
+    __DEV__ && console.log('🗑️ Queue vidée');
   }, [saveQueue]);
 
   /**
@@ -247,7 +247,7 @@ export const useOfflineQueue = () => {
       }
 
       // Sinon, ajouter à la queue
-      console.log('📴 Hors ligne, action mise en queue');
+      __DEV__ && console.log('📴 Hors ligne, action mise en queue');
       await enqueue(action);
       return false; // Retourne false pour indiquer que l'action est en attente
     },

@@ -32,7 +32,7 @@ export default function VocabCardsScreen() {
       const userId = sessionData.session?.user?.id;
 
       if (!userId) {
-        console.log('❌ Pas d\'utilisateur connecté');
+        __DEV__ && console.log('❌ Pas d\'utilisateur connecté');
         setLoading(false);
         return;
       }
@@ -51,23 +51,23 @@ export default function VocabCardsScreen() {
       ]);
 
       if (vocabError) {
-        console.error('❌ Erreur chargement vocabulaire:', vocabError);
+        __DEV__ && console.error('❌ Erreur chargement vocabulaire:', vocabError);
         setLoading(false);
         return;
       }
 
       if (progressError) {
-        console.warn('⚠️ Erreur chargement progression (table peut-être pas créée):', progressError);
+        __DEV__ && console.warn('⚠️ Erreur chargement progression (table peut-être pas créée):', progressError);
       }
 
       if (!vocab || vocab.length === 0) {
-        console.log('ℹ️ Aucun vocabulaire trouvé');
+        __DEV__ && console.log('ℹ️ Aucun vocabulaire trouvé');
         setLoading(false);
         return;
       }
 
-      console.log(`✅ ${vocab.length} mots chargés`);
-      console.log(`✅ ${progress?.length || 0} progressions chargées`);
+      __DEV__ && console.log(`✅ ${vocab.length} mots chargés`);
+      __DEV__ && console.log(`✅ ${progress?.length || 0} progressions chargées`);
 
       // Créer un map de la progression par vocabulary_id
       const progressMap = new Map(
@@ -96,7 +96,7 @@ export default function VocabCardsScreen() {
       setVocabCards(cards);
       setLoading(false);
     } catch (e) {
-      console.error('❌ Erreur:', e);
+      __DEV__ && console.error('❌ Erreur:', e);
       setLoading(false);
     }
   };

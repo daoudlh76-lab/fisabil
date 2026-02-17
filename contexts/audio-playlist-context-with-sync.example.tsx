@@ -118,9 +118,9 @@ export function AudioPlaylistProviderWithSync({ children }: { children: ReactNod
           transformToCloud
         );
 
-        console.log('✅ Playlist sauvegardée et synchronisée');
+        __DEV__ && console.log('✅ Playlist sauvegardée et synchronisée');
       } catch (error) {
-        console.error("Erreur sauvegarde playlist:", error);
+        __DEV__ && console.error("Erreur sauvegarde playlist:", error);
       }
     },
     [saveWithSync, transformToCloud]
@@ -142,12 +142,12 @@ export function AudioPlaylistProviderWithSync({ children }: { children: ReactNod
 
       if (data && Array.isArray(data)) {
         setPlaylist((prev) => ({ ...prev, tracks: data }));
-        console.log('✅ Playlist chargée:', data.length, 'pistes');
+        __DEV__ && console.log('✅ Playlist chargée:', data.length, 'pistes');
       } else {
         setPlaylist((prev) => ({ ...prev, tracks: [] }));
       }
     } catch (error) {
-      console.error("Erreur chargement playlist:", error);
+      __DEV__ && console.error("Erreur chargement playlist:", error);
     }
   }, [loadWithFallback, transformFromCloud]);
 
@@ -192,7 +192,7 @@ export function AudioPlaylistProviderWithSync({ children }: { children: ReactNod
       // Sauvegarder la playlist complète
       await savePlaylist(newTracks);
 
-      console.log('✅ Piste ajoutée et synchronisée');
+      __DEV__ && console.log('✅ Piste ajoutée et synchronisée');
       return newTrack;
     },
     [playlist.tracks, savePlaylist, executeWithFallback, transformToCloud]
@@ -224,7 +224,7 @@ export function AudioPlaylistProviderWithSync({ children }: { children: ReactNod
       // Sauvegarder la nouvelle playlist
       await savePlaylist(newTracks);
 
-      console.log('✅ Piste supprimée et synchronisée');
+      __DEV__ && console.log('✅ Piste supprimée et synchronisée');
     },
     [playlist.tracks, playlist.currentTrackIndex, savePlaylist, executeWithFallback]
   );
@@ -249,7 +249,7 @@ export function AudioPlaylistProviderWithSync({ children }: { children: ReactNod
       // Sauvegarder la nouvelle playlist
       await savePlaylist(newTracks);
 
-      console.log('✅ Dossier mis à jour et synchronisé');
+      __DEV__ && console.log('✅ Dossier mis à jour et synchronisé');
     },
     [playlist.tracks, savePlaylist, executeWithFallback]
   );

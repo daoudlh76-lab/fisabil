@@ -24,6 +24,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { useTextToSpeech } from "@/hooks/use-text-to-speech";
 import { isOcrAvailable, performOcr } from "@/src/lib/google-vision-ocr";
 import { supabase } from "@/src/lib/supabase";
+import { updateLocalScan } from "@/src/lib/local-cache";
 
 const GREEN = "#2E7D32";
 const BG = "transparent";
@@ -155,9 +156,9 @@ function ScannerScreen() {
     setOcrLoading(true);
 
     try {
-      // Si pas d’API OCR configurée → mode démo
+      // Si pas d'API OCR configurée → mode démo
       if (!isOcrAvailable()) {
-        console.warn("⚠️ OCR non configuré, mode démo");
+        __DEV__ && console.warn("⚠️ OCR non configuré, mode démo");
         const mockText = "الحمد لله رب العالمين مرحبا بك في التطبيق";
 
         setOcrText(mockText);
@@ -174,7 +175,7 @@ function ScannerScreen() {
 
         setReviewText(finalText);
 
-        // ✅ Multi-page: on n’ajoute PAS à la playlist tout de suite
+        // ✅ Multi-page: on n'ajoute PAS à la playlist tout de suite
         if (multiPageMode) {
           Alert.alert(`✅ ${t("scanner.extractionOk")}`, t("scanner.textAdded"));
         } else {
@@ -223,7 +224,7 @@ function ScannerScreen() {
 
       setOcrText(result.text);
 
-      // Diacritiques : seulement si le texte n’en a pas
+      // Diacritiques : seulement si le texte n'en a pas
       const hasDiacritics = /[\u064B-\u0652]/.test(result.text);
 
       let finalText = result.text;
@@ -236,7 +237,7 @@ function ScannerScreen() {
 
       setReviewText(finalText);
 
-      // ✅ Multi-page: on n’ajoute PAS à la playlist tout de suite
+      // ✅ Multi-page: on n'ajoute PAS à la playlist tout de suite
       if (multiPageMode) {
         Alert.alert(`✅ ${t("scanner.extractionOk")}`, t("scanner.textAdded"));
       } else {
@@ -244,7 +245,7 @@ function ScannerScreen() {
         Alert.alert(`✅ ${t("scanner.extractionOk")}`, t("scanner.vowelsAdded"));
       }
     } catch (error: any) {
-      console.error("Erreur OCR:", error);
+      __DEV__ && console.error("Erreur OCR:", error);
       Alert.alert(t("scanner.error"), error.message || "OCR failed");
     } finally {
       setOcrLoading(false);
@@ -258,7 +259,7 @@ function ScannerScreen() {
       const newTrack = await addTrack(trackTitle, text, null);
       setLastTrackId(newTrack.id);
     } catch (error) {
-      console.error("❌ Erreur ajout playlist:", error);
+      __DEV__ && console.error("❌ Erreur ajout playlist:", error);
     }
   }
 
@@ -364,6 +365,18 @@ function ScannerScreen() {
         updateTrackScanId(lastTrackId, scanId);
       }
 
+      // Sauvegarder dans le cache local
+      if (scanId) {
+        updateLocalScan({
+          id: scanId,
+          user_id: userId,
+          title: titleTrimmed,
+          content: c,
+          created_at: new Date().toISOString(),
+          folder_id: null,
+        });
+      }
+
       // ✅ Compter la limite free : 1 fois par document (au moment du save)
       if (isLoaded && subscription.plan === "free" && scannerLimit) {
         await scannerLimit.incrementUsage();
@@ -379,7 +392,7 @@ function ScannerScreen() {
       setScannedTexts([]);
       setLastTrackId(null);
     } catch (e: any) {
-      console.log("SAVE ERROR:", e);
+      __DEV__ && console.log("SAVE ERROR:", e);
       Alert.alert(t("scanner.error"), e?.message ?? t("scanner.saveError"));
     }
   }

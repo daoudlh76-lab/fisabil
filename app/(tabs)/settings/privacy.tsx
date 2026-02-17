@@ -32,7 +32,7 @@ export default function PrivacyPolicyScreen() {
         );
       }
     } catch (error) {
-      console.error('Error opening URL:', error);
+      __DEV__ && console.error('Error opening URL:', error);
       Alert.alert(
         t('settings.error') || 'Error',
         'Cannot open browser'

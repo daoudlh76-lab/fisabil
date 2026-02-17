@@ -7,7 +7,7 @@ export async function recognizeSpeechFromAudio(
   language: string = "ar"
 ): Promise<string> {
   try {
-    console.log("🎤 Sending audio for recognition:", audioUri);
+    __DEV__ && console.log("🎤 Sending audio for recognition:", audioUri);
 
     // TODO: Implémenter l'appel API réel vers Google Cloud Speech-to-Text
     // const response = await fetch(
@@ -31,12 +31,12 @@ export async function recognizeSpeechFromAudio(
     // );
 
     // Pour maintenant, retourner une simulation
-    console.log("📝 Simulated recognition (real API not yet integrated)");
+    __DEV__ && console.log("📝 Simulated recognition (real API not yet integrated)");
     return language === "ar"
       ? "أنا أتعلم اللغة العربية"
       : "J'apprends la langue arabe";
   } catch (error) {
-    console.error("❌ Speech recognition error:", error);
+    __DEV__ && console.error("❌ Speech recognition error:", error);
     throw error;
   }
 }

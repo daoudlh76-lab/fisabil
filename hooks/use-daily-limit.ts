@@ -43,7 +43,7 @@ export const useDailyLimit = (featureKey: FeatureKey, limit: number) => {
         );
       }
     } catch (error) {
-      console.error('Erreur chargement limite quotidienne:', error);
+      __DEV__ && console.error('Erreur chargement limite quotidienne:', error);
       setUsage(0);
     } finally {
       setLoading(false);
@@ -74,7 +74,7 @@ export const useDailyLimit = (featureKey: FeatureKey, limit: number) => {
       setUsage(newCount);
       return true;
     } catch (error) {
-      console.error('Erreur incrémentation usage:', error);
+      __DEV__ && console.error('Erreur incrémentation usage:', error);
       return false;
     }
   }, [featureKey, usage, limit]);

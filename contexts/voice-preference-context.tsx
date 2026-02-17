@@ -23,12 +23,12 @@ export function VoicePreferenceProvider({ children }: { children: ReactNode }) {
         const stored = await AsyncStorage.getItem(VOICE_PREFERENCE_KEY);
         if (stored === 'male' || stored === 'female') {
           setGenderState(stored);
-          console.log('✅ Préférence vocale chargée:', stored);
+          __DEV__ && console.log('✅ Préférence vocale chargée:', stored);
         } else {
-          console.log('ℹ️ Aucune préférence vocale trouvée, utilisation par défaut: male');
+          __DEV__ && console.log('ℹ️ Aucune préférence vocale trouvée, utilisation par défaut: male');
         }
       } catch (e) {
-        console.error('❌ Erreur chargement préférence vocale:', e);
+        __DEV__ && console.error('❌ Erreur chargement préférence vocale:', e);
       } finally {
         setIsReady(true);
       }
@@ -40,9 +40,9 @@ export function VoicePreferenceProvider({ children }: { children: ReactNode }) {
     try {
       await AsyncStorage.setItem(VOICE_PREFERENCE_KEY, newGender);
       setGenderState(newGender);
-      console.log('✅ Nouvelle préférence vocale sauvegardée:', newGender);
+      __DEV__ && console.log('✅ Nouvelle préférence vocale sauvegardée:', newGender);
     } catch (e) {
-      console.error('❌ Erreur sauvegarde préférence vocale:', e);
+      __DEV__ && console.error('❌ Erreur sauvegarde préférence vocale:', e);
     }
   };
 

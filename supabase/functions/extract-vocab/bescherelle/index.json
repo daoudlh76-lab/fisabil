@@ -1,0 +1,114 @@
+{
+  "ا": {
+    "count": 5437,
+    "file": "verbs_ا.json"
+  },
+  "ب": {
+    "count": 412,
+    "file": "verbs_ب.json"
+  },
+  "ت": {
+    "count": 2916,
+    "file": "verbs_ت.json"
+  },
+  "ث": {
+    "count": 132,
+    "file": "verbs_ث.json"
+  },
+  "ج": {
+    "count": 381,
+    "file": "verbs_ج.json"
+  },
+  "ح": {
+    "count": 474,
+    "file": "verbs_ح.json"
+  },
+  "خ": {
+    "count": 404,
+    "file": "verbs_خ.json"
+  },
+  "د": {
+    "count": 323,
+    "file": "verbs_د.json"
+  },
+  "ذ": {
+    "count": 104,
+    "file": "verbs_ذ.json"
+  },
+  "ر": {
+    "count": 548,
+    "file": "verbs_ر.json"
+  },
+  "ز": {
+    "count": 231,
+    "file": "verbs_ز.json"
+  },
+  "س": {
+    "count": 448,
+    "file": "verbs_س.json"
+  },
+  "ش": {
+    "count": 354,
+    "file": "verbs_ش.json"
+  },
+  "ص": {
+    "count": 229,
+    "file": "verbs_ص.json"
+  },
+  "ض": {
+    "count": 152,
+    "file": "verbs_ض.json"
+  },
+  "ط": {
+    "count": 184,
+    "file": "verbs_ط.json"
+  },
+  "ظ": {
+    "count": 30,
+    "file": "verbs_ظ.json"
+  },
+  "ع": {
+    "count": 524,
+    "file": "verbs_ع.json"
+  },
+  "غ": {
+    "count": 258,
+    "file": "verbs_غ.json"
+  },
+  "ف": {
+    "count": 376,
+    "file": "verbs_ف.json"
+  },
+  "ق": {
+    "count": 451,
+    "file": "verbs_ق.json"
+  },
+  "ك": {
+    "count": 321,
+    "file": "verbs_ك.json"
+  },
+  "ل": {
+    "count": 364,
+    "file": "verbs_ل.json"
+  },
+  "م": {
+    "count": 440,
+    "file": "verbs_م.json"
+  },
+  "ن": {
+    "count": 639,
+    "file": "verbs_ن.json"
+  },
+  "ه": {
+    "count": 334,
+    "file": "verbs_ه.json"
+  },
+  "و": {
+    "count": 523,
+    "file": "verbs_و.json"
+  },
+  "ي": {
+    "count": 42,
+    "file": "verbs_ي.json"
+  }
+}

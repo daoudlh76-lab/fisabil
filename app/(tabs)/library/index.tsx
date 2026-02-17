@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/hooks/use-language";
+import { getLocalScans, saveLocalScans, getLocalFolders, saveLocalFolders } from "@/src/lib/local-cache";
 
 type Scan = {
   id: string;
@@ -42,6 +43,12 @@ export default function LibraryScreen() {
   const [newFolderIcon, setNewFolderIcon] = useState("📁");
 
   const loadFolders = useCallback(async () => {
+    // Charger d'abord depuis le cache local (affichage instantané)
+    const cached = await getLocalFolders();
+    if (cached.length > 0) {
+      setFolders(cached);
+    }
+
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session?.user?.id;
     if (!userId) return;
@@ -53,11 +60,19 @@ export default function LibraryScreen() {
       .order("name", { ascending: true });
 
     if (!error && data) {
-      setFolders(data as Folder[]);
+      const foldersData = data as Folder[];
+      setFolders(foldersData);
+      saveLocalFolders(foldersData);
     }
   }, []);
 
   const loadScans = useCallback(async () => {
+    // Charger d'abord depuis le cache local (affichage instantané)
+    const cached = await getLocalScans();
+    if (cached.length > 0) {
+      setScans(cached);
+    }
+
     const { data: sessionData, error: sErr } = await supabase.auth.getSession();
     if (sErr) {
       Alert.alert(t('library.error'), sErr.message);
@@ -83,12 +98,13 @@ export default function LibraryScreen() {
     }
 
     const scansData = (data ?? []) as Scan[];
-    console.log(`📚 ${scansData.length} textes chargés depuis la DB`);
-    console.log('📁 Répartition:', {
+    __DEV__ && console.log(`📚 ${scansData.length} textes chargés depuis la DB`);
+    __DEV__ && console.log('📁 Répartition:', {
       withFolder: scansData.filter(s => s.folder_id !== null).length,
       withoutFolder: scansData.filter(s => s.folder_id === null).length
     });
     setScans(scansData);
+    saveLocalScans(scansData);
   }, [router, t]);
 
   const deleteFolder = useCallback(async (folderId: string, folderName: string) => {
@@ -169,7 +185,7 @@ export default function LibraryScreen() {
   // ✅ Recharge quand tu reviens sur l'écran
   useFocusEffect(
     useCallback(() => {
-      console.log('📚 Rechargement de la bibliothèque...');
+      __DEV__ && console.log('📚 Rechargement de la bibliothèque...');
       loadFolders();
       loadScans();
     }, [loadFolders, loadScans])

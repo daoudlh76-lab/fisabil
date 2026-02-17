@@ -67,14 +67,14 @@ export async function initRevenueCat(): Promise<boolean> {
   const apiKey = Platform.OS === 'ios' ? APPLE_API_KEY : GOOGLE_API_KEY;
 
   if (!apiKey) {
-    console.warn('⚠️ [RC] No API key found for platform:', Platform.OS,
+    __DEV__ && console.warn('⚠️ [RC] No API key found for platform:', Platform.OS,
       '\n  → Set EXPO_PUBLIC_REVENUECAT_API_KEY (or EXPO_PUBLIC_REVENUECAT_APPLE_KEY / EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY) in .env');
     return false;
   }
 
   try {
     if (__DEV__) {
-      console.log('💰 [RC] Configuring with key:', apiKey.substring(0, 8) + '...', 'platform:', Platform.OS);
+      __DEV__ && console.log('💰 [RC] Configuring with key:', apiKey.substring(0, 8) + '...', 'platform:', Platform.OS);
     }
 
     // CRITICAL: Check if native module is available BEFORE calling configure
@@ -89,8 +89,8 @@ export async function initRevenueCat(): Promise<boolean> {
 
     if (!canConfigure) {
       if (__DEV__) {
-        console.warn('💰 [RC] ⚠️ Native module not available (Expo Go or preview mode)');
-        console.warn('💰 [RC] → To use RevenueCat, create a development build: npx expo run:ios');
+        __DEV__ && console.warn('💰 [RC] ⚠️ Native module not available (Expo Go or preview mode)');
+        __DEV__ && console.warn('💰 [RC] → To use RevenueCat, create a development build: npx expo run:ios');
       }
       return false;
     }
@@ -119,8 +119,8 @@ export async function initRevenueCat(): Promise<boolean> {
 
     if (isNativeModuleError) {
       if (__DEV__) {
-        console.warn('💰 [RC] ⚠️ Native module not available (Expo Go or preview mode)');
-        console.warn('💰 [RC] → To use RevenueCat, create a development build: npx expo run:ios');
+        __DEV__ && console.warn('💰 [RC] ⚠️ Native module not available (Expo Go or preview mode)');
+        __DEV__ && console.warn('💰 [RC] → To use RevenueCat, create a development build: npx expo run:ios');
       }
     } else {
       if (__DEV__) console.error('💰 [RC] ❌ Configuration error:', error);
@@ -184,7 +184,7 @@ export async function getOfferings(): Promise<PurchasesOfferings | null> {
     const offerings = await Purchases.getOfferings();
 
     if (__DEV__) {
-      console.log('💰 [RC] Offerings fetched:', {
+      __DEV__ && console.log('💰 [RC] Offerings fetched:', {
         hasCurrentOffering: !!offerings.current,
         packagesCount: offerings.current?.availablePackages.length ?? 0,
       });
@@ -292,7 +292,7 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
  */
 export function parseCustomerInfo(info: CustomerInfo): SubscriptionStatus {
   if (__DEV__) {
-    console.log('💰 [RC] parseCustomerInfo debug:', JSON.stringify({
+    __DEV__ && console.log('💰 [RC] parseCustomerInfo debug:', JSON.stringify({
       activeEntitlements: Object.keys(info.entitlements.active),
       allEntitlements: Object.keys(info.entitlements.all),
       activeSubscriptions: info.activeSubscriptions,

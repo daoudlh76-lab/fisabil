@@ -49,7 +49,7 @@ export const useSyncManager = () => {
 
       // Si on vient de se reconnecter, sync automatiquement
       if (wasOffline && isNowOnline) {
-        console.log('📡 Connexion rétablie, synchronisation...');
+        __DEV__ && console.log('📡 Connexion rétablie, synchronisation...');
         syncAll();
       }
     });
@@ -66,7 +66,7 @@ export const useSyncManager = () => {
           setSyncState((prev) => ({ ...prev, lastSync: new Date(stored) }));
         }
       } catch (error) {
-        console.error('Erreur chargement lastSync:', error);
+        __DEV__ && console.error('Erreur chargement lastSync:', error);
       }
     };
     loadLastSync();
@@ -85,7 +85,7 @@ export const useSyncManager = () => {
       await AsyncStorage.setItem(`${SYNC_PREFIX}${key}`, JSON.stringify(payload));
       return true;
     } catch (error) {
-      console.error('Erreur saveLocal:', error);
+      __DEV__ && console.error('Erreur saveLocal:', error);
       return false;
     }
   }, []);
@@ -101,7 +101,7 @@ export const useSyncManager = () => {
       const parsed = JSON.parse(stored);
       return parsed.data;
     } catch (error) {
-      console.error('Erreur loadLocal:', error);
+      __DEV__ && console.error('Erreur loadLocal:', error);
       return null;
     }
   }, []);
@@ -113,7 +113,7 @@ export const useSyncManager = () => {
     async (tableName: string, data: any, userId?: string) => {
       try {
         if (!syncState.isOnline) {
-          console.log('📴 Pas de connexion, sauvegarde locale uniquement');
+          __DEV__ && console.log('📴 Pas de connexion, sauvegarde locale uniquement');
           return false;
         }
 
@@ -121,7 +121,7 @@ export const useSyncManager = () => {
         const user_id = userId || session?.user?.id;
 
         if (!user_id) {
-          console.warn('Pas d\'utilisateur connecté, impossible de sync');
+          __DEV__ && console.warn('Pas d\'utilisateur connecté, impossible de sync');
           return false;
         }
 
@@ -133,14 +133,14 @@ export const useSyncManager = () => {
         const { error } = await supabase.from(tableName).upsert(payload);
 
         if (error) {
-          console.error('Erreur saveCloud:', error);
+          __DEV__ && console.error('Erreur saveCloud:', error);
           return false;
         }
 
-        console.log(`✅ Données synchronisées vers ${tableName}`);
+        __DEV__ && console.log(`✅ Données synchronisées vers ${tableName}`);
         return true;
       } catch (error) {
-        console.error('Erreur saveCloud:', error);
+        __DEV__ && console.error('Erreur saveCloud:', error);
         return false;
       }
     },
@@ -154,7 +154,7 @@ export const useSyncManager = () => {
     async (tableName: string, userId?: string) => {
       try {
         if (!syncState.isOnline) {
-          console.log('📴 Pas de connexion, chargement local uniquement');
+          __DEV__ && console.log('📴 Pas de connexion, chargement local uniquement');
           return null;
         }
 
@@ -162,7 +162,7 @@ export const useSyncManager = () => {
         const user_id = userId || session?.user?.id;
 
         if (!user_id) {
-          console.warn('Pas d\'utilisateur connecté, impossible de charger');
+          __DEV__ && console.warn('Pas d\'utilisateur connecté, impossible de charger');
           return null;
         }
 
@@ -172,14 +172,14 @@ export const useSyncManager = () => {
           .eq('user_id', user_id);
 
         if (error) {
-          console.error('Erreur loadCloud:', error);
+          __DEV__ && console.error('Erreur loadCloud:', error);
           return null;
         }
 
-        console.log(`📥 Données chargées depuis ${tableName}:`, data?.length || 0, 'items');
+        __DEV__ && console.log(`📥 Données chargées depuis ${tableName}:`, data?.length || 0, 'items');
         return data;
       } catch (error) {
-        console.error('Erreur loadCloud:', error);
+        __DEV__ && console.error('Erreur loadCloud:', error);
         return null;
       }
     },
@@ -213,7 +213,7 @@ export const useSyncManager = () => {
 
         return success;
       } catch (error) {
-        console.error('Erreur syncToCloud:', error);
+        __DEV__ && console.error('Erreur syncToCloud:', error);
         return false;
       }
     },
@@ -247,7 +247,7 @@ export const useSyncManager = () => {
 
         return success;
       } catch (error) {
-        console.error('Erreur syncFromCloud:', error);
+        __DEV__ && console.error('Erreur syncFromCloud:', error);
         return false;
       }
     },
@@ -259,7 +259,7 @@ export const useSyncManager = () => {
    */
   const syncAll = useCallback(async () => {
     if (!syncState.isOnline) {
-      console.log('📴 Pas de connexion Internet');
+      __DEV__ && console.log('📴 Pas de connexion Internet');
       return;
     }
 
@@ -280,7 +280,7 @@ export const useSyncManager = () => {
 
         // Si pas encore synced, essayer de sync
         if (!parsed.synced) {
-          console.log(`🔄 Sync de ${key}...`);
+          __DEV__ && console.log(`🔄 Sync de ${key}...`);
           // Note: Pour un vrai sync, il faudrait connaître le tableName
           // Pour l'instant, on marque juste comme synced
           parsed.synced = true;
@@ -299,9 +299,9 @@ export const useSyncManager = () => {
         error: hasError ? 'Certaines données n\'ont pas pu être synchronisées' : null,
       }));
 
-      console.log('✅ Synchronisation terminée');
+      __DEV__ && console.log('✅ Synchronisation terminée');
     } catch (error) {
-      console.error('Erreur syncAll:', error);
+      __DEV__ && console.error('Erreur syncAll:', error);
       setSyncState((prev) => ({
         ...prev,
         status: 'error',

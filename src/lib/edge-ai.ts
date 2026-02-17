@@ -10,33 +10,19 @@ import { supabase } from './supabase';
  */
 export async function invokeEdge<T = any>(fnName: string, body: any): Promise<T> {
   if (__DEV__) {
-    console.log(`📡 [EdgeAI] invokeEdge('${fnName}') payload:`, body);
+    __DEV__ && console.log(`📡 [EdgeAI] invokeEdge('${fnName}') payload:`, body);
   }
-
-  // Récupérer la session
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData?.session?.access_token;
-
-  if (!accessToken) {
-    throw new Error("No session or access token");
-  }
-
-  console.log("[EdgeAI] hasSession", !!accessToken, "fn", fnName);
-  console.log("[EdgeAI] token startsWith", accessToken?.slice(0, 20));
 
   const { data, error } = await supabase.functions.invoke(fnName, {
     body,
-    headers: {
-      Authorization: `Bearer ${accessToken}`
-    }
   });
 
   if (__DEV__) {
-    console.log(`📡 [EdgeAI] invokeEdge('${fnName}') response:`, data, error);
+    __DEV__ && console.log(`📡 [EdgeAI] invokeEdge('${fnName}') response:`, data, error);
   }
   if (error) {
     const errMsg = `[EdgeAI] ${fnName} failed: status=${error.status || 'unknown'}, message=${error.message}`;
-    console.error(errMsg, "url:", error.context?.url);
+    __DEV__ && console.error(errMsg, "url:", error.context?.url);
     throw new Error(errMsg);
   }
   return data as T;

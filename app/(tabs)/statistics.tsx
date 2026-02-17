@@ -53,7 +53,7 @@ export default function StatisticsScreen() {
         .like('key', 'ai_vocab_%');
 
       if (error) {
-        console.error('Erreur chargement vocabulaire:', error);
+        __DEV__ && console.error('Erreur chargement vocabulaire:', error);
         return;
       }
 
@@ -102,7 +102,7 @@ export default function StatisticsScreen() {
               allParticles.push(...particleItems);
             }
           } catch (e) {
-            console.error('Erreur parsing cache:', e);
+            __DEV__ && console.error('Erreur parsing cache:', e);
           }
         }
       }
@@ -125,7 +125,7 @@ export default function StatisticsScreen() {
       setParticles(uniqueParticles.sort((a, b) => a.word.localeCompare(b.word, 'ar')));
 
     } catch (error) {
-      console.error('Erreur chargement statistiques:', error);
+      __DEV__ && console.error('Erreur chargement statistiques:', error);
     } finally {
       setLoading(false);
     }

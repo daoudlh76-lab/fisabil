@@ -19,7 +19,7 @@ export const useTextToSpeech = () => {
         setIsSpeaking(true);
 
         const speed = language.startsWith('ar') ? 0.9 : 1.0;
-        console.log(`🔊 Lecture avec voix ${gender === 'female' ? 'féminine' : 'masculine'} (OpenAI TTS, gender: ${gender})`);
+        __DEV__ && console.log(`🔊 Lecture avec voix ${gender === 'female' ? 'féminine' : 'masculine'} (locale, gender: ${gender})`);
 
         await speakWithOpenAI({
           text,
@@ -28,15 +28,15 @@ export const useTextToSpeech = () => {
           language,
           onDone: () => {
             setIsSpeaking(false);
-            console.log('🔊 Lecture terminée');
+            __DEV__ && console.log('🔊 Lecture terminée');
           },
           onError: (err) => {
-            console.error('Erreur synthèse vocale:', err);
+            __DEV__ && console.error('Erreur synthèse vocale:', err);
             setIsSpeaking(false);
           },
         });
       } catch (error) {
-        console.error('Erreur synthèse vocale:', error);
+        __DEV__ && console.error('Erreur synthèse vocale:', error);
       } finally {
         setIsSpeaking(false);
       }
@@ -50,7 +50,7 @@ export const useTextToSpeech = () => {
       await stopTTS();
       setIsSpeaking(false);
     } catch (error) {
-      console.error('Erreur arrêt parole:', error);
+      __DEV__ && console.error('Erreur arrêt parole:', error);
     }
   }, []);
 
@@ -64,7 +64,7 @@ export const useTextToSpeech = () => {
 
         // Note: expo-speech ne peut pas générer de fichiers audio
         // On utilise directement la lecture vocale à la place
-        console.log('📢 Utilisation de la synthèse vocale en temps réel');
+        __DEV__ && console.log('📢 Utilisation de la synthèse vocale en temps réel');
         
         setConversionProgress(100);
         
@@ -72,7 +72,7 @@ export const useTextToSpeech = () => {
         // L'app utilisera speakText() pour la lecture
         return null;
       } catch (error) {
-        console.error('Erreur conversion texte-audio:', error);
+        __DEV__ && console.error('Erreur conversion texte-audio:', error);
         return null;
       } finally {
         setIsConverting(false);

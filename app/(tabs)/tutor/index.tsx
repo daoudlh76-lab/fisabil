@@ -77,15 +77,17 @@ export default function TutorPage() {
   }, []);
 
   // Recharger les textes et dossiers à chaque fois que l'utilisateur revient sur cette page
+  // + arrêter l'audio quand on quitte la page
   useFocusEffect(
     useCallback(() => {
-      console.log('📚 [PAGE] Rechargement des textes du tuteur...');
-      console.log('📚 [PAGE] userTexts actuels:', userTexts.length);
-      loadUserTexts().then((texts) => {
-        console.log('📚 [PAGE] Textes rechargés:', texts?.length || 0);
-      });
+      __DEV__ && console.log('📚 [PAGE] Rechargement des textes du tuteur...');
+      loadUserTexts();
       loadFolders();
-    }, [loadUserTexts, loadFolders, userTexts])
+
+      return () => {
+        interrupt();
+      };
+    }, [loadUserTexts, loadFolders, interrupt])
   );
 
   // Filtrer les textes par recherche et dossier
@@ -123,9 +125,9 @@ export default function TutorPage() {
 
   // Log userTexts à chaque changement
   useEffect(() => {
-    console.log('📚 [PAGE] userTexts mis à jour:', userTexts.length);
+    __DEV__ && console.log('📚 [PAGE] userTexts mis à jour:', userTexts.length);
     if (userTexts.length > 0) {
-      console.log('📚 [PAGE] Premier texte:', userTexts[0]?.title);
+      __DEV__ && console.log('📚 [PAGE] Premier texte:', userTexts[0]?.title);
     }
   }, [userTexts]);
 
@@ -175,7 +177,7 @@ export default function TutorPage() {
             onPress={async () => {
               const id = selectedTextId ?? userTexts[0]?.id;
               if (!id) return;
-              console.log('[UI] Start Dialogue pressed for', id);
+              __DEV__ && console.log('[UI] Start Dialogue pressed for', id);
               await startDialogue(id);
             }}
             disabled={preparedCount() === 0}

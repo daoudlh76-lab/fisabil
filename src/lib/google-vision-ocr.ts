@@ -9,6 +9,7 @@ const GOOGLE_VISION_API_URL = 'https://vision.googleapis.com/v1/images:annotate'
 export interface OcrResult {
   text: string;
   confidence: number;
+  words?: string[]; // Mots individuels extraits par Google Vision
   error?: string;
 }
 
@@ -23,7 +24,7 @@ async function prepareImageForOcr(imageUri: string): Promise<string> {
 
   if (__DEV__) {
     const sizeMB = (base64.length / (1024 * 1024)).toFixed(2);
-    console.log(`📏 Image base64: ${sizeMB} MB`);
+    __DEV__ && console.log(`📏 Image base64: ${sizeMB} MB`);
   }
 
   return base64;
@@ -44,7 +45,7 @@ async function fetchWithRetry(
     try {
       if (attempt > 0) {
         const delay = attempt * 1500; // 1.5s, 3s, 4.5s
-        console.log(`🔄 Retry ${attempt}/${maxRetries} après ${delay}ms...`);
+        __DEV__ && console.log(`🔄 Retry ${attempt}/${maxRetries} après ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       const response = await fetch(url, options);
@@ -58,7 +59,7 @@ async function fetchWithRetry(
       if (!isNetworkError || attempt === maxRetries) {
         throw lastError;
       }
-      console.warn(`⚠️ Erreur réseau (tentative ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
+      __DEV__ && console.warn(`⚠️ Erreur réseau (tentative ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
     }
   }
 
@@ -78,7 +79,7 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
   try {
     // Vérifier si Google Vision est configuré
     if (!GOOGLE_VISION_API_KEY) {
-      console.warn('⚠️ Google Vision API key not configured');
+      __DEV__ && console.warn('⚠️ Google Vision API key not configured');
       return {
         text: '',
         confidence: 0,
@@ -89,7 +90,7 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
     // Convertir en base64
     const base64Image = await prepareImageForOcr(imageUri);
 
-    console.log('📡 Envoi de la requête à Google Vision...');
+    __DEV__ && console.log('📡 Envoi de la requête à Google Vision...');
 
     // Préparer la requête pour Google Vision
     const requestBody = {
@@ -123,7 +124,7 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('❌ Erreur Google Vision:', errorData);
+      __DEV__ && console.error('❌ Erreur Google Vision:', errorData);
       throw new Error(errorData.error?.message || `HTTP ${response.status}`);
     }
 
@@ -132,7 +133,7 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
     // Extraire le texte et la confiance
     const textAnnotations = data.responses?.[0]?.textAnnotations;
     if (!textAnnotations || textAnnotations.length === 0) {
-      console.warn('⚠️ Aucun texte détecté dans l\'image');
+      __DEV__ && console.warn('⚠️ Aucun texte détecté dans l\'image');
       return {
         text: '',
         confidence: 0,
@@ -143,18 +144,25 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
     // Le premier élément contient tout le texte détecté
     const fullText = textAnnotations[0].description || '';
 
+    // Extraire les mots individuels (à partir du 2ème élément)
+    const words = textAnnotations
+      .slice(1) // Skip le premier (texte complet)
+      .map(annotation => annotation.description)
+      .filter(word => word && /[\u0600-\u06FF]/.test(word)); // Garde uniquement les mots arabes
+
     // Calculer une confiance moyenne (Google Vision ne fournit pas de score global)
     const confidence = 0.85; // Valeur conservative pour Google Vision
 
-    console.log(`✅ OCR terminé avec succès (${fullText.length} caractères)`);
+    __DEV__ && console.log(`✅ OCR terminé avec succès (${fullText.length} caractères, ${words.length} mots)`);
 
     return {
       text: fullText,
       confidence,
+      words, // ✅ Mots individuels extraits par Google Vision
     };
 
   } catch (error) {
-    console.error('❌ Erreur lors de l\'OCR:', error);
+    __DEV__ && console.error('❌ Erreur lors de l\'OCR:', error);
     return {
       text: '',
       confidence: 0,
@@ -177,8 +185,8 @@ export async function performOcr(imageUri: string): Promise<OcrResult> {
  */
 export async function addDiacritics(arabicText: string): Promise<string> {
   if (__DEV__) {
-    console.warn('⚠️ addDiacritics: OpenAI client-side calls disabled for security.');
-    console.warn('💡 Use Supabase Edge Function instead: supabase.functions.invoke("add-diacritics")');
+    __DEV__ && console.warn('⚠️ addDiacritics: OpenAI client-side calls disabled for security.');
+    __DEV__ && console.warn('💡 Use Supabase Edge Function instead: supabase.functions.invoke("add-diacritics")');
   }
 
   // Return original text unchanged

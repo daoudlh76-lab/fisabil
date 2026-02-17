@@ -12,7 +12,7 @@ try {
   ExpoSpeechRecognitionModule = speechRecognition.ExpoSpeechRecognitionModule;
   useSpeechRecognitionEvent = speechRecognition.useSpeechRecognitionEvent;
 } catch (e) {
-  console.log('⚠️ expo-speech-recognition not available (native module required)');
+  __DEV__ && console.log('⚠️ expo-speech-recognition not available (native module required)');
 }
 
 // Hook factice pour quand le module n'est pas disponible
@@ -43,7 +43,7 @@ export function useSpeechNative(forceArabic: boolean = true) {
 
     try {
       const status = await ExpoSpeechRecognitionModule.getPermissionsAsync();
-      console.log('🎤 Permission status:', status);
+      __DEV__ && console.log('🎤 Permission status:', status);
 
       if (status.granted) {
         setHasPermission(true);
@@ -52,7 +52,7 @@ export function useSpeechNative(forceArabic: boolean = true) {
 
       if (status.canAskAgain) {
         const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-        console.log('🎤 Permission result:', result);
+        __DEV__ && console.log('🎤 Permission result:', result);
         setHasPermission(result.granted);
         return result.granted;
       } else {
@@ -61,7 +61,7 @@ export function useSpeechNative(forceArabic: boolean = true) {
         return false;
       }
     } catch (err) {
-      console.error('❌ Error checking permissions:', err);
+      __DEV__ && console.error('❌ Error checking permissions:', err);
       setHasPermission(false);
       return false;
     }
@@ -72,7 +72,7 @@ export function useSpeechNative(forceArabic: boolean = true) {
 
   // Ecoute les résultats de transcription
   eventHook('result', (event: any) => {
-    console.log('🎤 Speech result:', event);
+    __DEV__ && console.log('🎤 Speech result:', event);
     if (event && event.results && event.results[0]) {
       setTranscript(event.results[0].transcript);
     }
@@ -80,14 +80,14 @@ export function useSpeechNative(forceArabic: boolean = true) {
 
   // Ecoute les erreurs
   eventHook('error', (event: any) => {
-    console.error('🎤 Speech error:', event);
+    __DEV__ && console.error('🎤 Speech error:', event);
     setError(event.message || JSON.stringify(event));
     setIsListening(false);
   });
 
   // Ecoute la fin de reconnaissance
   eventHook('end', () => {
-    console.log('🎤 Speech ended');
+    __DEV__ && console.log('🎤 Speech ended');
     setIsListening(false);
   });
 
@@ -133,7 +133,7 @@ export function useSpeechNative(forceArabic: boolean = true) {
         voiceLang = langMap[language] || 'ar-SA';
       }
 
-      console.log('🎤 Starting speech recognition with lang:', voiceLang);
+      __DEV__ && console.log('🎤 Starting speech recognition with lang:', voiceLang);
 
       await ExpoSpeechRecognitionModule.start({
         lang: voiceLang,
@@ -141,7 +141,7 @@ export function useSpeechNative(forceArabic: boolean = true) {
         continuous: false,
       });
     } catch (err) {
-      console.error('❌ Start listening error:', err);
+      __DEV__ && console.error('❌ Start listening error:', err);
       setError("Impossible de démarrer: " + (err instanceof Error ? err.message : String(err)));
       setIsListening(false);
     }

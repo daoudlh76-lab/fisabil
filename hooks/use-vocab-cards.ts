@@ -23,6 +23,9 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
   const [cards, setCards] = useState<VocabCard[]>(initialCards);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [reviewedStats, setReviewedStats] = useState<Record<CardDifficulty, number>>({
+    easy: 0, medium: 0, hard: 0, forgotten: 0,
+  });
   // Garder une ref de la dernière initialCards appliquée
   // pour ne synchroniser que lors d'un vrai rechargement externe
   const lastAppliedRef = useRef<VocabCard[]>(initialCards);
@@ -35,13 +38,19 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
       setCards(initialCards);
       setCurrentIndex(0);
       setIsFlipped(false);
+      setReviewedStats({ easy: 0, medium: 0, hard: 0, forgotten: 0 });
     }
   }, [initialCards]);
 
   const currentCard = cards[currentIndex];
+  const isSavingRef = useRef(false);
 
   const updateDifficulty = useCallback(
     async (difficulty: CardDifficulty) => {
+      // Guard anti-double-tap
+      if (isSavingRef.current) return;
+      isSavingRef.current = true;
+
       const now = new Date();
       const intervals: Record<CardDifficulty, number> = {
         easy: 30, // 30 jours
@@ -58,47 +67,50 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
         const { data: sessionData } = await supabase.auth.getSession();
         const userId = sessionData.session?.user?.id;
 
-        if (userId && currentCard && currentCard.scanId) {
+        if (userId && currentCard) {
           const { error } = await supabase
             .from('vocab_cards_progress')
             .upsert({
               user_id: userId,
-              scan_id: currentCard.scanId,
+              vocabulary_id: null,
+              scan_id: currentCard.scanId || null,
               word_ar: currentCard.wordAr,
               difficulty,
               last_reviewed: now.toISOString(),
               next_review: nextReviewDate.toISOString(),
               review_count: currentCard.reviewCount + 1,
             }, {
-              onConflict: 'user_id,scan_id,word_ar'
+              onConflict: 'user_id,word_ar'
             });
 
           if (error) {
-            console.error('❌ Erreur sauvegarde progression:', error);
+            __DEV__ && console.error('❌ Erreur sauvegarde progression:', error);
           } else {
-            console.log('✅ Progression sauvegardée:', { scanId: currentCard.scanId, word: currentCard.wordAr, difficulty });
+            __DEV__ && console.log('✅ Progression sauvegardée:', { word: currentCard.wordAr, difficulty });
           }
-        } else if (!currentCard?.scanId) {
-          console.warn('⚠️ Impossible de sauvegarder: scanId manquant pour', currentCard?.wordAr);
         }
       } catch (e) {
-        console.error('❌ Erreur:', e);
+        __DEV__ && console.error('❌ Erreur:', e);
       }
+
+      // Comptabiliser la carte révisée
+      setReviewedStats((prev) => ({
+        ...prev,
+        [difficulty]: prev[difficulty] + 1,
+      }));
 
       // Mettre à jour l'état local — retirer la carte révisée du deck
       setCards((prev) => {
         const updated = prev.filter((_, idx) => idx !== currentIndex);
+        // Ajuster l'index dans le même setState pour éviter les stale closures
+        setCurrentIndex((prevIdx) => {
+          if (updated.length === 0) return 0;
+          return prevIdx >= updated.length ? updated.length - 1 : prevIdx;
+        });
         return updated;
       });
-
-      // Ajuster l'index si nécessaire
-      setCurrentIndex((prevIdx) => {
-        // Si on a retiré la dernière carte du tableau, reculer d'un cran
-        const remaining = cards.length - 1;
-        if (remaining === 0) return 0;
-        return prevIdx >= remaining ? remaining - 1 : prevIdx;
-      });
       setIsFlipped(false);
+      isSavingRef.current = false;
     },
     [currentIndex, cards]
   );
@@ -112,11 +124,12 @@ export const useVocabCards = (initialCards: VocabCard[] = []) => {
     return {
       total: cards.length,
       toReview: getCardsToReview().length,
-      easy: cards.filter((c) => c.difficulty === 'easy').length,
-      hard: cards.filter((c) => c.difficulty === 'hard').length,
-      forgotten: cards.filter((c) => c.difficulty === 'forgotten').length,
+      easy: reviewedStats.easy,
+      medium: reviewedStats.medium,
+      hard: reviewedStats.hard,
+      forgotten: reviewedStats.forgotten,
     };
-  }, [cards, getCardsToReview]);
+  }, [cards, getCardsToReview, reviewedStats]);
 
   return {
     cards,

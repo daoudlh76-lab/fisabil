@@ -143,7 +143,7 @@ export const useAudioPlaylist = () => {
         setPlaylist((prev) => ({ ...prev, isPlaying: true }));
       }
     } catch (error) {
-      console.error('Erreur lecture audio:', error);
+      __DEV__ && console.error('Erreur lecture audio:', error);
     }
   }, [playlist.tracks, playlist.currentTrackIndex, playlist.isLooping, selectTrack]);
 
@@ -155,7 +155,7 @@ export const useAudioPlaylist = () => {
           await soundRef.current.unloadAsync();
           soundRef.current = null;
         } catch (error) {
-          console.error('Erreur nettoyage son:', error);
+          __DEV__ && console.error('Erreur nettoyage son:', error);
         }
       }
       selectTrack(playlist.currentTrackIndex + 1);
@@ -181,7 +181,7 @@ export const useAudioPlaylist = () => {
           await soundRef.current.unloadAsync();
           soundRef.current = null;
         } catch (error) {
-          console.error('Erreur nettoyage son:', error);
+          __DEV__ && console.error('Erreur nettoyage son:', error);
         }
       }
       selectTrack(playlist.currentTrackIndex - 1);

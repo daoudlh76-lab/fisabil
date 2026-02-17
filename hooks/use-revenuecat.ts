@@ -140,7 +140,7 @@ export function useRevenueCat() {
         // Use the activate_store_subscription RPC for proper server-side activation
         // Function expects individual p_* parameters (NOT a payload object)
         if (__DEV__) {
-          console.log('💰 [RC Hook] Calling activate_store_subscription with:', {
+          __DEV__ && console.log('💰 [RC Hook] Calling activate_store_subscription with:', {
             p_user_id: userId,
             p_plan: status.plan,
             p_store_provider: status.store ?? 'apple',

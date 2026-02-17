@@ -76,14 +76,14 @@ export default function DeleteAccountScreen() {
         await supabase.auth.getSession();
 
       if (sessionError) {
-        console.error('❌ getSession error:', sessionError);
+        __DEV__ && console.error('❌ getSession error:', sessionError);
         throw new Error('Impossible de récupérer la session. Reconnecte-toi.');
       }
 
       const accessToken = sessionData?.session?.access_token;
       const userId = sessionData?.session?.user?.id;
 
-      console.log('🔐 Session check:', {
+      __DEV__ && console.log('🔐 Session check:', {
         hasSession: !!sessionData?.session,
         hasToken: !!accessToken,
         tokenLength: accessToken?.length,
@@ -106,8 +106,8 @@ export default function DeleteAccountScreen() {
 
       const url = `${SUPABASE_URL}/functions/v1/delete-account`;
 
-      console.log('🔥 Calling delete-account:', url);
-      console.log('📤 Token prefix:', accessToken.slice(0, 20) + '...');
+      __DEV__ && console.log('🔥 Calling delete-account:', url);
+      __DEV__ && console.log('📤 Token prefix:', accessToken.slice(0, 20) + '...');
 
       const res = await fetch(url, {
         method: 'POST',
@@ -125,7 +125,7 @@ export default function DeleteAccountScreen() {
         json = JSON.parse(text);
       } catch {}
 
-      console.log('📥 Response:', { status: res.status, body: json ?? text });
+      __DEV__ && console.log('📥 Response:', { status: res.status, body: json ?? text });
 
       if (!res.ok) {
         const msg =
@@ -137,7 +137,7 @@ export default function DeleteAccountScreen() {
         throw new Error(msg);
       }
 
-      console.log('✅ Account deleted:', json);
+      __DEV__ && console.log('✅ Account deleted:', json);
 
       // 3) Sign out (même si le user est déjà supprimé, ça ne doit pas casser)
       await supabase.auth.signOut();
@@ -148,7 +148,7 @@ export default function DeleteAccountScreen() {
           'Votre compte a été supprimé avec succès.'
       );
     } catch (e: any) {
-      console.error('❌ Account deletion error:', e);
+      __DEV__ && console.error('❌ Account deletion error:', e);
       showError(e?.message || String(e));
       setIsDeleting(false);
     }

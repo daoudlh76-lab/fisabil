@@ -60,7 +60,7 @@ async function getStorageKey(): Promise<string> {
     const userId = session?.user?.id;
     return userId ? `@fisabil_playlist_${userId}` : "@fisabil_playlist_guest";
   } catch (error) {
-    console.error("Erreur récupération user_id:", error);
+    __DEV__ && console.error("Erreur récupération user_id:", error);
     return "@fisabil_playlist_guest";
   }
 }
@@ -90,7 +90,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
       }));
       await AsyncStorage.setItem(storageKey, JSON.stringify(serializable));
     } catch (error) {
-      console.error("Erreur sauvegarde playlist:", error);
+      __DEV__ && console.error("Erreur sauvegarde playlist:", error);
     }
   }, []);
 
@@ -110,7 +110,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         setPlaylist((prev) => ({ ...prev, tracks: [] }));
       }
     } catch (error) {
-      console.error("Erreur chargement playlist:", error);
+      __DEV__ && console.error("Erreur chargement playlist:", error);
     }
   }, []);
 
@@ -147,22 +147,22 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
 
   const loadCurrentTrackIntoPlayer = useCallback(async () => {
     try {
-      console.log('🔄 loadCurrentTrackIntoPlayer called');
+      __DEV__ && console.log('🔄 loadCurrentTrackIntoPlayer called');
       const track = playlist.tracks[playlist.currentTrackIndex];
-      console.log('🎵 Loading track:', {
+      __DEV__ && console.log('🎵 Loading track:', {
         title: track?.title,
         hasUri: !!track?.uri,
         uri: track?.uri?.substring(0, 50),
       });
 
       if (!track?.uri) {
-        console.warn('⚠️ No track URI to load');
+        __DEV__ && console.warn('⚠️ No track URI to load');
         return;
       }
 
       // Décharge l'ancien son
       if (soundRef.current) {
-        console.log('🗑️ Unloading previous sound');
+        __DEV__ && console.log('🗑️ Unloading previous sound');
         await soundRef.current.unloadAsync();
         soundRef.current = null;
       }
@@ -170,7 +170,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
       // Récupérer l'état actuel de isLooping
       const currentLooping = playlist.isLooping;
 
-      console.log('📡 Creating audio with URI:', track.uri.substring(0, 80));
+      __DEV__ && console.log('📡 Creating audio with URI:', track.uri.substring(0, 80));
       const { sound, status } = await Audio.Sound.createAsync(
         { uri: track.uri },
         {
@@ -178,7 +178,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
           isLooping: currentLooping,
         }
       );
-      console.log('✅ Audio created successfully');
+      __DEV__ && console.log('✅ Audio created successfully');
 
       soundRef.current = sound;
 
@@ -220,7 +220,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         }
       });
     } catch (error) {
-      console.error('❌ Error in loadCurrentTrackIntoPlayer:', error);
+      __DEV__ && console.error('❌ Error in loadCurrentTrackIntoPlayer:', error);
       soundRef.current = null;
     }
   }, [playlist.tracks, playlist.currentTrackIndex, playlist.isLooping]);
@@ -238,11 +238,11 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         scanId: scanId || null,
       };
 
-      console.log('🎵 addTrack appelé:', { id: newTrack.id, title, textLength: text.length, uri: audioUri });
+      __DEV__ && console.log('🎵 addTrack appelé:', { id: newTrack.id, title, textLength: text.length, uri: audioUri });
 
       setPlaylist((prev) => {
         const newTracks = [...prev.tracks, newTrack];
-        console.log('💾 Sauvegarde playlist avec', newTracks.length, 'pistes');
+        __DEV__ && console.log('💾 Sauvegarde playlist avec', newTracks.length, 'pistes');
         savePlaylist(newTracks);
         return { ...prev, tracks: newTracks };
       });
@@ -299,7 +299,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
             t.scanId === scanId ? { ...t, title: newTitle, text: newText } : t
           );
           savePlaylist(newTracks);
-          console.log('🔄 Pistes audio mises à jour pour scanId:', scanId);
+          __DEV__ && console.log('🔄 Pistes audio mises à jour pour scanId:', scanId);
           return { ...prev, tracks: newTracks };
         }
 
@@ -316,11 +316,11 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
               : t
           );
           savePlaylist(newTracks);
-          console.log('🔄 Pistes mises à jour par titre (fallback) + scanId lié:', scanId);
+          __DEV__ && console.log('🔄 Pistes mises à jour par titre (fallback) + scanId lié:', scanId);
           return { ...prev, tracks: newTracks };
         }
 
-        console.log('⚠️ Aucune piste trouvée pour scanId:', scanId, 'ni titre:', titleToMatch);
+        __DEV__ && console.log('⚠️ Aucune piste trouvée pour scanId:', scanId, 'ni titre:', titleToMatch);
         return prev;
       });
     },
@@ -335,7 +335,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
           t.id === trackId ? { ...t, scanId } : t
         );
         savePlaylist(newTracks);
-        console.log('🔗 Piste', trackId, 'liée au scan:', scanId);
+        __DEV__ && console.log('🔗 Piste', trackId, 'liée au scan:', scanId);
         return { ...prev, tracks: newTracks };
       });
     },
@@ -350,7 +350,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
           t.id === trackId ? { ...t, title: newTitle, text: newText } : t
         );
         savePlaylist(newTracks);
-        console.log('📝 Piste', trackId, 'mise à jour:', newTitle);
+        __DEV__ && console.log('📝 Piste', trackId, 'mise à jour:', newTitle);
         return { ...prev, tracks: newTracks };
       });
     },
@@ -370,13 +370,13 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (playlist.tracks.length === 0) return;
 
-    loadCurrentTrackIntoPlayer().catch((e) => console.error("Load track error:", e));
+    loadCurrentTrackIntoPlayer().catch((e) => __DEV__ && console.error("Load track error:", e));
   }, [playlist.currentTrackIndex, loadCurrentTrackIntoPlayer]);
 
   const togglePlayPause = useCallback(async () => {
     try {
-      console.log('🎵 togglePlayPause called');
-      console.log('📊 Playlist state:', {
+      __DEV__ && console.log('🎵 togglePlayPause called');
+      __DEV__ && console.log('📊 Playlist state:', {
         tracksCount: playlist.tracks.length,
         currentIndex: playlist.currentTrackIndex,
         isPlaying: playlist.isPlaying,
@@ -384,19 +384,19 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
       });
 
       if (!playlist.tracks.length) {
-        console.warn('⚠️ No tracks in playlist');
+        __DEV__ && console.warn('⚠️ No tracks in playlist');
         return;
       }
 
       const track = playlist.tracks[playlist.currentTrackIndex];
-      console.log('🎵 Current track:', {
+      __DEV__ && console.log('🎵 Current track:', {
         title: track?.title,
         hasUri: !!track?.uri,
         hasText: !!track?.text,
       });
 
       if (!track) {
-        console.warn('⚠️ No track found');
+        __DEV__ && console.warn('⚠️ No track found');
         return;
       }
 
@@ -404,45 +404,45 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
       if (track.uri) {
         // Si pas chargé, charge d'abord
         if (!soundRef.current) {
-          console.log('🔄 Loading track into player...');
+          __DEV__ && console.log('🔄 Loading track into player...');
           await loadCurrentTrackIntoPlayer();
         }
 
         if (!soundRef.current) {
-          console.error('❌ Failed to load sound');
+          __DEV__ && console.error('❌ Failed to load sound');
           return;
         }
 
         if (playlist.isPlaying) {
-          console.log('⏸️ Pausing audio file...');
+          __DEV__ && console.log('⏸️ Pausing audio file...');
           await soundRef.current.pauseAsync();
           setPlaylist((prev) => ({ ...prev, isPlaying: false }));
-          console.log('✅ Paused');
+          __DEV__ && console.log('✅ Paused');
         } else {
-          console.log('▶️ Playing audio file...');
+          __DEV__ && console.log('▶️ Playing audio file...');
           await soundRef.current.playAsync();
           setPlaylist((prev) => ({ ...prev, isPlaying: true }));
-          console.log('✅ Playing');
+          __DEV__ && console.log('✅ Playing');
         }
       }
       // CAS 2: Piste sans fichier audio - utiliser la synthèse vocale
       else if (track.text) {
         if (playlist.isPlaying) {
           // Arrêter la synthèse vocale
-          console.log('⏸️ Stopping speech...');
+          __DEV__ && console.log('⏸️ Stopping speech...');
           await Speech.stop();
           if (speechIntervalRef.current) {
             clearInterval(speechIntervalRef.current);
             speechIntervalRef.current = null;
           }
           setPlaylist((prev) => ({ ...prev, isPlaying: false }));
-          console.log('✅ Speech stopped');
+          __DEV__ && console.log('✅ Speech stopped');
         } else {
           // Démarrer la synthèse vocale (OpenAI TTS natural voice)
-          console.log('▶️ Starting speech (OpenAI TTS)...');
+          __DEV__ && console.log('▶️ Starting speech (OpenAI TTS)...');
           await Speech.stop(); // Arrêter d'abord toute lecture en cours
 
-          console.log(`🔊 Using ${gender === 'female' ? 'female' : 'male'} voice (OpenAI TTS)`);
+          __DEV__ && console.log(`🔊 Using ${gender === 'female' ? 'female' : 'male'} voice (OpenAI TTS)`);
 
           setPlaylist((prev) => ({ ...prev, isPlaying: true, currentPosition: 0 }));
 
@@ -499,60 +499,82 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
               });
             }, 1000);
 
-            // Utiliser expo-speech LOCAL - même voix que le tuteur et la dictée
+            // Utiliser expo-speech LOCAL
             const voiceOptions = getVoiceOptionsForGender(gender);
 
-            Speech.speak(track.text, {
-              language: 'ar',
-              pitch: voiceOptions.pitch,
-              rate: 0.9 * 0.85, // Ajuster le rate avec la vitesse
-              onDone: () => {
-                console.log('🔊 Speech finished');
+            // Découper le texte en segments pour éviter la troncature
+            // iOS AVSpeechSynthesizer peut s'arrêter aux sauts de paragraphe
+            const chunks = track.text
+              .split(/\n\n+/)
+              .map(c => c.trim())
+              .filter(c => c.length > 0);
+
+            __DEV__ && console.log(`🔊 Speaking ${chunks.length} chunk(s), total ${track.text.length} chars`);
+
+            let chunkIndex = 0;
+
+            const speakNextChunk = () => {
+              if (chunkIndex >= chunks.length) {
+                // Tous les segments lus
+                __DEV__ && console.log('🔊 All chunks finished');
                 if (speechIntervalRef.current) {
                   clearInterval(speechIntervalRef.current);
                   speechIntervalRef.current = null;
                 }
 
-                // Utiliser la ref pour éviter la stale closure
                 if (isLoopingRef.current) {
-                  console.log('🔄 Looping: relance de la lecture');
+                  __DEV__ && console.log('🔄 Looping: relance de la lecture');
                   setPlaylist((prev) => {
                     if (prev.tracks.length > 1) {
-                      // Plusieurs pistes → passer à la suivante
                       const nextIdx = (prev.currentTrackIndex + 1) % prev.tracks.length;
                       return { ...prev, currentTrackIndex: nextIdx, currentPosition: 0, isPlaying: true };
                     } else {
-                      // Une seule piste → relire la même
                       return { ...prev, currentPosition: 0, isPlaying: true };
                     }
                   });
-                  // Relancer la lecture après un court délai
                   setTimeout(() => replaySpeech(), 500);
                 } else {
                   setPlaylist((prev) => ({ ...prev, isPlaying: false, currentPosition: 0 }));
                 }
-              },
-              onError: (err) => {
-                console.error('❌ Speech error:', err);
-                if (speechIntervalRef.current) {
-                  clearInterval(speechIntervalRef.current);
-                  speechIntervalRef.current = null;
-                }
-                setPlaylist((prev) => ({ ...prev, isPlaying: false }));
-              },
-            }).catch(console.error);
+                return;
+              }
+
+              const chunk = chunks[chunkIndex];
+              __DEV__ && console.log(`🔊 Chunk ${chunkIndex + 1}/${chunks.length}: ${chunk.substring(0, 40)}...`);
+
+              Speech.speak(chunk, {
+                language: 'ar',
+                pitch: voiceOptions.pitch,
+                rate: 0.9 * 0.85,
+                onDone: () => {
+                  chunkIndex++;
+                  // Petite pause entre les segments
+                  setTimeout(() => speakNextChunk(), 300);
+                },
+                onError: (err) => {
+                  __DEV__ && console.error('❌ Speech error on chunk:', err);
+                  if (speechIntervalRef.current) {
+                    clearInterval(speechIntervalRef.current);
+                    speechIntervalRef.current = null;
+                  }
+                  setPlaylist((prev) => ({ ...prev, isPlaying: false }));
+                },
+              });
+            };
+
+            speakNextChunk();
           };
 
           replaySpeech();
 
-          console.log('✅ Speech started');
+          __DEV__ && console.log('✅ Speech started');
         }
       } else {
-        console.warn('⚠️ Track has no URI and no text');
+        __DEV__ && console.warn('⚠️ Track has no URI and no text');
         return;
       }
     } catch (error) {
-      console.error('❌ Error in togglePlayPause:', error);
+      __DEV__ && console.error('❌ Error in togglePlayPause:', error);
       setPlaylist((prev) => ({ ...prev, isPlaying: false }));
     }
   }, [playlist.tracks, playlist.currentTrackIndex, playlist.isPlaying, playlist.isLooping, gender, loadCurrentTrackIntoPlayer]);
@@ -590,7 +612,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
   // Arrêter complètement la lecture (stop, pas pause)
   const stopPlayback = useCallback(async () => {
     try {
-      console.log('⏹️ stopPlayback called');
+      __DEV__ && console.log('⏹️ stopPlayback called');
       // Stop audio file playback
       if (soundRef.current) {
         await soundRef.current.stopAsync().catch(() => {});
@@ -605,9 +627,9 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
         speechIntervalRef.current = null;
       }
       setPlaylist((prev) => ({ ...prev, isPlaying: false, currentPosition: 0 }));
-      console.log('⏹️ Playback stopped');
+      __DEV__ && console.log('⏹️ Playback stopped');
     } catch (error) {
-      console.error('❌ Error in stopPlayback:', error);
+      __DEV__ && console.error('❌ Error in stopPlayback:', error);
       setPlaylist((prev) => ({ ...prev, isPlaying: false, currentPosition: 0 }));
     }
   }, []);

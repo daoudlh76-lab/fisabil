@@ -2,6 +2,7 @@ import { useDictation } from '@/hooks/use-dictation';
 import { useLanguage } from '@/hooks/use-language';
 import { supabase } from '@/src/lib/supabase';
 import { invokeEdge } from '@/src/lib/edge-ai';
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     ActivityIndicator,
@@ -61,7 +62,7 @@ async function generateDictationsWithAI(
     // Extraire le JSON du contenu
     const jsonMatch = raw.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      console.error('[DICTATION] No JSON array in response:', raw.substring(0, 200));
+      __DEV__ && console.error('[DICTATION] No JSON array in response:', raw.substring(0, 200));
       return [];
     }
 
@@ -69,7 +70,7 @@ async function generateDictationsWithAI(
     if (__DEV__) console.log(`[DICTATION] ✅ GPT créé ${parsed.length} dictées pour "${title}"`);
     return parsed.filter(s => s && s.trim().length > 5);
   } catch (err) {
-    console.error('[DICTATION] AI generation error:', err);
+    __DEV__ && console.error('[DICTATION] AI generation error:', err);
     return [];
   }
 }
@@ -108,6 +109,7 @@ export default function DictationScreen() {
   const {
     isSpeaking,
     speakSentence,
+    stop: stopSpeech,
   } = useDictation();
 
   // ─── PHASE 1 : Charger la liste des textes ───
@@ -129,7 +131,7 @@ export default function DictationScreen() {
         .order('created_at', { ascending: false });
 
       if (error || !scans) {
-        console.error('❌ Erreur chargement scans:', error);
+        __DEV__ && console.error('❌ Erreur chargement scans:', error);
         setScanList([]);
         setLoadingScans(false);
         return;
@@ -146,7 +148,7 @@ export default function DictationScreen() {
 
       setScanList(validScans);
     } catch (err) {
-      console.error('Erreur loadScanList:', err);
+      __DEV__ && console.error('Erreur loadScanList:', err);
     } finally {
       setLoadingScans(false);
     }
@@ -155,6 +157,15 @@ export default function DictationScreen() {
   useEffect(() => {
     loadScanList();
   }, [loadScanList]);
+
+  // Arrêter l'audio quand on quitte la page
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        stopSpeech();
+      };
+    }, [stopSpeech])
+  );
 
   // ─── PHASE 2 : Générer les dictées pour UN seul texte ───
   const handleSelectText = useCallback(async (scan: ScanInfo) => {

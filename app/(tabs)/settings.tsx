@@ -9,7 +9,9 @@ import {
     Alert,
     Linking,
     Modal,
+    Platform,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Switch,
     Text,
@@ -33,7 +35,6 @@ export default function SettingsScreen() {
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
 
   // États pour les modals d'édition
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
@@ -60,18 +61,16 @@ export default function SettingsScreen() {
         setEditedUserName(storedName || '');
       }
     } catch (error) {
-      console.error('Erreur chargement données utilisateur:', error);
+      if (__DEV__) console.error('Erreur chargement données utilisateur:', error);
     }
   }
 
   async function loadPreferences() {
     try {
       const notifications = await AsyncStorage.getItem('@fisabil_notifications');
-      const darkMode = await AsyncStorage.getItem('@fisabil_dark_mode');
       if (notifications !== null) setNotificationsEnabled(notifications === 'true');
-      if (darkMode !== null) setDarkModeEnabled(darkMode === 'true');
     } catch (error) {
-      console.error('Erreur chargement préférences:', error);
+      if (__DEV__) console.error('Erreur chargement préférences:', error);
     }
   }
 
@@ -79,7 +78,7 @@ export default function SettingsScreen() {
     try {
       await AsyncStorage.setItem(key, value.toString());
     } catch (error) {
-      console.error('Erreur sauvegarde préférence:', error);
+      if (__DEV__) console.error('Erreur sauvegarde préférence:', error);
     }
   }
 
@@ -148,7 +147,7 @@ export default function SettingsScreen() {
         t('settings.resetSuccessMessage')
       );
     } catch (error) {
-      console.error('Erreur réinitialisation:', error);
+      if (__DEV__) console.error('Erreur réinitialisation:', error);
       Alert.alert(t('settings.error'), String(error));
     } finally {
       setIsResetting(false);
@@ -164,15 +163,6 @@ export default function SettingsScreen() {
         t('settings.notificationsEnabled') || 'Notifications activées'
       );
     }
-  };
-
-  const handleToggleDarkMode = async (value: boolean) => {
-    setDarkModeEnabled(value);
-    await savePreference('@fisabil_dark_mode', value);
-    Alert.alert(
-      'ℹ️',
-      t('settings.darkModeComingSoon') || 'Le mode sombre sera disponible dans une prochaine mise à jour'
-    );
   };
 
   const handleEditProfile = () => {
@@ -260,7 +250,7 @@ export default function SettingsScreen() {
         <View
           style={[
             styles.subscriptionCard,
-            subscription.plan === 'premium' && styles.premiumCard,
+            (subscription.plan === 'premium_monthly' || subscription.plan === 'premium_annual') && styles.premiumCard,
           ]}
         >
           <View style={styles.planHeader}>
@@ -379,8 +369,8 @@ export default function SettingsScreen() {
         <View style={styles.comparisonTable}>
           <View style={styles.comparisonRow}>
             <Text style={styles.comparisonLabel}>{t('settings.feature')}</Text>
-            <Text style={styles.comparisonCell}>{t('settings.free')}</Text>
-            <Text style={styles.comparisonCell}>{t('settings.premium')}</Text>
+            <Text style={[styles.comparisonCell, { fontWeight: '700' }]}>{t('settings.free')}</Text>
+            <Text style={[styles.comparisonCell, { fontWeight: '700' }]}>{t('settings.premium')}</Text>
           </View>
 
           <View style={styles.divider} />
@@ -388,19 +378,25 @@ export default function SettingsScreen() {
           <View style={styles.comparisonRow}>
             <Text style={styles.comparisonLabel}>{t('settings.duration')}</Text>
             <Text style={styles.comparisonCell}>7 {t('settings.days')}</Text>
-            <Text style={styles.comparisonCell}>{t('settings.unlimited')}</Text>
+            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.unlimited')}</Text>
+          </View>
+
+          <View style={styles.comparisonRow}>
+            <Text style={styles.comparisonLabel}>{t('settings.scannerFeature')}</Text>
+            <Text style={styles.comparisonCell}>1{t('settings.perDay')}</Text>
+            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.unlimited')}</Text>
           </View>
 
           <View style={styles.comparisonRow}>
             <Text style={styles.comparisonLabel}>{t('settings.aiTutor')}</Text>
             <Text style={styles.comparisonCell}>5{t('settings.perDay')}</Text>
-            <Text style={styles.comparisonCell}>{t('settings.unlimited')}</Text>
+            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.unlimited')}</Text>
           </View>
 
           <View style={styles.comparisonRow}>
             <Text style={styles.comparisonLabel}>{t('settings.dictations')}</Text>
             <Text style={styles.comparisonCell}>2{t('settings.perDay')}</Text>
-            <Text style={styles.comparisonCell}>{t('settings.unlimited')}</Text>
+            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.unlimited')}</Text>
           </View>
 
           <View style={styles.comparisonRow}>
@@ -410,15 +406,9 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{t('settings.scannerFeature')}</Text>
-            <Text style={styles.comparisonCell}>❌</Text>
-            <Text style={styles.comparisonCell}>✅</Text>
-          </View>
-
-          <View style={styles.comparisonRow}>
             <Text style={styles.comparisonLabel}>{t('settings.support')}</Text>
             <Text style={styles.comparisonCell}>{t('settings.byEmail')}</Text>
-            <Text style={styles.comparisonCell}>{t('settings.priority')}</Text>
+            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.priority')}</Text>
           </View>
         </View>
       </View>
@@ -460,19 +450,6 @@ export default function SettingsScreen() {
           <Switch
             value={notificationsEnabled}
             onValueChange={handleToggleNotifications}
-          />
-        </View>
-
-        <View style={styles.settingRow}>
-          <View>
-            <Text style={styles.settingLabel}>{t('settings.darkMode')}</Text>
-            <Text style={styles.settingDescription}>
-              {darkModeEnabled ? t('settings.enabled') : t('settings.disabled')}
-            </Text>
-          </View>
-          <Switch
-            value={darkModeEnabled}
-            onValueChange={handleToggleDarkMode}
           />
         </View>
 
@@ -923,7 +900,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1976d2',
     paddingVertical: 20,
     paddingHorizontal: 16,
-    paddingTop: 40,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 56,
   },
   title: {
     fontSize: 24,

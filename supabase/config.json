@@ -2,19 +2,23 @@
   "functions": [
     {
       "name": "extract-vocab",
-      "verify_jwt": true
+      "verify_jwt": false
     },
     {
       "name": "add-diacritics",
-      "verify_jwt": true
+      "verify_jwt": false
     },
     {
       "name": "tutor-chat",
-      "verify_jwt": true
+      "verify_jwt": false
     },
     {
       "name": "verify-store-receipt",
-      "verify_jwt": true
+      "verify_jwt": false
+    },
+    {
+      "name": "process-arabic-text",
+      "verify_jwt": false
     }
   ]
 }

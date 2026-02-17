@@ -180,7 +180,7 @@ export default function PlaylistScreen() {
       Alert.alert(t('playlist.success'), t('playlist.trackAdded'));
     } catch (error) {
       Alert.alert(t('playlist.error'), t('playlist.addError'));
-      console.error(error);
+      __DEV__ && console.error(error);
     }
   };
 
@@ -203,7 +203,7 @@ export default function PlaylistScreen() {
 
         Alert.alert('✅', t('libraryDetail.folderUpdated'));
       } catch (error) {
-        console.error('Error moving track to folder:', error);
+        __DEV__ && console.error('Error moving track to folder:', error);
         Alert.alert(t('playlist.error'), t('playlist.addError'));
       }
     }

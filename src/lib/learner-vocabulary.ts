@@ -86,10 +86,10 @@ export async function loadLearnerWords(): Promise<LearnerWord[]> {
       }
     }
 
-    console.log(`📚 Dictionnaire apprenant: ${words.length} mots uniques`);
+    __DEV__ && console.log(`📚 Dictionnaire apprenant: ${words.length} mots uniques`);
     return words;
   } catch (e) {
-    console.error('[VOCAB] Erreur chargement dictionnaire apprenant:', e);
+    __DEV__ && console.error('[VOCAB] Erreur chargement dictionnaire apprenant:', e);
     return [];
   }
 }

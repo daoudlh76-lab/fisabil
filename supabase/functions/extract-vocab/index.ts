@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
+    const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 
     console.log("[extract-vocab] OPENAI_API_KEY present?", Boolean(OPENAI_API_KEY));
     console.log("[extract-vocab] SUPABASE_URL present?", Boolean(SUPABASE_URL));
@@ -126,6 +126,17 @@ CRITICAL RULES:
    ❌ FORBIDDEN: ANY word that shows action (verb)
    ❌ FORBIDDEN: ANY word with verb conjugations (ذَهَبَ, يَذْهَبُ, etc.)
 
+   🔴 DUAL FORM (المثنى) RULE - CRITICAL:
+   If a word appears in DUAL form (ending in ـَانِ/-اَنِ or ـَيْنِ/-َيْنِ), you MUST:
+   - Put the SINGULAR form in "singulier" (NOT the dual)
+   - Put the PLURAL form in "pluriel" (NOT the dual)
+   Examples:
+     • كِتَابَانِ (two books) → singulier: كِتَابٌ, pluriel: كُتُبٌ
+     • وَلَدَانِ (two boys) → singulier: وَلَدٌ, pluriel: أَوْلَادٌ
+     • مُعَلِّمَيْنِ (two teachers) → singulier: مُعَلِّمٌ, pluriel: مُعَلِّمُونَ
+     • يَدَانِ (two hands) → singulier: يَدٌ, pluriel: أَيْدٍ
+   NEVER put the dual form in singulier or pluriel columns.
+
    🔴 MANDATORY FIELDS - NEVER LEAVE NULL UNLESS IMPOSSIBLE:
    - "pluriel": REQUIRED for ALL nouns (only null for invariable words like أَمْسِ)
    - "contraire": REQUIRED for ALL adjectives and quality nouns
@@ -147,25 +158,67 @@ CRITICAL RULES:
    ❌ FORBIDDEN: Nouns (كِتَابٌ), adjectives (كَبِيرٌ), particles (مِنْ)
 
    🔴 CRITICAL VERB FORM RULES - ERRORS HERE ARE UNACCEPTABLE:
-   - "passe_3ms": MUST be فَعَلَ form (past tense, 3rd person masculine singular)
-     ✅ CORRECT examples:
-     • ذَهَبَ (he went) - NOT يَذْهَبُ or اِذْهَبْ
-     • كَتَبَ (he wrote) - NOT يَكْتُبُ or اُكْتُبْ
-     • قَرَأَ (he read) - NOT يَقْرَأُ or اِقْرَأْ
-     • جَلَسَ (he sat) - NOT يَجْلِسُ or اِجْلِسْ
-     • شَرِبَ (he drank) - NOT يَشْرَبُ or اِشْرَبْ
-     ❌ WRONG: Using present (يَفْعَلُ) or imperative (اِفْعَلْ) in passe_3ms field
 
-   - "present_3ms": MUST be يَفْعَلُ form (present tense, 3rd person masculine singular)
-     ✅ CORRECT: يَذْهَبُ, يَكْتُبُ, يَقْرَأُ, يَجْلِسُ, يَشْرَبُ
+   ⚠️ IMPORTANT: The text may contain verbs conjugated in feminine (فَعَلَتْ),
+   plural (يَفْعَلُونَ, فَعَلُوا), 1st person (نَزَّلْنَا, رَتَّلْنَاهُ), or other forms.
+   You MUST convert ALL verbs to هُوَ (3rd masculine singular):
+     • فَعَلَتْ (she did) → passe_3ms: فَعَلَ (remove the تْ)
+     • ذَهَبَتْ (she went) → passe_3ms: ذَهَبَ
+     • نَزَّلْنَا (we sent down) → passe_3ms: نَزَّلَ
+     • رَتَّلْنَاهُ (we recited it) → passe_3ms: رَتَّلَ
+     • يَسْتَطِيعُوا (they can) → passe_3ms: اِسْتَطَاعَ
+     • يَأْتُوا (they come) → passe_3ms: أَتَى
+     • اجْتَمَعَتْ (she gathered) → passe_3ms: اِجْتَمَعَ
+     • تَدُلُّ (she indicates) → passe_3ms: دَلَّ
+     • تُؤَيِّدُ (she supports) → passe_3ms: أَيَّدَ
+     • بَقِيَتْ (she remained) → passe_3ms: بَقِيَ
 
-   - "imperatif": MUST be فِعْلْ/اِفْعَلْ form (imperative, 2nd person masculine singular)
-     ✅ CORRECT: اِذْهَبْ, اُكْتُبْ, اِقْرَأْ, اِجْلِسْ, اِشْرَبْ
+   - "passe_3ms": MUST be فَعَلَ form (past tense, 3rd person MASCULINE singular = هُوَ)
+     ✅ CORRECT: ذَهَبَ, كَتَبَ, كَانَ, قَالَ, دَلَّ, أَتَى, بَقِيَ, أَنْزَلَ, نَزَّلَ, رَتَّلَ
+     ❌ WRONG: فَعَلَتْ, فَعَلْنَا, يَفْعَلُونَ, يَفْعَلُ, تَفْعَلُ in passe_3ms
+     ❌ WRONG: تَثْبِيتُ (this is a masdar/noun, NOT a past tense verb)
+
+   - "present_3ms": MUST be يَفْعَلُ form (present tense, 3rd person MASCULINE singular = هُوَ)
+     The present MUST end with ضَمَّة (ـُ) for indicative mood (المرفوع).
+
+   🔴 HOLLOW VERBS (الأفعال الجوفاء) - MOST COMMON ERRORS:
+     • كَانَ → يَكُونُ (NOT يُكانِ or يَكانُ)
+     • قَالَ → يَقُولُ (NOT يُقالِ or يَقالُ)
+     • زَارَ → يَزُورُ
+     • نَامَ → يَنَامُ
+     • صَامَ → يَصُومُ
+     • عَادَ → يَعُودُ
+
+   🔴 FORM I PRESENT TENSE VOWEL PATTERNS - CRITICAL:
+     Pattern فَعَلَ/يَفْعُلُ (damma): كَتَبَ/يَكْتُبُ, خَرَجَ/يَخْرُجُ, دَخَلَ/يَدْخُلُ, كَفَرَ/يَكْفُرُ
+     Pattern فَعَلَ/يَفْعِلُ (kasra): جَلَسَ/يَجْلِسُ, نَزَلَ/يَنْزِلُ, ضَرَبَ/يَضْرِبُ
+     Pattern فَعَلَ/يَفْعَلُ (fatha): ذَهَبَ/يَذْهَبُ, فَتَحَ/يَفْتَحُ, ظَهَرَ/يَظْهَرُ, قَرَأَ/يَقْرَأُ
+     The middle radical in present tense has a SUKUN (ـْ), NOT a vowel: يَكْتُبُ not يَكَتُبُ
+
+   🔴 FORM IV (أَفْعَلَ) PRESENT: prefix يُ with sukun on first radical:
+     • أَنْزَلَ → يُنْزِلُ (NOT يُنَزِّلُ - that's Form II)
+     • أَرْسَلَ → يُرْسِلُ
+     • أَخْرَجَ → يُخْرِجُ
+
+   ⚠️ FORM V (تَفَعَّلَ) and FORM VI (تَفَاعَلَ) - SPECIAL ATTENTION:
+   These verbs START with تَ in the PAST tense. Do NOT confuse with feminine present!
+   The present tense adds يَ BEFORE the تَ → يَتَفَعَّلُ / يَتَفَاعَلُ
+     • تَعَلَّمَ → يَتَعَلَّمُ, تَكَلَّمَ → يَتَكَلَّمُ, تَقَدَّمَ → يَتَقَدَّمُ
+     • تَشَابَهَ → يَتَشَابَهُ, تَنَاوَلَ → يَتَنَاوَلُ
+
+   🔴 FORM VII (اِنْفَعَلَ): اِنْشَقَّ → يَنْشَقُّ (with tashdid on last letter)
+   🔴 FORM VIII (اِفْتَعَلَ): اِجْتَمَعَ → يَجْتَمِعُ
+   🔴 FORM X (اِسْتَفْعَلَ): اِسْتَطَاعَ → يَسْتَطِيعُ
+
+   - "imperatif": MUST be imperative 2nd person masculine singular
+     ✅ CORRECT: اِذْهَبْ, اُكْتُبْ, اِقْرَأْ, كُنْ, قُلْ
 
    🔴 VERIFICATION: Before adding a verb, verify that:
-   - passe_3ms does NOT start with يَ or contain ـُ/ـِ/ـَ at the end
-   - present_3ms MUST start with يَ
+   - passe_3ms is the هُوَ past form (NOT feminine تْ, NOT plural وا, NOT 1st person نَا)
+   - passe_3ms does NOT start with يَ (that's present tense!)
+   - present_3ms MUST start with يَ and end with ـُ (damma)
    - All three forms are DIFFERENT from each other
+   - Forms are MASCULINE singular (هُوَ), never feminine or plural
 
 3. "particules" array = ONLY function words (حرف) - prepositions, conjunctions, pronouns
    ✅ CORRECT: مِنْ (from), إِلَى (to), فِي (in), هُوَ (he), هِيَ (she), وَ (and), لِ (for)
@@ -257,7 +310,7 @@ EXAMPLES OF COMMON MISTAKES TO AVOID:
 
 Return ONLY the JSON object, no markdown, no comments, no explanation.`;
 
-    // ✅ Call OpenAI with higher token limit for complete extraction
+    // ✅ Call OpenAI GPT-4o for vocabulary extraction
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -270,9 +323,9 @@ Return ONLY the JSON object, no markdown, no comments, no explanation.`;
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: 16000,  // ✅ Maximum pour gpt-4o-mini (128k context, 16k output)
+        max_tokens: 16000,
         temperature: 0.1,
-        response_format: { type: "json_object" },  // ✅ Force JSON valide
+        response_format: { type: "json_object" },
       }),
     });
 

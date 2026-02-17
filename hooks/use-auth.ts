@@ -17,7 +17,7 @@ export function useAuth() {
         if (error) throw error;
         setSession(data?.session ?? null);
       } catch (error) {
-        console.error('Auth check error:', error);
+        __DEV__ && console.error('Auth check error:', error);
         setSession(null);
       } finally {
         setLoading(false);
@@ -28,12 +28,12 @@ export function useAuth() {
 
     // Écouter les changements d'auth
     const { data } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log('🔐 Auth state changed:', event, newSession ? 'has session' : 'no session');
+      __DEV__ && console.log('🔐 Auth state changed:', event, newSession ? 'has session' : 'no session');
       setSession(newSession);
 
       // Redirection immédiate lors du SIGNED_OUT
       if (event === 'SIGNED_OUT') {
-        console.log('🔐 User signed out, redirecting to login...');
+        __DEV__ && console.log('🔐 User signed out, redirecting to login...');
         router.replace('/(auth)/login');
       }
     });
@@ -55,7 +55,7 @@ export function useAuth() {
     const isOnVerifyEmailPage = currentRoute === 'verify-email';
     const isOnResetPasswordPage = currentRoute === 'reset-password';
 
-    console.log('🔐 Route check:', {
+    __DEV__ && console.log('🔐 Route check:', {
       session: !!session,
       emailConfirmed: session?.user?.email_confirmed_at,
       currentRoute,
@@ -70,17 +70,17 @@ export function useAuth() {
     // Cas 1: Pas de session et pas sur login -> rediriger vers login
     // SAUF si on est dans le flux de réinitialisation de mot de passe (forgot-password, verify-otp, verify-email, reset-password)
     if (!session && !isOnLoginPage && !isOnEmailVerificationPage && !isOnForgotPasswordPage && !isOnVerifyOtpPage && !isOnVerifyEmailPage && !isOnResetPasswordPage) {
-      console.log('🔐 No session, redirecting to login...');
+      __DEV__ && console.log('🔐 No session, redirecting to login...');
       router.replace('/(auth)/login');
     }
     // Cas 2: Session non vérifiée et pas sur page de vérification -> rediriger vers vérification
     else if (session && !session.user.email_confirmed_at && !isOnEmailVerificationPage && !isOnResetPasswordPage) {
-      console.log('🔐 Email not confirmed, redirecting to email verification...');
+      __DEV__ && console.log('🔐 Email not confirmed, redirecting to email verification...');
       router.replace('/(auth)/email-verification');
     }
     // Cas 3: Session vérifiée et sur login, vérification ou mot de passe oublié -> rediriger vers home
     else if (session && session.user.email_confirmed_at && (isOnLoginPage || isOnEmailVerificationPage || isOnForgotPasswordPage)) {
-      console.log('🔐 Email confirmed, redirecting to home...');
+      __DEV__ && console.log('🔐 Email confirmed, redirecting to home...');
       router.replace('/(tabs)');
     }
   }, [session, loading, segments, router]);

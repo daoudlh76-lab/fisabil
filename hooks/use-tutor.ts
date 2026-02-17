@@ -51,7 +51,7 @@ export function useTutor(uiLang: string = 'fr') {
       const userId = sessionData.session?.user?.id;
 
       if (!userId) {
-        console.warn('[TUTOR] No authenticated user');
+        __DEV__ && console.warn('[TUTOR] No authenticated user');
         setUserTexts([]);
         setTextsLoaded(true);
         setLoading(false);
@@ -65,7 +65,7 @@ export function useTutor(uiLang: string = 'fr') {
         .order('created_at', { ascending: false });
 
       if (scansError) {
-        console.error('[TUTOR] Error loading scans:', scansError.message);
+        __DEV__ && console.error('[TUTOR] Error loading scans:', scansError.message);
         setError('Erreur de chargement des textes');
         setUserTexts([]);
         setTextsLoaded(true);
@@ -74,12 +74,12 @@ export function useTutor(uiLang: string = 'fr') {
       }
 
       const normalizedScans = scans || [];
-      console.log(`[TUTOR] Loaded ${normalizedScans.length} texts`);
+      __DEV__ && console.log(`[TUTOR] Loaded ${normalizedScans.length} texts`);
       setUserTexts(normalizedScans);
       setTextsLoaded(true);
       setLoading(false);
     } catch (e) {
-      console.error('[TUTOR] Exception loading texts:', e);
+      __DEV__ && console.error('[TUTOR] Exception loading texts:', e);
       setError('Erreur de chargement des textes');
       setUserTexts([]);
       setTextsLoaded(true);
@@ -91,13 +91,13 @@ export function useTutor(uiLang: string = 'fr') {
   useEffect(() => {
     const loadVocabulary = async () => {
       try {
-        console.log('[TUTOR] Loading learner vocabulary...');
+        __DEV__ && console.log('[TUTOR] Loading learner vocabulary...');
         const words = await loadLearnerWords();
         const summary = buildVocabSummary(words, 200); // Max 200 mots
         setVocabSummary(summary);
-        console.log(`[TUTOR] Loaded ${words.length} known words`);
+        __DEV__ && console.log(`[TUTOR] Loaded ${words.length} known words`);
       } catch (e) {
-        console.error('[TUTOR] Error loading vocabulary:', e);
+        __DEV__ && console.error('[TUTOR] Error loading vocabulary:', e);
         setVocabSummary('');
       }
     };
@@ -167,7 +167,7 @@ ${vocabBlock}
   // ═══ Send message to tutor via Edge Function ═══
   const sendMessage = useCallback(async (userMessage: string, selectedTextId?: string) => {
     if (!userMessage.trim()) {
-      console.warn('[TUTOR] Empty message, skipping');
+      __DEV__ && console.warn('[TUTOR] Empty message, skipping');
       return;
     }
 
@@ -199,7 +199,7 @@ ${vocabBlock}
       ];
 
       // Appeler l'Edge Function Supabase
-      console.log('[TUTOR] Calling Edge Function: tutor-chat-ai');
+      __DEV__ && console.log('[TUTOR] Calling Edge Function: tutor-chat-ai');
       const response = await invokeEdge<{ content: string; modelUsed?: string; error?: string }>('tutor-chat-ai', {
         messages: messagesToSend,
         max_tokens: 500,
@@ -208,14 +208,14 @@ ${vocabBlock}
       });
 
       if (response.error) {
-        console.error('[TUTOR] Edge Function error:', response.error);
+        __DEV__ && console.error('[TUTOR] Edge Function error:', response.error);
         setError(response.error);
         setLoading(false);
         return;
       }
 
       if (!response.content) {
-        console.error('[TUTOR] Empty response from Edge Function');
+        __DEV__ && console.error('[TUTOR] Empty response from Edge Function');
         setError('Réponse vide du tuteur');
         setLoading(false);
         return;
@@ -230,11 +230,11 @@ ${vocabBlock}
       };
       setMessages(prev => [...prev, assistantMsg]);
 
-      console.log('[TUTOR] ✅ Response received:', response.content.substring(0, 100) + '...');
-      console.log('[TUTOR] Model used:', response.modelUsed || 'gpt-4o-mini');
+      __DEV__ && console.log('[TUTOR] ✅ Response received:', response.content.substring(0, 100) + '...');
+      __DEV__ && console.log('[TUTOR] Model used:', response.modelUsed || 'gpt-4o-mini');
       setLoading(false);
     } catch (err: any) {
-      console.error('[TUTOR] Exception in sendMessage:', err);
+      __DEV__ && console.error('[TUTOR] Exception in sendMessage:', err);
       setError(err.message || 'Erreur de communication avec le tuteur');
       setLoading(false);
     }
@@ -287,10 +287,10 @@ ${vocabBlock}
       };
 
       setMessages([welcomeMsg]);
-      console.log(`[TUTOR] Conversation started with text: ${text.title}`);
+      __DEV__ && console.log(`[TUTOR] Conversation started with text: ${text.title}`);
       setLoading(false);
     } catch (err: any) {
-      console.error('[TUTOR] Error starting conversation:', err);
+      __DEV__ && console.error('[TUTOR] Error starting conversation:', err);
       setError(err.message || 'Erreur de démarrage de la conversation');
       setLoading(false);
     }
@@ -298,7 +298,7 @@ ${vocabBlock}
 
   // ═══ Clear messages ═══
   const clearMessages = useCallback(() => {
-    console.log('[TUTOR] Clearing messages');
+    __DEV__ && console.log('[TUTOR] Clearing messages');
     setMessages([]);
     setError(null);
   }, []);

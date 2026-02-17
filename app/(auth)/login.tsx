@@ -41,10 +41,10 @@ export default function LoginScreen() {
 
       if (error) {
         if (__DEV__) {
-          console.log('🔐 Login error:', error);
-          console.log('🔐 Error status:', error.status);
-          console.log('🔐 Error code:', (error as any).code);
-          console.log('🔐 Error message complet:', JSON.stringify(error));
+          __DEV__ && console.log('🔐 Login error:', error);
+          __DEV__ && console.log('🔐 Error status:', error.status);
+          __DEV__ && console.log('🔐 Error code:', (error as any).code);
+          __DEV__ && console.log('🔐 Error message complet:', JSON.stringify(error));
         }
 
         // Message d'erreur plus clair selon le type d'erreur
@@ -66,9 +66,9 @@ export default function LoginScreen() {
       }
 
       if (__DEV__) {
-        console.log('✅ Login successful:', data.user?.email);
-        console.log('✅ User ID:', data.user?.id);
-        console.log('✅ Email confirmed:', data.user?.email_confirmed_at);
+        __DEV__ && console.log('✅ Login successful:', data.user?.email);
+        __DEV__ && console.log('✅ User ID:', data.user?.id);
+        __DEV__ && console.log('✅ Email confirmed:', data.user?.email_confirmed_at);
       }
       // ✅ Redirection automatique via le hook useAuth
       // (pas besoin de router.replace ici)

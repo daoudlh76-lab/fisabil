@@ -100,7 +100,7 @@ export const useDictation = () => {
   // Lire un segment spécifique (expo-speech LOCAL - même voix que le tuteur)
   const speakSegmentInternal = useCallback((index: number) => {
     if (index < 0 || index >= segmentsRef.current.length) {
-      console.log('✅ Lecture terminée (tous les segments)');
+      __DEV__ && console.log('✅ Lecture terminée (tous les segments)');
       setIsSpeaking(false);
       setIsPaused(false);
       isPlayingRef.current = false;
@@ -112,7 +112,7 @@ export const useDictation = () => {
     setCurrentSegmentIndex(index);
 
     if (index === 0) {
-      console.log('▶️ Lecture démarrée');
+      __DEV__ && console.log('▶️ Lecture démarrée');
     }
 
     // Utiliser les mêmes options de voix que le tuteur
@@ -129,7 +129,7 @@ export const useDictation = () => {
         }
       },
       onError: (err) => {
-        console.error('❌ Erreur synthèse vocale:', err);
+        __DEV__ && console.error('❌ Erreur synthèse vocale:', err);
         setIsSpeaking(false);
         setIsPaused(false);
         isPlayingRef.current = false;
@@ -140,11 +140,11 @@ export const useDictation = () => {
   // Démarrer la lecture
   const speakSentence = useCallback((text: string) => {
     if (!text || text.trim().length === 0) {
-      console.error('❌ Aucun texte à lire');
+      __DEV__ && console.error('❌ Aucun texte à lire');
       return;
     }
     
-    console.log('🔊 Lecture du texte:', text.substring(0, 50) + '...');
+    __DEV__ && console.log('🔊 Lecture du texte:', text.substring(0, 50) + '...');
     
     // Arrêter toute lecture en cours
     Speech.stop();
@@ -164,7 +164,7 @@ export const useDictation = () => {
 
   // Mettre en pause
   const pause = useCallback(() => {
-    console.log('⏸️ Pause');
+    __DEV__ && console.log('⏸️ Pause');
     isPlayingRef.current = false;
     Speech.stop();
     setIsPaused(true);
@@ -173,7 +173,7 @@ export const useDictation = () => {
 
   // Reprendre la lecture
   const resume = useCallback(() => {
-    console.log('▶️ Reprise depuis segment', currentIndexRef.current);
+    __DEV__ && console.log('▶️ Reprise depuis segment', currentIndexRef.current);
     isPlayingRef.current = true;
     setIsPaused(false);
     setIsSpeaking(true);
@@ -191,7 +191,7 @@ export const useDictation = () => {
 
   // Arrêter complètement
   const stop = useCallback(() => {
-    console.log('⏹️ Stop');
+    __DEV__ && console.log('⏹️ Stop');
     isPlayingRef.current = false;
     Speech.stop();
     setIsSpeaking(false);
@@ -200,19 +200,18 @@ export const useDictation = () => {
     setCurrentSegmentIndex(0);
   }, []);
 
-  // Reculer de N segments (environ 5 secondes = 1 segment, 10 secondes = 2 segments)
-  const rewindSegments = useCallback((segments: number) => {
-    const newIndex = Math.max(0, currentIndexRef.current - segments);
-    console.log(`⏪ Retour de ${segments} segments vers ${newIndex}`);
-    
+  // Fonction interne pour reculer et relancer la lecture à un index donné
+  const rewindToIndex = useCallback((newIndex: number) => {
+    __DEV__ && console.log(`⏪ Retour vers segment ${newIndex}`);
+
     // IMPORTANT : désactiver isPlaying AVANT Speech.stop pour éviter que le onDone
     // de l'ancienne lecture ne déclenche le segment suivant
     isPlayingRef.current = false;
     Speech.stop();
-    
+
     currentIndexRef.current = newIndex;
     setCurrentSegmentIndex(newIndex);
-    
+
     // Redémarrer la lecture après un petit délai pour laisser le stop se terminer
     setTimeout(() => {
       isPlayingRef.current = true;
@@ -222,15 +221,20 @@ export const useDictation = () => {
     }, 150);
   }, [speakSegmentInternal]);
 
-  // Reculer de 5 secondes (~1 segment)
-  const rewind5s = useCallback(() => rewindSegments(1), [rewindSegments]);
+  // Reculer de 5 secondes → rejouer le segment actuel depuis le début
+  const rewind5s = useCallback(() => {
+    rewindToIndex(currentIndexRef.current);
+  }, [rewindToIndex]);
 
-  // Reculer de 10 secondes (~2 segments)
-  const rewind10s = useCallback(() => rewindSegments(2), [rewindSegments]);
+  // Reculer de 10 secondes → reculer d'1 segment
+  const rewind10s = useCallback(() => {
+    const newIndex = Math.max(0, currentIndexRef.current - 1);
+    rewindToIndex(newIndex);
+  }, [rewindToIndex]);
 
   // Changer la vitesse de lecture
   const changeSpeed = useCallback((speed: number) => {
-    console.log(`🔄 Vitesse: ${speed}x`);
+    __DEV__ && console.log(`🔄 Vitesse: ${speed}x`);
     setPlaybackSpeed(speed);
     speedRef.current = speed;
     

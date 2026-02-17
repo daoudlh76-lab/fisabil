@@ -25,7 +25,7 @@ try {
   ExpoSpeechRecognitionModule = speechRecognition.ExpoSpeechRecognitionModule;
   useSpeechRecognitionEvent = speechRecognition.useSpeechRecognitionEvent;
 } catch (e) {
-  console.log('⚠️ expo-speech-recognition not available (requires rebuild)');
+  __DEV__ && console.log('⚠️ expo-speech-recognition not available (requires rebuild)');
 }
 
 // Hook factice si le module n'est pas disponible
@@ -97,13 +97,13 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
   useEffect(() => {
     const loadVocabulary = async () => {
       try {
-        console.log('[TUTOR] Loading learner vocabulary...');
+        __DEV__ && console.log('[TUTOR] Loading learner vocabulary...');
         const words = await loadLearnerWords();
         const summary = buildVocabSummary(words, 200); // Max 200 mots
         setVocabSummary(summary);
-        console.log(`[TUTOR] Loaded ${words.length} known words`);
+        __DEV__ && console.log(`[TUTOR] Loaded ${words.length} known words`);
       } catch (e) {
-        console.error('[TUTOR] Error loading vocabulary:', e);
+        __DEV__ && console.error('[TUTOR] Error loading vocabulary:', e);
         setVocabSummary('');
       }
     };
@@ -122,11 +122,11 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
         .select('id, title, content, folder_id')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-      if (scansError) { console.error('[TUTOR] Erreur chargement scans:', scansError.message); return []; }
+      if (scansError) { __DEV__ && console.error('[TUTOR] Erreur chargement scans:', scansError.message); return []; }
       const normalizedScans = scans || [];
       setUserTexts(normalizedScans);
       return normalizedScans;
-    } catch (e) { console.error('[TUTOR] Erreur chargement textes:', e); return []; }
+    } catch (e) { __DEV__ && console.error('[TUTOR] Erreur chargement textes:', e); return []; }
   }, []);
 
   // ═══ Detect Arabic ═══
@@ -138,8 +138,9 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
 
   // ═══ TTS — LOCAL device TTS (expo-speech) — gratuit, utilise les voix natives du téléphone ═══
   const speakText = useCallback(async (text: string): Promise<void> => {
+    if (!isConnectedRef.current) return;
     return new Promise((resolve) => {
-      console.log('🔊 TTS starting (local device):', text.substring(0, 50) + '...');
+      __DEV__ && console.log('🔊 TTS starting (local device):', text.substring(0, 50) + '...');
       setIsSpeaking(true);
 
       const isArabic = isArabicText(text);
@@ -151,12 +152,12 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
         pitch: 1.0,
         rate: rate,
         onDone: () => {
-          console.log('🔊 TTS finished (device)');
+          __DEV__ && console.log('🔊 TTS finished (device)');
           setIsSpeaking(false);
           resolve();
         },
         onError: (error) => {
-          console.error('🔊 TTS error (device):', error);
+          __DEV__ && console.error('🔊 TTS error (device):', error);
           setIsSpeaking(false);
           resolve();
         },
@@ -169,24 +170,28 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
 
   // Écoute les résultats de transcription en temps réel
   eventHook('result', (event: any) => {
-    console.log('🎤 Speech result:', event);
+    __DEV__ && console.log('🎤 Speech result:', event);
     if (event && event.results && event.results[0]) {
       const transcription = event.results[0].transcript;
       currentTranscriptRef.current = transcription;
-      console.log('📝 Transcription partielle:', transcription);
+      __DEV__ && console.log('📝 Transcription partielle:', transcription);
     }
   });
 
   // Écoute la fin de reconnaissance (déclenché automatiquement quand l'utilisateur arrête de parler)
   eventHook('end', () => {
-    console.log('🎤 Speech recognition ended');
+    __DEV__ && console.log('🎤 Speech recognition ended');
     const finalTranscript = currentTranscriptRef.current;
 
     if (finalTranscript && finalTranscript.trim()) {
-      console.log('✅ Transcription finale:', finalTranscript);
+      __DEV__ && console.log('✅ Transcription finale:', finalTranscript);
       setUserTranscript(finalTranscript);
       setIsListening(false);
       isListeningRef.current = false;
+
+      // Ne pas traiter si déconnecté
+      if (!isConnectedRef.current) return;
+
       setIsTranscribing(true);
 
       // Traiter la transcription
@@ -203,7 +208,7 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
         });
       }
     } else {
-      console.log('⚠️ Pas de transcription');
+      __DEV__ && console.log('⚠️ Pas de transcription');
       setIsListening(false);
       isListeningRef.current = false;
       setIsTranscribing(false);
@@ -217,7 +222,7 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
 
   // Écoute les erreurs
   eventHook('error', (event: any) => {
-    console.error('🎤 Speech recognition error:', event);
+    __DEV__ && console.error('🎤 Speech recognition error:', event);
     setError(event.message || 'Erreur de reconnaissance vocale');
     setIsListening(false);
     isListeningRef.current = false;
@@ -281,7 +286,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
 ${content}`;
 
     try {
-      console.log('[TUTOR] invokeEdge tutor-chat-ai (generate questions)');
+      __DEV__ && console.log('[TUTOR] invokeEdge tutor-chat-ai (generate questions)');
       const response = await invokeEdge<{ content?: string; message?: string }>('tutor-chat-ai', {
         messages: [
           { role: 'system', content: 'You are an assistant that returns clean JSON arrays when asked.' },
@@ -292,7 +297,7 @@ ${content}`;
       });
 
       const txt = response.content || response.message || '';
-      console.log('[TUTOR] ✅ Questions received (raw):', txt.substring(0, 100) + '...');
+      __DEV__ && console.log('[TUTOR] ✅ Questions received (raw):', txt.substring(0, 100) + '...');
 
       try {
         const parsed = JSON.parse(txt);
@@ -309,10 +314,10 @@ ${content}`;
       const lines = txt.split(/\r?\n/).map((l: string) => l.replace(/^\d+[\.\)\-]\s*/, '').trim()).filter((l: string) => l.length > 5);
       if (lines.length >= 5) return lines;
 
-      console.warn('[TUTOR] Failed to parse questions, using local fallback');
+      __DEV__ && console.warn('[TUTOR] Failed to parse questions, using local fallback');
       return generateLocalQuestions(title, content);
     } catch (err) {
-      console.error('[TUTOR] generateQuestions exception', err);
+      __DEV__ && console.error('[TUTOR] generateQuestions exception', err);
       return generateLocalQuestions(title, content);
     }
   }, [vocabSummary]);
@@ -345,16 +350,16 @@ ${content}`;
   // ═══ Prepare questions for a text and store in ref ═══
   const prepareQuestionsForText = useCallback(async (textId: string, title: string, content: string) => {
     if (questionsCacheRef.current[textId]?.length > 0) {
-      console.log('[TUTOR] Questions already prepared for', textId, 'count=', questionsCacheRef.current[textId].length);
+      __DEV__ && console.log('[TUTOR] Questions already prepared for', textId, 'count=', questionsCacheRef.current[textId].length);
       return questionsCacheRef.current[textId].length;
     }
-    console.log('[TUTOR] Preparing questions for text', textId);
+    __DEV__ && console.log('[TUTOR] Preparing questions for text', textId);
     const list = await generateQuestionsForText(textId, title, content);
     if (list && list.length > 0) {
       questionsCacheRef.current[textId] = [...list];
       questionsMetaRef.current[textId] = { originalCount: list.length };
       setCacheVersion(v => v + 1);
-      console.log('[TUTOR] Prepared questions for text', textId, 'count=', list.length);
+      __DEV__ && console.log('[TUTOR] Prepared questions for text', textId, 'count=', list.length);
       return list.length;
     }
     return 0;
@@ -366,7 +371,7 @@ ${content}`;
 ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْرُوفَةُ:\n${vocabSummary}\n\n⚠️ اسْتَخْدِمْ هَذِهِ المُفْرَدَاتِ فِي التَّلْخِيصِ.` : ''}`;
 
     try {
-      console.log('[TUTOR] invokeEdge tutor-chat-ai (summarize)');
+      __DEV__ && console.log('[TUTOR] invokeEdge tutor-chat-ai (summarize)');
       const response = await invokeEdge<{ content?: string; message?: string }>('tutor-chat-ai', {
         messages: [
           { role: 'system', content: systemPrompt },
@@ -377,10 +382,10 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       });
 
       const summary = response.content || response.message || '';
-      console.log('[TUTOR] ✅ Summary received:', summary.substring(0, 100) + '...');
+      __DEV__ && console.log('[TUTOR] ✅ Summary received:', summary.substring(0, 100) + '...');
       if (summary.trim().length > 10) return summary.trim();
     } catch (err) {
-      console.error('[TUTOR] summarizeText error', err);
+      __DEV__ && console.error('[TUTOR] summarizeText error', err);
     }
     return `هَذَا النَّصُّ بِعُنْوَانِ "${title}". لِنَبْدَأْ بِالأَسْئِلَةِ!`;
   }, [vocabSummary]);
@@ -394,7 +399,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       const newHistory = [...conversationHistory, { role: 'user', content: userMessage }];
       const systemPrompt = buildSystemPrompt(filteredTexts);
 
-      console.log('[TUTOR] invokeEdge tutor-chat-ai (conversation)');
+      __DEV__ && console.log('[TUTOR] invokeEdge tutor-chat-ai (conversation)');
       const response = await invokeEdge<{ content?: string; message?: string }>('tutor-chat-ai', {
         messages: [{ role: 'system', content: systemPrompt }, ...newHistory],
         max_tokens: 200,
@@ -402,10 +407,10 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       });
 
       const assistantMessage = response.content || response.message || '';
-      console.log('[TUTOR] ✅ Conversation response:', assistantMessage.substring(0, 100) + '...');
+      __DEV__ && console.log('[TUTOR] ✅ Conversation response:', assistantMessage.substring(0, 100) + '...');
 
       if (!assistantMessage) {
-        console.error('[TUTOR] Empty response from Edge Function');
+        __DEV__ && console.error('[TUTOR] Empty response from Edge Function');
         setError('Erreur de communication avec le tuteur');
         setIsTranscribing(false);
         return;
@@ -423,7 +428,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
         setTimeout(() => startListening(), 500);
       }
     } catch (error: any) {
-      console.error('[TUTOR] Error in sendMessageToGPT:', error);
+      __DEV__ && console.error('[TUTOR] Error in sendMessageToGPT:', error);
       setError(error.message);
       setIsTranscribing(false);
     }
@@ -432,28 +437,28 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
   // ═══ Start speech recognition (LOCAL - no server) ═══
   const startListening = useCallback(async () => {
     if (!ExpoSpeechRecognitionModule) {
-      console.error('❌ expo-speech-recognition not available (requires native rebuild)');
+      __DEV__ && console.error('❌ expo-speech-recognition not available (requires native rebuild)');
       setError('Reconnaissance vocale non disponible. Rebuild nécessaire.');
       return;
     }
 
     try {
-      console.log('🎤 Starting speech recognition (local)...');
+      __DEV__ && console.log('🎤 Starting speech recognition (local)...');
 
       // Vérifier et demander la permission
       const permissionResult = await ExpoSpeechRecognitionModule.getPermissionsAsync();
-      console.log('🎤 Permission status:', permissionResult);
+      __DEV__ && console.log('🎤 Permission status:', permissionResult);
 
       if (!permissionResult.granted) {
         if (permissionResult.canAskAgain) {
           const requestResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
           if (!requestResult.granted) {
-            console.error('❌ Microphone permission denied');
+            __DEV__ && console.error('❌ Microphone permission denied');
             setError('Permission microphone refusée. Allez dans Réglages → Fisabil → Microphone.');
             return;
           }
         } else {
-          console.error('❌ Cannot ask for permission again');
+          __DEV__ && console.error('❌ Cannot ask for permission again');
           setError('Permission microphone refusée. Allez dans Réglages → Fisabil → Microphone.');
           return;
         }
@@ -465,7 +470,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       setError(null);
 
       // Démarrer la reconnaissance vocale en arabe
-      console.log('🎤 Starting recognition with lang: ar-SA');
+      __DEV__ && console.log('🎤 Starting recognition with lang: ar-SA');
       await ExpoSpeechRecognitionModule.start({
         lang: 'ar-SA',
         interimResults: true,
@@ -475,9 +480,9 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
 
       isListeningRef.current = true;
       setIsListening(true);
-      console.log('✅ Speech recognition started (local)');
+      __DEV__ && console.log('✅ Speech recognition started (local)');
     } catch (error: any) {
-      console.error('❌ Error starting speech recognition:', error);
+      __DEV__ && console.error('❌ Error starting speech recognition:', error);
       setError('Impossible de démarrer la reconnaissance vocale: ' + error.message);
       setIsListening(false);
       isListeningRef.current = false;
@@ -487,20 +492,20 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
   // ═══ Stop speech recognition (LOCAL) ═══
   const stopListening = useCallback(async () => {
     if (!ExpoSpeechRecognitionModule) {
-      console.log('⚠️ Speech recognition module not available');
+      __DEV__ && console.log('⚠️ Speech recognition module not available');
       return;
     }
 
     try {
-      console.log('🎤 Stopping speech recognition...');
+      __DEV__ && console.log('🎤 Stopping speech recognition...');
       await ExpoSpeechRecognitionModule.stop();
       isListeningRef.current = false;
       setIsListening(false);
-      console.log('✅ Speech recognition stopped');
+      __DEV__ && console.log('✅ Speech recognition stopped');
 
       // Le traitement de la transcription se fait dans l'event listener 'end'
     } catch (error: any) {
-      console.error('❌ Error stopping speech recognition:', error);
+      __DEV__ && console.error('❌ Error stopping speech recognition:', error);
       setIsListening(false);
       isListeningRef.current = false;
     }
@@ -510,7 +515,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
   const askPreparedQuestion = useCallback(async (textId: string) => {
     const pool = questionsCacheRef.current[textId] ?? [];
     const count = questionCountRef.current;
-    console.log('[TUTOR] askPreparedQuestion called for', textId, 'poolLen=', pool.length, 'questionCount=', count);
+    __DEV__ && console.log('[TUTOR] askPreparedQuestion called for', textId, 'poolLen=', pool.length, 'questionCount=', count);
 
     if (pool.length === 0) {
       if (count >= 10) {
@@ -520,7 +525,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
         await speakText(endMsg);
         return;
       }
-      console.warn('[TUTOR] Pool empty but only', count, 'questions asked. GPT fallback.');
+      __DEV__ && console.warn('[TUTOR] Pool empty but only', count, 'questions asked. GPT fallback.');
       await sendMessageToGPT('اِطْرَحْ سُؤَالًا آخَرَ عَنِ النَّصِّ.');
       return;
     }
@@ -544,7 +549,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
 
     // Auto-start listening after asking
     if (isConnectedRef.current && !isPausedRef.current) {
-      console.log('🎤 Auto-starting listening after question...');
+      __DEV__ && console.log('🎤 Auto-starting listening after question...');
       setTimeout(() => startListening(), 300);
     }
   }, [intToArabicIndic, speakText, sendMessageToGPT, startListening]);
@@ -556,16 +561,23 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       const textData = userTexts.find(t => t.id === textId);
       const textContext = textData ? `\nالنَّصُّ: "${textData.title}"\n${textData.content.substring(0, 500)}` : '';
 
-      const correctionPrompt = `صَحِّحْ إِجَابَةَ الطَّالِبِ بِإِيجَازٍ (جُمْلَتَيْنِ كَحَدٍّ أَقْصَى) مَعَ التَّشْكِيلِ.
+      const correctionPrompt = `أَنْتَ مُعَلِّمٌ لَطِيفٌ. قَيِّمْ إِجَابَةَ الطَّالِبِ بِنَاءً عَلَى الْمَعْنَى وَالْفَهْمِ، لَا عَلَى التَّطَابُقِ الحَرْفِيِّ.
+
+⚠️ قَاعِدَةٌ مُهِمَّةٌ جِدًّا:
+- إِذَا كَانَ مَعْنَى الإِجَابَةِ صَحِيحًا، اقْبَلْهَا حَتَّى لَوْ كَانَتِ الصِّيَاغَةُ مُخْتَلِفَةً.
+- لَا تُقَارِنِ الكَلِمَاتِ حَرْفِيًّا. حَلِّلِ الْمَعْنَى وَالْمَضْمُونَ.
+- الطَّالِبُ قَدْ يُجِيبُ بِكَلِمَاتِهِ الخَاصَّةِ، بِلُغَةٍ أُخْرَى، أَوْ بِشَكْلٍ مُبَسَّطٍ. كُلُّ ذَلِكَ مَقْبُولٌ إِذَا كَانَ الْمَعْنَى صَحِيحًا.
+- الإِجَابَةُ الجُزْئِيَّةُ الصَّحِيحَةُ تُعْتَبَرُ مَقْبُولَةً أَيْضًا.
 
 السُّؤَالُ: ${question}
-الإِجَابَةُ: "${studentAnswer}"${textContext}
+إِجَابَةُ الطَّالِبِ: "${studentAnswer}"${textContext}
 ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْرُوفَةُ:\n${vocabSummary}\n\n⚠️ اسْتَخْدِمْ هَذِهِ المُفْرَدَاتِ فِي التَّصْحِيحِ.` : ''}
 
-إِذَا صَحِيحَة: "أَحْسَنْتَ!" + مُلاحَظَة قَصِيرَة.
-إِذَا خَاطِئَة: صَحِّحْ بِلُطْفٍ + الإِجَابَة الصَّحِيحَة.`;
+أَجِبْ بِإِيجَازٍ (جُمْلَتَيْنِ كَحَدٍّ أَقْصَى) مَعَ التَّشْكِيلِ:
+- إِذَا الْمَعْنَى صَحِيحٌ: "أَحْسَنْتَ!" + مُلاحَظَة نَحْوِيَّة إِنْ وُجِدَتْ.
+- إِذَا الْمَعْنَى خَاطِئٌ: صَحِّحْ بِلُطْفٍ + الإِجَابَة الصَّحِيحَة.`;
 
-      console.log('[TUTOR] invokeEdge tutor-chat-ai (evaluate answer)');
+      __DEV__ && console.log('[TUTOR] invokeEdge tutor-chat-ai (evaluate answer)');
       const response = await invokeEdge<{ content?: string; message?: string }>('tutor-chat-ai', {
         messages: [{ role: 'system', content: correctionPrompt }],
         max_tokens: 150,
@@ -573,7 +585,13 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       });
 
       let correction = response.content || response.message || '';
-      console.log('[TUTOR] ✅ Correction received:', correction.substring(0, 100) + '...');
+      __DEV__ && console.log('[TUTOR] ✅ Correction received:', correction.substring(0, 100) + '...');
+
+      // Abandonner si déconnecté pendant l'appel réseau
+      if (!isConnectedRef.current) {
+        setIsTranscribing(false);
+        return;
+      }
 
       if (!correction) {
         correction = 'لِنَنْتَقِلْ إِلَى السُّؤَالِ التَّالِي.';
@@ -603,7 +621,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
         await speakText(endMsg);
       }
     } catch (err) {
-      console.error('[TUTOR] evaluateAnswer error', err);
+      __DEV__ && console.error('[TUTOR] evaluateAnswer error', err);
       setIsTranscribing(false);
     }
   }, [userTexts, speakText, askPreparedQuestion, vocabSummary]);
@@ -615,15 +633,15 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
   // welcome → (summarize + prepare questions in parallel) → ask first question
   const connect = useCallback(async () => {
     try {
-      console.log('🔌 Connecting chat tutor...');
+      __DEV__ && console.log('🔌 Connecting chat tutor...');
       setError(null);
       const loadedTexts = await loadUserTexts();
-      console.log(`✅ Loaded ${loadedTexts.length} texts`);
+      __DEV__ && console.log(`✅ Loaded ${loadedTexts.length} texts`);
 
       let filteredTexts = loadedTexts;
       if (selectedTextId) {
         filteredTexts = loadedTexts.filter(t => t.id === selectedTextId);
-        console.log(`🔍 Filtered to: ${filteredTexts.length} text(s)`);
+        __DEV__ && console.log(`🔍 Filtered to: ${filteredTexts.length} text(s)`);
       }
       if (filteredTexts.length === 0) { setError('Aucun texte sélectionné'); return; }
 
@@ -648,7 +666,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       await speakText(welcomeText);
 
       // Step 2: Summary — questions are preparing in parallel
-      console.log('[TUTOR] Getting summary (started in background)...');
+      __DEV__ && console.log('[TUTOR] Getting summary (started in background)...');
       const summary = await summaryPromise;
       const summaryMsg: ChatMessage = { id: `assistant_summary_${Date.now()}`, role: 'assistant', text: summary, timestamp: Date.now() };
       setMessages(prev => [...prev, summaryMsg]);
@@ -658,22 +676,22 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
 
       // Wait for questions to be ready (likely already done)
       const count = await questionsPromise;
-      console.log('[TUTOR] Questions ready:', count);
+      __DEV__ && console.log('[TUTOR] Questions ready:', count);
 
       // Step 3: Directly ask the first question (no transition message)
       await askPreparedQuestion(text.id);
 
-    } catch (error: any) { console.error('❌ Error connecting:', error); setError(error.message); }
+    } catch (error: any) { __DEV__ && console.error('❌ Error connecting:', error); setError(error.message); }
   }, [loadUserTexts, selectedTextId, speakText, summarizeText, prepareQuestionsForText, askPreparedQuestion]);
 
   // ═══ Disconnect ═══
   const disconnect = useCallback(() => {
-    console.log('🔌 Disconnecting...');
+    __DEV__ && console.log('🔌 Disconnecting...');
 
     // Arrêter la reconnaissance vocale locale si active
     if (ExpoSpeechRecognitionModule && isListeningRef.current) {
       ExpoSpeechRecognitionModule.stop().catch((err: any) =>
-        console.log('⚠️ Error stopping speech recognition:', err)
+        __DEV__ && console.log('⚠️ Error stopping speech recognition:', err)
       );
     }
 
@@ -699,17 +717,27 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheVersion]);
 
+  // ═══ Interrupt: arrêter TTS et reconnaissance vocale ═══
+  const interrupt = useCallback(() => {
+    Speech.stop();
+    if (ExpoSpeechRecognitionModule && isListeningRef.current) {
+      ExpoSpeechRecognitionModule.stop().catch((err: any) =>
+        __DEV__ && console.log('⚠️ Error stopping speech:', err)
+      );
+    }
+  }, []);
+
   // ═══ Force prepare questions (manual UI action) ═══
   const prepareNow = useCallback(async (textId: string) => {
     try {
-      console.log('[TUTOR] prepareNow requested for', textId);
+      __DEV__ && console.log('[TUTOR] prepareNow requested for', textId);
       const existing = questionsCacheRef.current[textId];
-      if (existing && existing.length > 0) { console.log('[TUTOR] prepareNow: already prepared, count=', existing.length); return existing.length; }
+      if (existing && existing.length > 0) { __DEV__ && console.log('[TUTOR] prepareNow: already prepared, count=', existing.length); return existing.length; }
       let text = userTexts.find(t => t.id === textId);
       if (!text) { const loaded = await loadUserTexts(); text = loaded.find(t => t.id === textId); }
-      if (!text) { console.warn('[TUTOR] prepareNow: text not found', textId); return 0; }
+      if (!text) { __DEV__ && console.warn('[TUTOR] prepareNow: text not found', textId); return 0; }
       return await prepareQuestionsForText(textId, text.title, text.content);
-    } catch (err) { console.error('[TUTOR] prepareNow error', err); return 0; }
+    } catch (err) { __DEV__ && console.error('[TUTOR] prepareNow error', err); return 0; }
   }, [userTexts, loadUserTexts, prepareQuestionsForText]);
 
   return {
@@ -735,13 +763,6 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
     startDialogue: askPreparedQuestion,
     preparedCount: getPreparedCount,
     prepareNow,
-    interrupt: () => {
-      Speech.stop(); // Arrêter TTS local
-      if (ExpoSpeechRecognitionModule && isListeningRef.current) {
-        ExpoSpeechRecognitionModule.stop().catch((err: any) =>
-          console.log('⚠️ Error stopping speech:', err)
-        );
-      }
-    },
+    interrupt,
   };
 };

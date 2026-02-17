@@ -111,7 +111,7 @@ export default function PlaylistFolderDetailScreen() {
         await loadPlaylist();
         Alert.alert('✅', t('libraryDetail.folderUpdated'));
       } catch (error) {
-        console.error('Error moving track to folder:', error);
+        __DEV__ && console.error('Error moving track to folder:', error);
         Alert.alert(t('playlist.error'), t('playlist.addError'));
       }
     }

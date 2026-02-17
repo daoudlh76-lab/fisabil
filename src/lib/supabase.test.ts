@@ -6,19 +6,19 @@ import { supabase } from "./supabase";
  */
 export async function testSupabaseConnection() {
   try {
-    console.log("🧪 Test 1: Vérification de la configuration...");
+    __DEV__ && console.log("🧪 Test 1: Vérification de la configuration...");
     
     const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
     
-    console.log("✅ Test 1: Configuration OK");
-    console.log("  - URL Supabase chargée");
-    console.log("  - Clés d'API chargées");
-    console.log("  - Session:", data?.session ? "Utilisateur connecté" : "Non connecté");
+    __DEV__ && console.log("✅ Test 1: Configuration OK");
+    __DEV__ && console.log("  - URL Supabase chargée");
+    __DEV__ && console.log("  - Clés d'API chargées");
+    __DEV__ && console.log("  - Session:", data?.session ? "Utilisateur connecté" : "Non connecté");
     
     return true;
   } catch (error: any) {
-    console.error("❌ Test 1 FAILED:", error?.message);
+    __DEV__ && console.error("❌ Test 1 FAILED:", error?.message);
     return false;
   }
 }
@@ -28,19 +28,19 @@ export async function testSupabaseConnection() {
  */
 export async function testSignUp(email: string, password: string) {
   try {
-    console.log(`\n🧪 Test 2: Inscription avec ${email}...`);
+    __DEV__ && console.log(`\n🧪 Test 2: Inscription avec ${email}...`);
     
     const { data, error } = await supabase.auth.signUp({ email, password });
     
     if (error) throw error;
     
-    console.log("✅ Test 2: Inscription OK");
-    console.log("  - User ID:", data?.user?.id);
-    console.log("  - Email:", data?.user?.email);
+    __DEV__ && console.log("✅ Test 2: Inscription OK");
+    __DEV__ && console.log("  - User ID:", data?.user?.id);
+    __DEV__ && console.log("  - Email:", data?.user?.email);
     
     return data?.user?.id;
   } catch (error: any) {
-    console.error("❌ Test 2 FAILED:", error?.message);
+    __DEV__ && console.error("❌ Test 2 FAILED:", error?.message);
     return null;
   }
 }
@@ -50,19 +50,19 @@ export async function testSignUp(email: string, password: string) {
  */
 export async function testSignIn(email: string, password: string) {
   try {
-    console.log(`\n🧪 Test 3: Connexion avec ${email}...`);
+    __DEV__ && console.log(`\n🧪 Test 3: Connexion avec ${email}...`);
     
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     
     if (error) throw error;
     
-    console.log("✅ Test 3: Connexion OK");
-    console.log("  - User ID:", data?.user?.id);
-    console.log("  - Token:", data?.session?.access_token?.substring(0, 20) + "...");
+    __DEV__ && console.log("✅ Test 3: Connexion OK");
+    __DEV__ && console.log("  - User ID:", data?.user?.id);
+    __DEV__ && console.log("  - Token:", data?.session?.access_token?.substring(0, 20) + "...");
     
     return data?.session?.user?.id;
   } catch (error: any) {
-    console.error("❌ Test 3 FAILED:", error?.message);
+    __DEV__ && console.error("❌ Test 3 FAILED:", error?.message);
     return null;
   }
 }
@@ -72,7 +72,7 @@ export async function testSignIn(email: string, password: string) {
  */
 export async function testCreateScan(userId: string, title: string, content: string) {
   try {
-    console.log(`\n🧪 Test 4: Création d'un scan...`);
+    __DEV__ && console.log(`\n🧪 Test 4: Création d'un scan...`);
     
     const { data, error } = await supabase
       .from("scans")
@@ -81,13 +81,13 @@ export async function testCreateScan(userId: string, title: string, content: str
     
     if (error) throw error;
     
-    console.log("✅ Test 4: Scan créé OK");
-    console.log("  - Scan ID:", data?.[0]?.id);
-    console.log("  - Titre:", data?.[0]?.title);
+    __DEV__ && console.log("✅ Test 4: Scan créé OK");
+    __DEV__ && console.log("  - Scan ID:", data?.[0]?.id);
+    __DEV__ && console.log("  - Titre:", data?.[0]?.title);
     
     return data?.[0]?.id;
   } catch (error: any) {
-    console.error("❌ Test 4 FAILED:", error?.message);
+    __DEV__ && console.error("❌ Test 4 FAILED:", error?.message);
     return null;
   }
 }
@@ -97,7 +97,7 @@ export async function testCreateScan(userId: string, title: string, content: str
  */
 export async function testReadScans(userId: string) {
   try {
-    console.log(`\n🧪 Test 5: Lecture des scans...`);
+    __DEV__ && console.log(`\n🧪 Test 5: Lecture des scans...`);
     
     const { data, error } = await supabase
       .from("scans")
@@ -106,12 +106,12 @@ export async function testReadScans(userId: string) {
     
     if (error) throw error;
     
-    console.log("✅ Test 5: Scans lus OK");
-    console.log(`  - Nombre de scans: ${data?.length ?? 0}`);
+    __DEV__ && console.log("✅ Test 5: Scans lus OK");
+    __DEV__ && console.log(`  - Nombre de scans: ${data?.length ?? 0}`);
     
     return data;
   } catch (error: any) {
-    console.error("❌ Test 5 FAILED:", error?.message);
+    __DEV__ && console.error("❌ Test 5 FAILED:", error?.message);
     return null;
   }
 }
@@ -121,17 +121,17 @@ export async function testReadScans(userId: string) {
  */
 export async function testSignOut() {
   try {
-    console.log(`\n🧪 Test 6: Déconnexion...`);
+    __DEV__ && console.log(`\n🧪 Test 6: Déconnexion...`);
     
     const { error } = await supabase.auth.signOut();
     
     if (error) throw error;
     
-    console.log("✅ Test 6: Déconnexion OK");
+    __DEV__ && console.log("✅ Test 6: Déconnexion OK");
     
     return true;
   } catch (error: any) {
-    console.error("❌ Test 6 FAILED:", error?.message);
+    __DEV__ && console.error("❌ Test 6 FAILED:", error?.message);
     return false;
   }
 }
@@ -140,14 +140,14 @@ export async function testSignOut() {
  * Exécuter tous les tests
  */
 export async function runAllTests() {
-  console.log("\n========================================");
-  console.log("🔬 TESTS SUPABASE COMPLETS");
-  console.log("========================================\n");
+  __DEV__ && console.log("\n========================================");
+  __DEV__ && console.log("🔬 TESTS SUPABASE COMPLETS");
+  __DEV__ && console.log("========================================\n");
   
   // Test 1: Connexion
   const isConnected = await testSupabaseConnection();
   if (!isConnected) {
-    console.error("\n❌ Impossible de continuer - config invalide");
+    __DEV__ && console.error("\n❌ Impossible de continuer - config invalide");
     return;
   }
   
@@ -159,7 +159,7 @@ export async function runAllTests() {
   
   const userId = await testSignIn(testEmail, testPassword);
   if (!userId) {
-    console.log("\n💡 Utilisateur n'existe pas, créons-le...");
+    __DEV__ && console.log("\n💡 Utilisateur n'existe pas, créons-le...");
     await testSignUp(testEmail, testPassword);
     await testSignIn(testEmail, testPassword);
   }
@@ -168,7 +168,7 @@ export async function runAllTests() {
   const scans = await testReadScans(userId || "");
   await testSignOut();
   
-  console.log("\n========================================");
-  console.log("✅ TOUS LES TESTS COMPLÉTÉS");
-  console.log("========================================\n");
+  __DEV__ && console.log("\n========================================");
+  __DEV__ && console.log("✅ TOUS LES TESTS COMPLÉTÉS");
+  __DEV__ && console.log("========================================\n");
 }

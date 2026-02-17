@@ -19,31 +19,31 @@ export default function ResetPasswordScreen() {
   // Vérifier qu'on a bien l'email et que l'OTP est vérifié OU qu'une session existe
   useEffect(() => {
     const checkAccess = async () => {
-      console.log('🔍 Reset Password - Paramètres reçus:', { email, verified, otp });
+      __DEV__ && console.log('🔍 Reset Password - Paramètres reçus:', { email, verified, otp });
 
       // Normaliser verified (accepte 'true' ou true)
       const verifiedFlag = verified === 'true' || verified === true || verified === '1' || verified === 1;
 
       // Si on vient du flux OTP avec verified=true
       if (verifiedFlag && email) {
-        console.log('✅ Flux OTP validé - accès autorisé');
+        __DEV__ && console.log('✅ Flux OTP validé - accès autorisé');
         return; // OK, on peut continuer
       }
 
-      console.log('⚠️ Flux OTP non détecté, vérification de la session...');
+      __DEV__ && console.log('⚠️ Flux OTP non détecté, vérification de la session...');
 
       // Sinon, vérifier qu'une session existe (flux magic link classique)
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
-        console.log('❌ Aucune session - redirection vers forgot-password');
+        __DEV__ && console.log('❌ Aucune session - redirection vers forgot-password');
         Alert.alert(
           t('auth.error'),
           "Accès non autorisé. Veuillez recommencer le processus.",
           [{ text: "OK", onPress: () => router.replace('/(auth)/forgot-password') }]
         );
       } else {
-        console.log('✅ Session trouvée - accès autorisé');
+        __DEV__ && console.log('✅ Session trouvée - accès autorisé');
       }
     };
     checkAccess();

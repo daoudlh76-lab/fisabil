@@ -111,10 +111,10 @@ export default function RevisionScreen() {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
       
-      console.log('🎴 Chargement vocabulaire pour user:', userId || 'NON CONNECTÉ');
+      __DEV__ && console.log('🎴 Chargement vocabulaire pour user:', userId || 'NON CONNECTÉ');
       
       if (!userId) {
-        console.log('⚠️ Pas de session, pas de vocabulaire');
+        __DEV__ && console.log('⚠️ Pas de session, pas de vocabulaire');
         setVocabCards([]);
         setLoadingVocab(false);
         return;
@@ -128,13 +128,13 @@ export default function RevisionScreen() {
         .order('created_at', { ascending: false });
 
       if (scansError) {
-        console.error('❌ Erreur chargement scans:', scansError);
+        __DEV__ && console.error('❌ Erreur chargement scans:', scansError);
         setVocabCards([]);
         setLoadingVocab(false);
         return;
       }
 
-      console.log('📄 Scans trouvés:', scans?.length || 0);
+      __DEV__ && console.log('📄 Scans trouvés:', scans?.length || 0);
 
       if (!scans || scans.length === 0) {
         setVocabCards([]);
@@ -169,7 +169,7 @@ export default function RevisionScreen() {
           });
         }
       }
-      console.log('📊 Progression chargée:', progressMap.size, 'entrées');
+      __DEV__ && console.log('📊 Progression chargée:', progressMap.size, 'entrées');
 
       for (const scan of scans) {
         // Chercher le cache de vocabulaire pour ce scan - priorité à la langue UI actuelle
@@ -195,7 +195,7 @@ export default function RevisionScreen() {
             .maybeSingle();
 
           if (cacheError) {
-            console.error('❌ Erreur cache:', cacheKey, cacheError);
+            __DEV__ && console.error('❌ Erreur cache:', cacheKey, cacheError);
             continue;
           }
 
@@ -204,7 +204,7 @@ export default function RevisionScreen() {
             vocabData = needsMigration(cached.payload)
               ? migrateExtractVocabResult(cached.payload)
               : cached.payload;
-            console.log('📦 Cache trouvé pour:', cacheKey, 'avec', {
+            __DEV__ && console.log('📦 Cache trouvé pour:', cacheKey, 'avec', {
               vocab: vocabData.vocabulaire?.length || 0,
               verbes: vocabData.verbes?.length || 0,
               particules: vocabData.particules?.length || 0,
@@ -214,7 +214,7 @@ export default function RevisionScreen() {
         }
 
         if (!vocabData) {
-          console.log('⚠️ Pas de cache vocabulaire pour scan:', scan.title, '- vous devez extraire le vocabulaire depuis la bibliothèque');
+          __DEV__ && console.log('⚠️ Pas de cache vocabulaire pour scan:', scan.title, '- vous devez extraire le vocabulaire depuis la bibliothèque');
           continue;
         }
 
@@ -228,7 +228,7 @@ export default function RevisionScreen() {
                 scanId: scan.id,
                 wordAr: item.singulier,
                 wordFr: item.traduction,
-                definition: item.pluriel ? `ج: ${item.pluriel}` : '',
+                definition: '',
                 difficulty: prog?.difficulty || 'medium',
                 lastReviewed: prog?.lastReviewed ? new Date(prog.lastReviewed) : null,
                 nextReview: prog?.nextReview ? new Date(prog.nextReview) : new Date(),
@@ -248,7 +248,7 @@ export default function RevisionScreen() {
                 scanId: scan.id,
                 wordAr: item.passe_3ms,
                 wordFr: item.traduction,
-                definition: `${item.present_3ms || ''} / ${item.imperatif || ''}`.replace(/^\s*\/\s*$/, '').trim(),
+                definition: '',
                 difficulty: prog?.difficulty || 'medium',
                 lastReviewed: prog?.lastReviewed ? new Date(prog.lastReviewed) : null,
                 nextReview: prog?.nextReview ? new Date(prog.nextReview) : new Date(),
@@ -297,10 +297,10 @@ export default function RevisionScreen() {
       // Mélanger les cartes dues
       const shuffled = uniqueCards.sort(() => Math.random() - 0.5);
       
-      console.log('✅ Vocabulaire chargé:', allCards.length, 'total,', dueCards.length, 'dues,', uniqueCards.length, 'uniques');
+      __DEV__ && console.log('✅ Vocabulaire chargé:', allCards.length, 'total,', dueCards.length, 'dues,', uniqueCards.length, 'uniques');
       setVocabCards(shuffled);
     } catch (error) {
-      console.error('❌ Erreur:', error);
+      __DEV__ && console.error('❌ Erreur:', error);
       setVocabCards([]);
     } finally {
       setLoadingVocab(false);
@@ -333,7 +333,7 @@ export default function RevisionScreen() {
         }));
       setScanChoices(valid);
     } catch (err) {
-      console.error('Erreur loadScanChoices:', err);
+      __DEV__ && console.error('Erreur loadScanChoices:', err);
     } finally {
       setLoadingScans(false);
     }
@@ -412,7 +412,7 @@ export default function RevisionScreen() {
 
   const handleSpeak = () => {
     if (current && current.text) {
-      console.log('🎧 Lecture dictée:', current.text.substring(0, 50) + '...');
+      __DEV__ && console.log('🎧 Lecture dictée:', current.text.substring(0, 50) + '...');
       speakSentence(current.text);
     }
   };
@@ -688,9 +688,21 @@ export default function RevisionScreen() {
                   </Text>
                 </View>
                 <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>{t('revision.mediumBtn')}</Text>
+                  <Text style={[styles.statValue, { color: '#2196F3' }]}>
+                    {vocabStats.medium}
+                  </Text>
+                </View>
+                <View style={styles.statBox}>
                   <Text style={styles.statLabel}>{t('revision.hardCards')}</Text>
                   <Text style={[styles.statValue, { color: '#FF9800' }]}>
                     {vocabStats.hard}
+                  </Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>{t('revision.forgotten')}</Text>
+                  <Text style={[styles.statValue, { color: '#F44336' }]}>
+                    {vocabStats.forgotten}
                   </Text>
                 </View>
               </View>
@@ -1046,9 +1058,11 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: 'white',
     borderRadius: 12,
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 30,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'visible' as any,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -1066,6 +1080,7 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: 'bold',
     color: 'white',
+    lineHeight: 80,
     marginBottom: 16,
     textAlign: 'center',
   },

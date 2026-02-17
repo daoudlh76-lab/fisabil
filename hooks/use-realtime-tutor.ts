@@ -12,8 +12,8 @@
 
 export function useRealtimeTutor() {
   if (__DEV__) {
-    console.warn('⚠️ [useRealtimeTutor] Feature temporairement désactivée (sécurité production)');
-    console.warn('💡 Utilisez use-chat-tutor pour le mode conversation classique');
+    __DEV__ && console.warn('⚠️ [useRealtimeTutor] Feature temporairement désactivée (sécurité production)');
+    __DEV__ && console.warn('💡 Utilisez use-chat-tutor pour le mode conversation classique');
   }
 
   return {
@@ -27,11 +27,11 @@ export function useRealtimeTutor() {
 
     // Méthodes vides pour compatibilité
     connect: () => {
-      console.warn('[useRealtimeTutor] Feature désactivée');
+      __DEV__ && console.warn('[useRealtimeTutor] Feature désactivée');
     },
     disconnect: () => {},
     startListening: () => {
-      console.warn('[useRealtimeTutor] Feature désactivée');
+      __DEV__ && console.warn('[useRealtimeTutor] Feature désactivée');
     },
     stopListening: () => {},
     pause: () => {},

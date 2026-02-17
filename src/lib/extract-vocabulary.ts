@@ -44,24 +44,27 @@ export type ExtractVocabResult = {
  * Extraire le vocabulaire d'un scan via Edge Function
  * @param scanId - ID du scan dans la base Supabase
  * @param uiLang - Langue d'interface pour les traductions (fr, en, de, es, ru, ms, ar)
+ * @param words - Mots déjà extraits par Google Vision (optionnel, pour optimisation)
  */
 export async function extractVocabularyFromText(
   scanId: string,
-  uiLang: string = 'fr'
+  uiLang: string = 'fr',
+  words?: string[]
 ): Promise<ExtractVocabResult | null> {
   try {
-    console.log(`📚 Extracting vocabulary via Edge Function (scan: ${scanId}, lang: ${uiLang})...`);
+    __DEV__ && console.log(`📚 Extracting vocabulary via Edge Function (scan: ${scanId}, lang: ${uiLang})...`);
 
     const data = await invokeEdge<ExtractVocabResult>('extract-vocab', {
       scan_id: scanId,
       ui_lang: uiLang,
+      words, // ✅ Passe les mots pré-extraits par Google Vision
     });
 
-    console.log(`✅ Extracted: ${data.vocabulaire?.length || 0} vocab, ${data.verbes?.length || 0} verbs, ${data.particules?.length || 0} particles`);
+    __DEV__ && console.log(`✅ Extracted: ${data.vocabulaire?.length || 0} vocab, ${data.verbes?.length || 0} verbs, ${data.particules?.length || 0} particles`);
 
     return data;
   } catch (err) {
-    console.error('❌ Vocabulary extraction failed:', err);
+    __DEV__ && console.error('❌ Vocabulary extraction failed:', err);
 
     // Try to get more detailed error info by making a direct fetch call
     try {
@@ -70,7 +73,7 @@ export async function extractVocabularyFromText(
       const accessToken = sessionData?.session?.access_token;
 
       if (accessToken) {
-        console.log('🔍 Attempting direct fetch to get detailed error...');
+        __DEV__ && console.log('🔍 Attempting direct fetch to get detailed error...');
         const response = await fetch(
           `https://lluabltdmlprrwggwhlq.supabase.co/functions/v1/extract-vocab`,
           {
@@ -87,18 +90,18 @@ export async function extractVocabularyFromText(
         );
 
         const responseText = await response.text();
-        console.error('🔍 Direct fetch response status:', response.status);
-        console.error('🔍 Direct fetch response body:', responseText);
+        __DEV__ && console.error('🔍 Direct fetch response status:', response.status);
+        __DEV__ && console.error('🔍 Direct fetch response body:', responseText);
 
         try {
           const errorJson = JSON.parse(responseText);
-          console.error('🔍 Parsed error JSON:', JSON.stringify(errorJson, null, 2));
+          __DEV__ && console.error('🔍 Parsed error JSON:', JSON.stringify(errorJson, null, 2));
         } catch (e) {
-          console.error('🔍 Could not parse response as JSON');
+          __DEV__ && console.error('🔍 Could not parse response as JSON');
         }
       }
     } catch (debugErr) {
-      console.error('🔍 Debug fetch also failed:', debugErr);
+      __DEV__ && console.error('🔍 Debug fetch also failed:', debugErr);
     }
 
     return null;

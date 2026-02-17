@@ -20,39 +20,39 @@ export function useSpeech() {
   const requestMicrophonePermission = useCallback(async () => {
     try {
       // Vérifier d'abord le statut actuel
-      console.log("🎤 Checking microphone permission status...");
+      __DEV__ && console.log("🎤 Checking microphone permission status...");
       const permissionResult = await Audio.getPermissionsAsync();
-      console.log("🎤 Permission result:", JSON.stringify(permissionResult));
+      __DEV__ && console.log("🎤 Permission result:", JSON.stringify(permissionResult));
       const { status: currentStatus, canAskAgain } = permissionResult;
 
       if (currentStatus === "granted") {
-        console.log("✅ Microphone permission already granted");
+        __DEV__ && console.log("✅ Microphone permission already granted");
         return true;
       }
 
       // Si on ne peut plus demander (permission refusée définitivement)
       if (!canAskAgain) {
-        console.warn("⚠️ Microphone permission was denied. User must enable it in system settings.");
+        __DEV__ && console.warn("⚠️ Microphone permission was denied. User must enable it in system settings.");
         setError("Permission microphone refusée. Allez dans Réglages → Fisabil → Microphone pour l'activer.");
         return false;
       }
 
       // Demander la permission
-      console.log("🎤 Requesting microphone permission...");
+      __DEV__ && console.log("🎤 Requesting microphone permission...");
       const requestResult = await Audio.requestPermissionsAsync();
-      console.log("🎤 Request result:", JSON.stringify(requestResult));
+      __DEV__ && console.log("🎤 Request result:", JSON.stringify(requestResult));
 
       if (requestResult.status === "granted") {
-        console.log("✅ Microphone permission granted");
+        __DEV__ && console.log("✅ Microphone permission granted");
         return true;
       } else {
-        console.error("❌ Microphone permission denied");
+        __DEV__ && console.error("❌ Microphone permission denied");
         setError("Permission microphone refusée. Allez dans Réglages → Fisabil → Microphone pour l'activer.");
         return false;
       }
     } catch (err) {
-      console.error("❌ Permission error:", err);
-      console.error("❌ Error stack:", err instanceof Error ? err.stack : String(err));
+      __DEV__ && console.error("❌ Permission error:", err);
+      __DEV__ && console.error("❌ Error stack:", err instanceof Error ? err.stack : String(err));
       setError("Erreur lors de la demande de permission microphone.");
       return false;
     }
@@ -69,12 +69,12 @@ export function useSpeech() {
       if (!hasPermission) {
         const errorMsg = "Microphone permission denied";
         setError(errorMsg);
-        console.error("❌", errorMsg);
+        __DEV__ && console.error("❌", errorMsg);
         return;
       }
 
       setIsListening(true);
-      console.log("🎤 Listening started...");
+      __DEV__ && console.log("🎤 Listening started...");
 
       // Configurer l'audio
       await Audio.setAudioModeAsync({
@@ -91,7 +91,7 @@ export function useSpeech() {
           Audio.RecordingOptionsPresets.HIGH_QUALITY
         );
         await recording.startAsync();
-        console.log("🎤 Recording started");
+        __DEV__ && console.log("🎤 Recording started");
 
         // Arrêter automatiquement après 10 secondes
         if (listeningTimeoutRef.current) {
@@ -99,16 +99,16 @@ export function useSpeech() {
         }
 
         listeningTimeoutRef.current = setTimeout(async () => {
-          console.log("⏱️ Timeout: stopping recording");
+          __DEV__ && console.log("⏱️ Timeout: stopping recording");
           await stopListening();
         }, 10000);
       } catch (err) {
-        console.error("Recording error:", err);
+        __DEV__ && console.error("Recording error:", err);
         setError("Recording error");
         setIsListening(false);
       }
     } catch (err) {
-      console.error("❌ Speech recognition error:", err);
+      __DEV__ && console.error("❌ Speech recognition error:", err);
       const errorMsg =
         err instanceof Error
           ? err.message
@@ -134,12 +134,12 @@ export function useSpeech() {
       const uri = recordingRef.current.getURI();
       recordingRef.current = null;
 
-      console.log("🎤 Recording stopped:", uri);
+      __DEV__ && console.log("🎤 Recording stopped:", uri);
 
       setIsListening(false);
 
       if (!uri) {
-        console.error("❌ No audio file recorded");
+        __DEV__ && console.error("❌ No audio file recorded");
         setError("No audio recorded");
         return;
       }
@@ -148,20 +148,20 @@ export function useSpeech() {
       setIsTranscribing(true);
       
       // Transcrire l'audio avec l'API Whisper d'OpenAI
-      console.log("📝 Transcribing audio with Whisper...");
+      __DEV__ && console.log("📝 Transcribing audio with Whisper...");
       const transcribedText = await transcribeWithWhisper(uri);
       
       setIsTranscribing(false);
       
       if (transcribedText) {
         setTranscript(transcribedText);
-        console.log("📝 Transcription:", transcribedText);
+        __DEV__ && console.log("📝 Transcription:", transcribedText);
       } else {
-        console.log("❌ Transcription failed or empty");
+        __DEV__ && console.log("❌ Transcription failed or empty");
         setError("Transcription failed");
       }
     } catch (err) {
-      console.error("Error stopping recognition:", err);
+      __DEV__ && console.error("Error stopping recognition:", err);
       setIsListening(false);
       setIsTranscribing(false);
     }
@@ -170,7 +170,7 @@ export function useSpeech() {
   // Transcrire l'audio avec Supabase Edge Function (speech-to-text)
   const transcribeWithWhisper = async (audioUri: string): Promise<string | null> => {
     try {
-      console.log("📤 Transcribing audio via Edge Function...");
+      __DEV__ && console.log("📤 Transcribing audio via Edge Function...");
 
       // Lire le fichier audio en base64
       const audioBase64 = await fileUriToBase64(audioUri);
@@ -182,10 +182,10 @@ export function useSpeech() {
         prompt: 'Ceci est une phrase en arabe. بسم الله الرحمن الرحيم',
       });
 
-      console.log("✅ Transcription result:", data.text);
+      __DEV__ && console.log("✅ Transcription result:", data.text);
       return data.text || null;
     } catch (err) {
-      console.error("❌ Transcription error:", err);
+      __DEV__ && console.error("❌ Transcription error:", err);
       return null;
     }
   };
@@ -228,7 +228,7 @@ export function useSpeech() {
 
         const speed = isArabicText(text) ? 0.9 : 1.0;
 
-        console.log("🔊 Speaking (OpenAI):", text.slice(0, 50) + "...", "lang:", speechLanguage);
+        __DEV__ && console.log("🔊 Speaking (local):", text.slice(0, 50) + "...", "lang:", speechLanguage);
 
         await speakWithOpenAI({
           text,
@@ -236,17 +236,17 @@ export function useSpeech() {
           speed,
           language: speechLanguage,
           onDone: () => {
-            console.log("🔊 Speech finished");
+            __DEV__ && console.log("🔊 Speech finished");
             setIsSpeaking(false);
           },
           onError: (err) => {
-            console.error("Speech synthesis error:", err);
+            __DEV__ && console.error("Speech synthesis error:", err);
             setIsSpeaking(false);
             setError("Speech synthesis error");
           },
         });
       } catch (err) {
-        console.error("❌ Speech error:", err);
+        __DEV__ && console.error("❌ Speech error:", err);
         const errorMsg =
           err instanceof Error ? err.message : "Speech error";
         setError(errorMsg);
@@ -262,9 +262,9 @@ export function useSpeech() {
     try {
       await stopTTS();
       setIsSpeaking(false);
-      console.log("🔊 Speech stopped");
+      __DEV__ && console.log("🔊 Speech stopped");
     } catch (err) {
-      console.error("Error stopping speech:", err);
+      __DEV__ && console.error("Error stopping speech:", err);
     }
   }, []);
 

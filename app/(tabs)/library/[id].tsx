@@ -18,6 +18,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { useAudioPlaylistContext } from "@/contexts/audio-playlist-context";
 import { extractVocabularyFromText, VocabItem, VerbItem, ParticleItem } from "@/src/lib/extract-vocabulary";
 import { migrateExtractVocabResult, needsMigration } from "@/src/lib/migrate-vocab-data";
+import { updateLocalScan, deleteLocalScan, getLocalVocab, saveLocalVocab } from "@/src/lib/local-cache";
 
 type ScanRow = {
   id: string;
@@ -77,7 +78,7 @@ export default function LibraryItemScreen() {
   // --- Diacritics
   const { addDiacriticsToWord } = useDiacritics();
   const { t, language } = useLanguage();
-  const { updateTracksByScanId } = useAudioPlaylistContext();
+  const { updateTracksByScanId, updateTrackFolder, playlist } = useAudioPlaylistContext();
   // Langue UI
   const uiLang = language;
 
@@ -121,7 +122,7 @@ export default function LibraryItemScreen() {
         setFolders(data as Folder[]);
       }
     } catch (e) {
-      console.error("Erreur chargement dossiers:", e);
+      __DEV__ && console.error("Erreur chargement dossiers:", e);
     }
   }
 
@@ -163,8 +164,23 @@ export default function LibraryItemScreen() {
       setNewContent(row.content ?? "");
       setSelectedFolderId(row.folder_id ?? null);
 
-      // ✅ Charge le cache IA si déjà présent
+      // Sauvegarder dans le cache local
+      updateLocalScan(row);
+
+      // ✅ Charge le cache IA — d'abord local, puis Supabase
       try {
+        // 1. Essayer le cache local (instantané)
+        const localVocab = await getLocalVocab(row.id, uiLang);
+        if (localVocab) {
+          const localData = localVocab as ExtractResponse;
+          if ((localData.meta?.prompt_version || 0) >= VOCAB_PROMPT_VERSION) {
+            const migratedData = needsMigration(localData) ? migrateExtractVocabResult(localData) : localData;
+            setAiData(migratedData);
+            __DEV__ && console.log('📱 Vocabulaire chargé depuis le cache local');
+          }
+        }
+
+        // 2. Vérifier aussi le cache Supabase (plus à jour)
         const cacheKey = `ai_vocab_${row.id}_${uiLang}`;
         const { data: cached } = await supabase
           .from("ai_cache")
@@ -174,14 +190,13 @@ export default function LibraryItemScreen() {
 
         if (cached?.payload) {
           const data = cached.payload as ExtractResponse;
-          // Ignorer le cache si le prompt a changé (ex: fix des traductions en mauvaise langue)
           if ((data.meta?.prompt_version || 0) < VOCAB_PROMPT_VERSION) {
-            console.log('🔄 Cache obsolète (v' + (data.meta?.prompt_version || 0) + ' < v' + VOCAB_PROMPT_VERSION + '), régénération...');
-            // Ne pas charger le cache obsolète — generateVocab sera appelé par le useEffect
+            __DEV__ && console.log('🔄 Cache obsolète (v' + (data.meta?.prompt_version || 0) + ' < v' + VOCAB_PROMPT_VERSION + '), régénération...');
           } else {
-            // Migrer automatiquement si nécessaire
             const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
             setAiData(migratedData);
+            // Synchroniser le cache local
+            saveLocalVocab(row.id, uiLang, migratedData);
           }
         }
       } catch {
@@ -206,29 +221,19 @@ export default function LibraryItemScreen() {
     }, [])
   );
 
-  // Générer automatiquement le vocabulaire quand le scan est chargé et qu'il n'y a pas de cache
-  useEffect(() => {
-    if (scan && !aiData && !aiLoading && !loading) {
-      generateVocab();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scan, aiData, loading]);
-
-  // Recharger le vocabulaire quand la langue change
+  // Recharger le cache vocabulaire quand la langue change (sans ré-extraire)
   useEffect(() => {
     if (!scan || loading) return;
-    
-    // Si les données actuelles ne sont pas dans la bonne langue, régénérer
+
+    // Si les données actuelles ne sont pas dans la bonne langue, chercher dans le cache
     if (aiData && aiData.meta?.ui_lang !== uiLang) {
-      console.log(`🔄 Langue changée: ${aiData.meta?.ui_lang} -> ${uiLang}, régénération...`);
-      generateVocab();
-      return;
+      __DEV__ && console.log(`🔄 Langue changée: ${aiData.meta?.ui_lang} -> ${uiLang}, recherche du cache...`);
+      setAiData(null); // Reset pour recharger le cache
     }
-    
-    // Si pas de données, vérifier le cache ou régénérer
+
+    // Si pas de données, vérifier le cache (mais ne PAS ré-extraire automatiquement)
     if (!aiData) {
-      // Recharger le cache pour la nouvelle langue
-      async function reloadVocabForNewLanguage() {
+      async function reloadVocabFromCache() {
         try {
           const cacheKey = `ai_vocab_${scan!.id}_${uiLang}`;
           const { data: cached } = await supabase
@@ -239,28 +244,24 @@ export default function LibraryItemScreen() {
 
           if (cached?.payload) {
             const data = cached.payload as ExtractResponse;
-            // Ignorer le cache si le prompt a changé
             if ((data.meta?.prompt_version || 0) < VOCAB_PROMPT_VERSION) {
-              console.log('🔄 Cache obsolète, régénération...');
-              generateVocab();
+              __DEV__ && console.log('📋 Cache obsolète — appuyez sur "Extraire" pour régénérer');
             } else {
               const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
               setAiData(migratedData);
             }
           } else {
-            // Pas de cache pour cette langue, régénérer
-            generateVocab();
+            __DEV__ && console.log('📋 Pas de vocabulaire extrait — appuyez sur "Extraire" pour lancer l\'extraction');
           }
         } catch {
-          // En cas d'erreur, régénérer avec les données mock
-          generateVocab();
+          // Cache non disponible
         }
       }
 
-      reloadVocabForNewLanguage();
+      reloadVocabFromCache();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uiLang, aiData]);
+  }, [uiLang, aiData, scan, loading]);
 
   function startEdit() {
     if (!scan) return;
@@ -276,18 +277,23 @@ export default function LibraryItemScreen() {
     setEditing(false);
   }
 
-  async function updateFolder() {
+  async function updateFolder(folderId: string | null) {
     try {
       if (!scan) return;
+      if (folderId === scan.folder_id) return; // Already in this folder
 
       const userId = await getUserIdOrThrow();
 
+      __DEV__ && console.log('📁 updateFolder:', { scanId: scan.id, newFolderId: folderId, currentFolderId: scan.folder_id });
+
       const { data, error } = await supabase
         .from("scans")
-        .update({ folder_id: selectedFolderId })
+        .update({ folder_id: folderId })
         .eq("id", scan.id)
         .eq("user_id", userId)
         .select("id,user_id,title,content,created_at,folder_id");
+
+      __DEV__ && console.log('📁 updateFolder result:', { data, error });
 
       if (error) {
         Alert.alert(t('libraryDetail.error'), error.message);
@@ -301,9 +307,21 @@ export default function LibraryItemScreen() {
 
       const updated = data[0] as ScanRow;
       setScan(updated);
+      setSelectedFolderId(updated.folder_id);
 
-      Alert.alert('✅', t('libraryDetail.folderUpdated'));
+      // Mettre à jour le cache local
+      updateLocalScan(updated);
+
+      // Mettre à jour le dossier de la piste audio associée
+      const linkedTrack = playlist.tracks.find(tr => tr.scanId === scan.id);
+      if (linkedTrack) {
+        updateTrackFolder(linkedTrack.id, folderId);
+      }
+
+      const folderName = folderId ? folders.find(f => f.id === folderId)?.name : t('library.noFolder');
+      Alert.alert('✅', `${t('libraryDetail.folderUpdated')}: ${folderName}`);
     } catch (e: any) {
+      __DEV__ && console.error('📁 updateFolder error:', e);
       Alert.alert(t('libraryDetail.error'), e?.message ?? "Unknown error");
     }
   }
@@ -343,7 +361,10 @@ export default function LibraryItemScreen() {
       setScan(updated);
       setEditing(false);
 
-      // � Synchroniser le texte modifié avec les pistes audio liées
+      // Mettre à jour le cache local
+      updateLocalScan(updated);
+
+      // Synchroniser le texte modifié avec les pistes audio liées
       updateTracksByScanId(scan.id, updated.title, updated.content, scan.title);
 
       // �💡 Quand on modifie le texte, on invalide le résultat IA (optionnel)
@@ -378,6 +399,9 @@ export default function LibraryItemScreen() {
                 Alert.alert(t('libraryDetail.error'), error.message);
                 return;
               }
+
+              // Supprimer du cache local
+              deleteLocalScan(scan.id);
 
               Alert.alert(`✅ ${t('library.deleted')}`, t('libraryDetail.deletedSuccess'));
               router.replace("/(tabs)/library");
@@ -504,16 +528,16 @@ export default function LibraryItemScreen() {
       // Utiliser l'extraction via Edge Function (sécurisée)
       let payload: ExtractResponse;
 
-      console.log('📡 Extraction du vocabulaire via Edge Function...');
+      __DEV__ && console.log('📡 Extraction du vocabulaire via Edge Function...');
       const result = await extractVocabularyFromText(scan.id, uiLang);
 
       if (!result) {
-        console.warn('⚠️ Edge Function extraction failed');
-        console.log('📋 Utilisant mock data...');
+        __DEV__ && console.warn('⚠️ Edge Function extraction failed');
+        __DEV__ && console.log('📋 Utilisant mock data...');
         payload = getMockVocabData();
       } else {
         payload = result;
-        console.log('✅ Vocabulaire extrait:', {
+        __DEV__ && console.log('✅ Vocabulaire extrait:', {
           vocab: result.vocabulaire.length,
           verbes: result.verbes.length,
           particules: result.particules.length,
@@ -529,7 +553,7 @@ export default function LibraryItemScreen() {
 
       setAiData(payload);
 
-      // cache (optionnel)
+      // cache (Supabase + local)
       try {
         const cacheKey = `ai_vocab_${scan.id}_${uiLang}`;
         const userId = await getUserIdOrThrow();
@@ -546,8 +570,10 @@ export default function LibraryItemScreen() {
       } catch {
         // ignore
       }
+      // Sauvegarder aussi en local
+      saveLocalVocab(scan.id, uiLang, payload);
     } catch (e: any) {
-      console.error("Erreur génération vocabulaire:", e?.message);
+      __DEV__ && console.error("Erreur génération vocabulaire:", e?.message);
       // En cas d'erreur, utiliser mock data
       setAiData(getMockVocabData());
     } finally {
@@ -572,7 +598,7 @@ export default function LibraryItemScreen() {
                 // Supprimer le cache existant
                 const cacheKey = `ai_vocab_${scan.id}_${uiLang}`;
                 await supabase.from('ai_cache').delete().eq('key', cacheKey);
-                console.log('🗑️ Cache supprimé:', cacheKey);
+                __DEV__ && console.log('🗑️ Cache supprimé:', cacheKey);
 
                 // Supprimer aussi les caches des autres langues
                 const allLangs = ['fr', 'en', 'de', 'es', 'ru', 'ms', 'ar'];
@@ -590,7 +616,7 @@ export default function LibraryItemScreen() {
 
                 Alert.alert('✅', t('libraryDetail.regenerateSuccess'));
               } catch (e: any) {
-                console.error('Erreur régénération:', e);
+                __DEV__ && console.error('Erreur régénération:', e);
                 Alert.alert(t('libraryDetail.error'), e?.message || 'Unknown error');
               }
             },
@@ -611,9 +637,11 @@ export default function LibraryItemScreen() {
         { key: cacheKey, payload: newData, updated_at: new Date().toISOString() },
         { onConflict: 'key' }
       );
-      console.log('💾 Cache AI sauvegardé');
+      // Synchroniser le cache local
+      saveLocalVocab(scan.id, uiLang, newData);
+      __DEV__ && console.log('💾 Cache AI sauvegardé (Supabase + local)');
     } catch (e) {
-      console.error('Erreur sauvegarde cache:', e);
+      __DEV__ && console.error('Erreur sauvegarde cache:', e);
     }
   }
 
@@ -885,7 +913,10 @@ export default function LibraryItemScreen() {
                 styles.folderChip,
                 selectedFolderId === null && styles.folderChipSelected
               ]}
-              onPress={() => setSelectedFolderId(null)}
+              onPress={() => {
+                setSelectedFolderId(null);
+                updateFolder(null);
+              }}
             >
               <Text style={styles.folderText}>{t('library.noFolder')}</Text>
             </Pressable>
@@ -896,20 +927,16 @@ export default function LibraryItemScreen() {
                   styles.folderChip,
                   selectedFolderId === folder.id && styles.folderChipSelected
                 ]}
-                onPress={() => setSelectedFolderId(folder.id)}
+                onPress={() => {
+                  setSelectedFolderId(folder.id);
+                  updateFolder(folder.id);
+                }}
               >
                 <Text style={styles.folderIcon}>{folder.icon}</Text>
                 <Text style={styles.folderText}>{folder.name}</Text>
               </Pressable>
             ))}
           </ScrollView>
-          {selectedFolderId !== scan?.folder_id && (
-            <Pressable style={styles.btnUpdateFolder} onPress={updateFolder}>
-              <Text style={styles.btnUpdateFolderText}>
-                ✅ {t('libraryDetail.updateFolder')}
-              </Text>
-            </Pressable>
-          )}
           {folders.length === 0 && (
             <Text style={styles.noFoldersText}>
               {t('library.noFolders')}
@@ -961,6 +988,15 @@ export default function LibraryItemScreen() {
           </View>
         )}
 
+        {/* Bouton d'extraction si pas encore de données */}
+        {!aiData && !aiLoading && (
+          <Pressable style={styles.extractButton} onPress={generateVocab}>
+            <Text style={styles.extractButtonText}>
+              ✨ {t('libraryDetail.extractVocab') || "Extraire le vocabulaire"}
+            </Text>
+          </Pressable>
+        )}
+
         {!!aiData && (
           <>
             {/* Boutons pour ouvrir les listes */}
@@ -993,7 +1029,7 @@ export default function LibraryItemScreen() {
               </Pressable>
             </View>
 
-            {/* Bouton régénérer pour forcer la ré-extraction avec voyelles */}
+            {/* Bouton régénérer pour forcer la ré-extraction */}
             <Pressable style={styles.regenerateButton} onPress={regenerateVocab}>
               <Text style={styles.regenerateButtonText}>
                 🔄 {t('libraryDetail.regenerate')}
@@ -1510,6 +1546,20 @@ const styles = StyleSheet.create({
     color: "#1b5e20",
   },
   vocabButtonTextActive: {
+    color: "white",
+  },
+  // Bouton extraire vocabulaire (première fois)
+  extractButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: "#2e7d32",
+    alignItems: "center",
+  },
+  extractButtonText: {
+    fontSize: 15,
+    fontWeight: "800",
     color: "white",
   },
   // Bouton régénérer vocabulaire
