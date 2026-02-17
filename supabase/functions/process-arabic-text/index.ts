@@ -122,12 +122,36 @@ CRITICAL: Add full tashkeel to EVERY Arabic word. This is essential for text-to-
    ❌ FORBIDDEN: nouns, adjectives, particles
 
    🔴 ALL verbs MUST be converted to هُوَ (3rd masculine singular):
-   - "passe_3ms": فَعَلَ form (past 3ms) — NEVER starts with يَ/تَ/نَ/أَ
+   - "passe_3ms": فَعَلَ form (past 3ms) — NEVER starts with يَ/نَ/أَ (except Form V/VI which start with تَ)
    - "present_3ms": يَفْعَلُ form (present 3ms) — MUST start with يَ
-   - "imperatif": اِفْعَلْ form (imperative 2ms)
-   - All 3 forms MUST be DIFFERENT
+   - "imperatif": اِفْعَلْ form (imperative 2ms) — MUST be DIFFERENT from passe_3ms
+   - All 3 forms MUST be DIFFERENT from each other
 
    ⚠️ FORM V (تَفَعَّلَ) / FORM VI (تَفَاعَلَ): past starts with تَ, present = يَتَفَعَّلُ / يَتَفَاعَلُ
+
+   📋 CORRECT CONJUGATION EXAMPLES (follow these patterns exactly):
+   Form I:   كَتَبَ / يَكْتُبُ / اُكْتُبْ (kataba/yaktub/uktub)
+   Form I:   ذَهَبَ / يَذْهَبُ / اِذْهَبْ (dhahaba/yadh-hab/idh-hab)
+   Form I:   جَعَلَ / يَجْعَلُ / اِجْعَلْ (ja3ala/yaj3al/ij3al)
+   Form I:   عَلِمَ / يَعْلَمُ / اِعْلَمْ (3alima/ya3lam/i3lam)
+   Form I:   قَرَأَ / يَقْرَأُ / اِقْرَأْ (qara'a/yaqra'/iqra')
+   Form I:   قَالَ / يَقُولُ / قُلْ (qaala/yaquul/qul)
+   Form I:   كَانَ / يَكُونُ / كُنْ (kaana/yakuun/kun)
+   Form II:  عَلَّمَ / يُعَلِّمُ / عَلِّمْ (3allama/yu3allim/3allim)
+   Form III: جَاهَدَ / يُجَاهِدُ / جَاهِدْ (jaahada/yujaahid/jaahid)
+   Form IV:  أَنْزَلَ / يُنْزِلُ / أَنْزِلْ (anzala/yunzil/anzil)
+   Form IV:  أَرْسَلَ / يُرْسِلُ / أَرْسِلْ (arsala/yursil/arsil)
+   Form V:   تَعَلَّمَ / يَتَعَلَّمُ / تَعَلَّمْ (ta3allama/yata3allam/ta3allam)
+   Form VI:  تَعَاوَنَ / يَتَعَاوَنُ / تَعَاوَنْ (ta3aawana/yata3aawan/ta3aawan)
+   Form VII: اِنْكَسَرَ / يَنْكَسِرُ / اِنْكَسِرْ (inkasara/yankasir/inkasir)
+   Form VIII: اِجْتَمَعَ / يَجْتَمِعُ / اِجْتَمِعْ (ijtama3a/yajtami3/ijtami3)
+   Form X:   اِسْتَخْرَجَ / يَسْتَخْرِجُ / اِسْتَخْرِجْ (istakhraja/yastakhrij/istakhrij)
+
+   ⚠️ COMMON MISTAKES TO AVOID:
+   - Present tense: the 2nd root letter often gets sukuun (ـْـ), NOT fatha. E.g. يَكْتُبُ NOT يَكَتَبُ
+   - Imperative: MUST be different from past. E.g. اُكْتُبْ NOT كَتَبَ
+   - Form IV present: starts with يُـ (damma), e.g. يُنْزِلُ NOT يَنْزِلُ
+   - Form II present: starts with يُـ (damma), e.g. يُعَلِّمُ NOT يَعَلِّمُ
 
 3. "particules" = ONLY function words (حرف) — prepositions, conjunctions, pronouns
    ✅ مِنْ, إِلَى, فِي, هُوَ, وَ
@@ -323,13 +347,8 @@ Deno.serve(async (req) => {
       }, 500);
     }
 
-    // ── Step 2: Bescherelle correction ──
+    // ── Step 2: Bescherelle correction (disabled — data quality issues) ──
     const verbes = parsed.verbes || [];
-    const correctedCount = await correctVerbsWithBescherelle(verbes, supabaseAdmin);
-
-    if (correctedCount > 0) {
-      console.log(`[process-arabic-text] Bescherelle: corrected ${correctedCount}/${verbes.length} verbs`);
-    }
 
     // ── Response ──
     const result = {

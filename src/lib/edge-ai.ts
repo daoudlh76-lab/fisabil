@@ -10,18 +10,31 @@ import { supabase } from './supabase';
  */
 export async function invokeEdge<T = any>(fnName: string, body: any): Promise<T> {
   if (__DEV__) {
-    __DEV__ && console.log(`📡 [EdgeAI] invokeEdge('${fnName}') payload:`, body);
+    const logBody = body?.image_base64
+      ? { ...body, image_base64: `[${(body.image_base64.length / 1024).toFixed(0)}KB base64]` }
+      : body;
+    __DEV__ && console.log(`📡 [EdgeAI] invokeEdge('${fnName}') payload:`, logBody);
   }
 
-  const { data, error } = await supabase.functions.invoke(fnName, {
+  // Ensure session is fresh before calling Edge Function
+  await supabase.auth.getSession();
+
+  let { data, error } = await supabase.functions.invoke(fnName, {
     body,
   });
+
+  // Retry once on 401 after forcing a session refresh
+  if (error && error.context?.status === 401) {
+    __DEV__ && console.log(`📡 [EdgeAI] 401 received, refreshing session and retrying...`);
+    await supabase.auth.refreshSession();
+    ({ data, error } = await supabase.functions.invoke(fnName, { body }));
+  }
 
   if (__DEV__) {
     __DEV__ && console.log(`📡 [EdgeAI] invokeEdge('${fnName}') response:`, data, error);
   }
   if (error) {
-    const errMsg = `[EdgeAI] ${fnName} failed: status=${error.status || 'unknown'}, message=${error.message}`;
+    const errMsg = `[EdgeAI] ${fnName} failed: status=${error.context?.status || 'unknown'}, message=${error.message}`;
     __DEV__ && console.error(errMsg, "url:", error.context?.url);
     throw new Error(errMsg);
   }

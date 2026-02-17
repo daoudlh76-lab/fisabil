@@ -22,6 +22,7 @@ import { useDiacritics as useOldDiacritics } from "@/hooks/use-diacritics";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
 import { useTextToSpeech } from "@/hooks/use-text-to-speech";
+import { isOcrAvailable, performOcr } from "@/src/lib/google-vision-ocr";
 import { supabase } from "@/src/lib/supabase";
 import { updateLocalScan, saveLocalVocab } from "@/src/lib/local-cache";
 import { processArabicImage } from "@/src/lib/process-arabic-text";
@@ -159,25 +160,66 @@ function ScannerScreen() {
 
     try {
       // Pipeline Gemini 2.0 Flash : OCR + vocalisation + extraction vocab en un seul appel
-      const result = await processArabicImage(imageUri, language);
+      let usedGemini = false;
+      let finalText = "";
 
-      if (!result.full_text_vocalized?.trim()) {
+      try {
+        const result = await processArabicImage(imageUri, language);
+
+        if (result.full_text_vocalized?.trim()) {
+          finalText = result.full_text_vocalized;
+          usedGemini = true;
+
+          // Sauvegarder le vocab extrait pour le cacher lors du save
+          setLastGeminiVocab({
+            vocabulaire: result.vocabulaire || [],
+            verbes: result.verbes || [],
+            particules: result.particules || [],
+          });
+        }
+      } catch (geminiError: any) {
+        __DEV__ && console.warn("⚠️ Gemini OCR failed, falling back to Google Vision:", geminiError?.message);
+      }
+
+      // Fallback : Google Vision OCR si Gemini a échoué
+      if (!usedGemini) {
+        if (!isOcrAvailable()) {
+          Alert.alert(t("scanner.error"), "OCR non disponible");
+          return;
+        }
+
+        const ocrResult = await performOcr(imageUri);
+
+        if (ocrResult.error) {
+          if (ocrResult.error === "NO_TEXT_DETECTED") {
+            Alert.alert(t("scanner.error"), t("scanner.noTextDetected"));
+          } else {
+            Alert.alert(t("scanner.error"), `OCR Error: ${ocrResult.error}`);
+          }
+          return;
+        }
+
+        if (!ocrResult.text.trim()) {
+          Alert.alert(t("scanner.error"), t("scanner.noTextDetected"));
+          return;
+        }
+
+        finalText = ocrResult.text;
+        const hasDiacritics = /[\u064B-\u0652]/.test(finalText);
+        if (!hasDiacritics) {
+          finalText = addDiacriticsToText(finalText);
+          setShowDiacritics(true);
+        }
+      }
+
+      if (!finalText.trim()) {
         Alert.alert(t("scanner.error"), t("scanner.noTextDetected"));
         return;
       }
 
-      const finalText = result.full_text_vocalized;
       setOcrText(finalText);
       setReviewText(finalText);
-      // Gemini retourne toujours le texte vocalisé (avec diacritiques)
-      setShowDiacritics(true);
-
-      // Sauvegarder le vocab extrait pour le cacher lors du save
-      setLastGeminiVocab({
-        vocabulaire: result.vocabulaire || [],
-        verbes: result.verbes || [],
-        particules: result.particules || [],
-      });
+      if (usedGemini) setShowDiacritics(true);
 
       // ✅ Multi-page: on n'ajoute PAS à la playlist tout de suite
       if (multiPageMode) {
@@ -187,7 +229,7 @@ function ScannerScreen() {
         Alert.alert(`✅ ${t("scanner.extractionOk")}`, t("scanner.vowelsAdded"));
       }
     } catch (error: any) {
-      __DEV__ && console.error("Erreur Gemini OCR:", error);
+      __DEV__ && console.error("Erreur OCR:", error);
       Alert.alert(t("scanner.error"), error.message || "OCR failed");
     } finally {
       setOcrLoading(false);
