@@ -22,15 +22,15 @@ import { useDiacritics as useOldDiacritics } from "@/hooks/use-diacritics";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
 import { useTextToSpeech } from "@/hooks/use-text-to-speech";
-import { isOcrAvailable, performOcr } from "@/src/lib/google-vision-ocr";
 import { supabase } from "@/src/lib/supabase";
-import { updateLocalScan } from "@/src/lib/local-cache";
+import { updateLocalScan, saveLocalVocab } from "@/src/lib/local-cache";
+import { processArabicImage } from "@/src/lib/process-arabic-text";
 
 const GREEN = "#2E7D32";
 const BG = "transparent";
 
 function ScannerScreen() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { subscription, isLoaded } = useSubscription();
   const scannerLimitRaw = useDailyLimit("scanner", 1);
 
@@ -81,8 +81,10 @@ function ScannerScreen() {
 
   const [ocrLoading, setOcrLoading] = useState(false);
 
-  // On garde l’ID de la piste audio créée (single page ou merge)
+  // On garde l'ID de la piste audio créée (single page ou merge)
   const [lastTrackId, setLastTrackId] = useState<string | null>(null);
+  // Résultat Gemini (vocab extrait lors du scan) pour sauvegarder avec le scan
+  const [lastGeminiVocab, setLastGeminiVocab] = useState<any>(null);
 
   const canSave = useMemo(() => {
     return title.trim().length > 0 && reviewText.trim().length > 0;
@@ -156,86 +158,26 @@ function ScannerScreen() {
     setOcrLoading(true);
 
     try {
-      // Si pas d'API OCR configurée → mode démo
-      if (!isOcrAvailable()) {
-        __DEV__ && console.warn("⚠️ OCR non configuré, mode démo");
-        const mockText = "الحمد لله رب العالمين مرحبا بك في التطبيق";
+      // Pipeline Gemini 2.0 Flash : OCR + vocalisation + extraction vocab en un seul appel
+      const result = await processArabicImage(imageUri, language);
 
-        setOcrText(mockText);
-
-        const hasDiacritics = /[\u064B-\u0652]/.test(mockText);
-        let finalText = mockText;
-
-        if (!hasDiacritics) {
-          finalText = addDiacriticsToText(mockText);
-          setShowDiacritics(true);
-        } else {
-          setShowDiacritics(false);
-        }
-
-        setReviewText(finalText);
-
-        // ✅ Multi-page: on n'ajoute PAS à la playlist tout de suite
-        if (multiPageMode) {
-          Alert.alert(`✅ ${t("scanner.extractionOk")}`, t("scanner.textAdded"));
-        } else {
-          await convertAndAddToPlaylist(finalText);
-          Alert.alert(
-            `✅ ${t("scanner.extractionOk")}`,
-            hasDiacritics ? t("scanner.textExtracted") : t("scanner.vowelsAdded")
-          );
-        }
-
-        return;
-      }
-
-      // OCR réel (Google Vision)
-      const result = await performOcr(imageUri);
-
-      if (result.error) {
-        if (result.error === "NO_TEXT_DETECTED") {
-          Alert.alert(t("scanner.error"), t("scanner.noTextDetected"));
-        } else if (result.error === "CONTENT_POLICY_VIOLATION") {
-          Alert.alert(
-            t("scanner.error"),
-            "L'image n'a pas pu être traitée. Essayez une autre image."
-          );
-        } else if (result.error === "NO_API_CONFIGURED") {
-          Alert.alert(
-            t("scanner.error"),
-            "Aucune API OCR n'est configurée. Configure Google Cloud Vision API."
-          );
-        } else if (result.error === "IMAGE_TOO_LARGE") {
-          Alert.alert(
-            t("scanner.error"),
-            t("scanner.imageTooLarge") ||
-              "L'image est trop volumineuse. Prends une photo avec une résolution plus basse."
-          );
-        } else {
-          Alert.alert(t("scanner.error"), `OCR Error: ${result.error}`);
-        }
-        return;
-      }
-
-      if (!result.text.trim()) {
+      if (!result.full_text_vocalized?.trim()) {
         Alert.alert(t("scanner.error"), t("scanner.noTextDetected"));
         return;
       }
 
-      setOcrText(result.text);
-
-      // Diacritiques : seulement si le texte n'en a pas
-      const hasDiacritics = /[\u064B-\u0652]/.test(result.text);
-
-      let finalText = result.text;
-      if (!hasDiacritics) {
-        finalText = addDiacriticsToText(result.text);
-        setShowDiacritics(true);
-      } else {
-        setShowDiacritics(false);
-      }
-
+      const finalText = result.full_text_vocalized;
+      setOcrText(finalText);
       setReviewText(finalText);
+      // Gemini retourne toujours le texte vocalisé (avec diacritiques)
+      setShowDiacritics(true);
+
+      // Sauvegarder le vocab extrait pour le cacher lors du save
+      setLastGeminiVocab({
+        vocabulaire: result.vocabulaire || [],
+        verbes: result.verbes || [],
+        particules: result.particules || [],
+      });
 
       // ✅ Multi-page: on n'ajoute PAS à la playlist tout de suite
       if (multiPageMode) {
@@ -245,7 +187,7 @@ function ScannerScreen() {
         Alert.alert(`✅ ${t("scanner.extractionOk")}`, t("scanner.vowelsAdded"));
       }
     } catch (error: any) {
-      __DEV__ && console.error("Erreur OCR:", error);
+      __DEV__ && console.error("Erreur Gemini OCR:", error);
       Alert.alert(t("scanner.error"), error.message || "OCR failed");
     } finally {
       setOcrLoading(false);
@@ -375,6 +317,22 @@ function ScannerScreen() {
           created_at: new Date().toISOString(),
           folder_id: null,
         });
+
+        // Pré-cacher le vocabulaire extrait par Gemini lors du scan
+        if (lastGeminiVocab) {
+          const vocabPayload = {
+            meta: { ui_lang: language, title: titleTrimmed, source: 'gemini', model: 'gemini-2.0-flash', prompt_version: 2 },
+            ...lastGeminiVocab,
+          };
+          saveLocalVocab(scanId, language, vocabPayload);
+          // Cache Supabase aussi
+          try {
+            await supabase.from("ai_cache").upsert(
+              { key: `ai_vocab_${scanId}_${language}`, payload: vocabPayload, scan_id: scanId, user_id: userId },
+              { onConflict: "key" }
+            );
+          } catch { /* ignore */ }
+        }
       }
 
       // ✅ Compter la limite free : 1 fois par document (au moment du save)
@@ -391,6 +349,7 @@ function ScannerScreen() {
       setShowDiacritics(false);
       setScannedTexts([]);
       setLastTrackId(null);
+      setLastGeminiVocab(null);
     } catch (e: any) {
       __DEV__ && console.log("SAVE ERROR:", e);
       Alert.alert(t("scanner.error"), e?.message ?? t("scanner.saveError"));
