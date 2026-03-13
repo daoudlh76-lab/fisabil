@@ -1,6 +1,5 @@
-import { useVoicePreference, getVoiceOptionsForGender } from '@/contexts/voice-preference-context';
 import * as Speech from 'expo-speech';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 export interface DictationEntry {
   id: string;
@@ -28,20 +27,11 @@ export const useDictation = () => {
   const [playbackSpeed, setPlaybackSpeed] = useState(0.75);
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
 
-  // Préférence de voix (homme/femme)
-  const { gender } = useVoicePreference();
-
   // Références pour gérer la lecture segmentée
   const segmentsRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
   const isPlayingRef = useRef(false);
   const speedRef = useRef(0.75);
-  const genderRef = useRef(gender);
-
-  // Mettre à jour la ref quand le genre change
-  useEffect(() => {
-    genderRef.current = gender;
-  }, [gender]);
 
   // Découper le texte en segments respectant la ponctuation
   const splitIntoSegments = useCallback((text: string): string[] => {
@@ -115,12 +105,9 @@ export const useDictation = () => {
       __DEV__ && console.log('▶️ Lecture démarrée');
     }
 
-    // Utiliser les mêmes options de voix que le tuteur
-    const voiceOptions = getVoiceOptionsForGender(genderRef.current);
-
     Speech.speak(segment, {
       language: 'ar',
-      pitch: voiceOptions.pitch,
+      pitch: 1.0,
       rate: speedRef.current * 0.85, // Ajuster le rate avec la vitesse sélectionnée
       onDone: () => {
         if (isPlayingRef.current) {

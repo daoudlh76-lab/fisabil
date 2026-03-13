@@ -3,9 +3,12 @@ import AnimatedLogoButton from "@/components/AnimatedLogoButton";
 import { useChatTutor } from "@/hooks/use-chat-tutor";
 import { useLanguage } from "@/hooks/use-language";
 import { supabase } from "@/src/lib/supabase";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import { useSubscription } from "@/contexts/subscription-context";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+    Alert,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -25,6 +28,7 @@ type Folder = {
 
 export default function TutorPage() {
   const { language, t } = useLanguage();
+  const { isPremium, isLoaded } = useSubscription();
   const [selectedTextId, setSelectedTextId] = useState<string | undefined>(undefined);
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -85,9 +89,10 @@ export default function TutorPage() {
       loadFolders();
 
       return () => {
-        interrupt();
+        // Full disconnect when leaving the tutor page (stops TTS, speech recognition, and all async flows)
+        disconnect();
       };
-    }, [loadUserTexts, loadFolders, interrupt])
+    }, [loadUserTexts, loadFolders, disconnect])
   );
 
   // Filtrer les textes par recherche et dossier
@@ -143,7 +148,20 @@ export default function TutorPage() {
     }
   };
 
+  const router = useRouter();
+
   const handleConnect = async () => {
+    if (isLoaded && !isPremium) {
+      Alert.alert(
+        t('realtimeTutor.premiumRequired'),
+        t('realtimeTutor.premiumRequiredMessage'),
+        [
+          { text: t('settings.cancel'), style: 'cancel' },
+          { text: t('settings.upgradeToPremium'), onPress: () => router.push('/(tabs)/subscription') },
+        ]
+      );
+      return;
+    }
     if (isConnected) {
       disconnect();
     } else {
@@ -158,6 +176,16 @@ export default function TutorPage() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
+      {/* Bandeau abonnement requis */}
+      {isLoaded && !isPremium && (
+        <View style={styles.trialExpiredBanner}>
+          <Text style={styles.trialExpiredText}>{t('realtimeTutor.premiumRequired')}</Text>
+          <Pressable style={styles.upgradeBtn} onPress={() => router.push('/(tabs)/subscription')}>
+            <Text style={styles.upgradeBtnText}>{t('settings.upgradeToPremium')}</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Barre d'info avec contrôles */}
       <View style={styles.infoBar}>
         <Text style={styles.infoText}>
@@ -565,6 +593,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
+  trialExpiredBanner: {
+    backgroundColor: "#FFEBEE",
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#D32F2F",
+    alignItems: "center",
+  },
+  trialExpiredText: { fontSize: 14, fontWeight: "700", color: "#D32F2F", textAlign: "center" },
+  upgradeBtn: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: "#2E7D32", borderRadius: 6 },
+  upgradeBtnText: { fontSize: 13, fontWeight: "600", color: "white" },
   infoBar: {
     flexDirection: "row",
     justifyContent: "space-between",

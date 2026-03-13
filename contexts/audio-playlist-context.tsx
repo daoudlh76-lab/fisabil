@@ -1,4 +1,4 @@
-import { useVoicePreference, getVoiceOptionsForGender } from '@/contexts/voice-preference-context';
+import { useVoicePreference } from '@/contexts/voice-preference-context';
 import { supabase } from "@/src/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
@@ -499,9 +499,6 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
               });
             }, 1000);
 
-            // Utiliser expo-speech LOCAL
-            const voiceOptions = getVoiceOptionsForGender(gender);
-
             // Découper le texte en segments pour éviter la troncature
             // iOS AVSpeechSynthesizer peut s'arrêter aux sauts de paragraphe
             const chunks = track.text
@@ -544,7 +541,7 @@ export function AudioPlaylistProvider({ children }: { children: ReactNode }) {
 
               Speech.speak(chunk, {
                 language: 'ar',
-                pitch: voiceOptions.pitch,
+                pitch: 1.0,
                 rate: 0.9 * 0.85,
                 onDone: () => {
                   chunkIndex++;

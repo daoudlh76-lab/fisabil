@@ -4,7 +4,8 @@
  * Wraps useRevenueCat hook and exposes a backward-compatible API
  * so existing screens (settings, scanner, tutor, etc.) keep working.
  *
- * Source of truth: RevenueCat SDK → synced to Supabase.
+ * Source of truth: RevenueCat SDK (entitlement "Premium").
+ * Two states: Premium (has entitlement) or Free (no entitlement).
  */
 
 import React, { createContext, useCallback, useContext } from 'react';
@@ -42,12 +43,12 @@ const PLANS: PlanInfo[] = [
     price: 0,
     currency: '€',
     period: null,
-    features: ['tutor', 'dictation', 'vocab', 'scanner'],
+    features: ['vocab'],
   },
   {
     key: 'premium_monthly',
     labelKey: 'subscription.monthlyPlan',
-    price: 9.99,
+    price: 11.99,
     currency: '€',
     period: 'month',
     features: ['tutor', 'dictation', 'vocab', 'scanner', 'unlimited_messages'],
@@ -55,7 +56,7 @@ const PLANS: PlanInfo[] = [
   {
     key: 'premium_annual',
     labelKey: 'subscription.annualPlan',
-    price: 99.99,
+    price: 119.99,
     currency: '€',
     period: 'year',
     features: ['tutor', 'dictation', 'vocab', 'scanner', 'unlimited_messages'],
@@ -75,6 +76,10 @@ interface SubscriptionContextValue {
   getPlans: () => PlanInfo[];
   /** Get current plan info */
   getCurrentPlanInfo: () => PlanInfo | undefined;
+  /** Whether user is free (not premium) — replaces old isTrialExpired */
+  isFreeUser: boolean;
+  /** Whether the user is eligible for a store free trial (intro offer) */
+  isTrialEligible: boolean;
   /** Whether RevenueCat is ready */
   isLoaded: boolean;
 
@@ -118,9 +123,12 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     plan: rc.status.plan,
     startDate: rc.status.originalPurchaseDate ?? new Date(),
     expiryDate: rc.status.expiresDate,
-    isActive: rc.status.isPremium || rc.status.plan === 'free',
+    isActive: rc.status.isPremium,
     daysRemaining: computeDaysRemaining(rc.status.expiresDate),
   };
+
+  // Free user = RC ready + not premium
+  const isFreeUser = rc.isReady && !rc.status.isPremium;
 
   const getPlans = useCallback(() => PLANS, []);
 
@@ -135,6 +143,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     getFeatures: rc.getFeatures,
     getPlans,
     getCurrentPlanInfo,
+    isFreeUser,
+    isTrialEligible: rc.isTrialEligible,
     isLoaded: rc.isReady,
 
     // RevenueCat-specific

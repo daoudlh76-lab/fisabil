@@ -77,7 +77,7 @@ export const translations = {
       cancel: "Annuler",
       upgradeTitle: "Passer à Premium",
       upgradeDescription: "Accédez à toutes les fonctionnalités sans limites!",
-      pay: "Payer 9,99€/mois",
+      pay: "Payer 11,99€/mois",
       thankYou: "Merci!",
       welcomePremium: "Bienvenue dans la version Premium!",
       // Reset
@@ -153,6 +153,8 @@ export const translations = {
       accountDeletedMessage: "Votre compte et toutes vos données ont été supprimés définitivement.",
       deletionInProgress: "Suppression en cours...",
       deletionError: "Erreur lors de la suppression",
+      locked: "Verrouillé",
+      freeDescription: "Abonnez-vous pour débloquer toutes les fonctionnalités",
     },
     // Statistics
     statistics: {
@@ -217,9 +219,16 @@ export const translations = {
       changePlan: "Changer de plan",
       unlockAll: "🔓 Tout débloquer",
       productsUnavailable: "Les produits ne sont pas disponibles. Veuillez réessayer plus tard.",
-      legalAutoRenew: "Le paiement sera débité de votre compte iTunes/Google Play lors de la confirmation d'achat. L'abonnement se renouvelle automatiquement sauf si le renouvellement automatique est désactivé au moins 24 heures avant la fin de la période en cours.",
+      legalAutoRenew: "Le paiement sera débité de votre compte lors de la confirmation d'achat. L'abonnement se renouvelle automatiquement sauf si le renouvellement automatique est désactivé au moins 24 heures avant la fin de la période en cours.",
       termsOfUse: "Conditions d'utilisation",
       privacyPolicy: "Politique de confidentialité",
+      trialTitle: "7 jours d'essai gratuit",
+      trialSubtitle: "Testez toutes les fonctionnalités premium sans engagement",
+      trialHint: "7 jours gratuits, puis facturation automatique",
+      startTrial: "Essai gratuit 7 jours",
+      trialTitleDynamic: "{{days}} jours d'essai gratuit",
+      startTrialDynamic: "Essai gratuit {{days}} jours",
+      trialHintDynamic: "{{days}} jours gratuits, puis {{price}}",
     },
 
     // Common
@@ -263,8 +272,9 @@ export const translations = {
       reanalyzeDone: "✅ Les voyelles ont été ajoutées!",
       save: "✅ Valider & Sauvegarder",
       permissionDenied: "Permission refusée",
-      cameraPermission: "Autorise l'accès à la caméra.",
-      galleryPermission: "Autorise l'accès à la galerie.",
+      cameraPermission: "Autorise l'accès à la caméra dans Réglages → Fisabil → Appareil photo.",
+      galleryPermission: "Autorise l'accès à la galerie dans Réglages → Fisabil → Photos.",
+      openSettings: "Ouvrir Réglages",
       missingImage: "Image manquante",
       chooseImage: "Choisis une photo ou prends une photo.",
       missingTitle: "Titre manquant",
@@ -301,7 +311,12 @@ export const translations = {
       noScansLeft: "Limite quotidienne atteinte ({{limit}}/jour)",
       limitReached: "Limite quotidienne atteinte",
       limitReachedMessage: "Vous avez atteint la limite de {{limit}} scan(s) par jour. Passez à Premium pour un accès illimité!",
+      trialExpired: "Essai terminé",
+      trialExpiredMessage: "Votre essai gratuit est terminé. Abonnez-vous pour continuer à scanner des textes.",
+      trialExpiredBanner: "Essai terminé — Abonnez-vous pour scanner des textes",
       imageTooLarge: "L'image est trop volumineuse. Veuillez prendre une photo avec une résolution plus basse ou recadrer l'image.",
+      premiumRequired: "Abonnement requis",
+      premiumRequiredMessage: "Abonnez-vous pour scanner des textes arabes.",
     },
 
     // Révision
@@ -371,6 +386,11 @@ export const translations = {
       noVocab: "Aucun vocabulaire disponible",
       extractVocabFirst: "Extrayez d'abord le vocabulaire de vos textes scannés",
       cards: "cartes",
+      trialExpired: "Essai terminé",
+      trialExpiredMessage: "Votre essai gratuit est terminé. Abonnez-vous pour générer des dictées.",
+      trialExpiredBanner: "Essai terminé — Abonnez-vous pour les dictées",
+      premiumRequired: "Abonnement requis",
+      premiumRequiredMessage: "Abonnez-vous pour générer des dictées.",
     },
 
     // Playlist
@@ -458,10 +478,10 @@ export const translations = {
       addWord: "Ajouter",
       addVerb: "Ajouter",
       addParticle: "Ajouter",
-      enterArabicWord: "Entrez un mot arabe...",
-      enterArabicVerb: "Entrez un verbe arabe...",
-      enterArabicParticle: "Entrez une particule arabe...",
-      autoComplete: "Compléter auto",
+      enterArabicWord: "Mot en arabe ou en français...",
+      enterArabicVerb: "Verbe en arabe ou en français...",
+      enterArabicParticle: "Particule en arabe ou en français...",
+      autoComplete: "Analyser",
       wordAdded: "Mot ajouté avec succès !",
       completionError: "Impossible de compléter automatiquement.",
       duplicateWord: "Ce mot existe déjà dans la liste.",
@@ -512,6 +532,11 @@ export const translations = {
       selectText: "Choisir un texte :",
       allTexts: "Tous mes textes",
       texts: "textes",
+      trialExpired: "Essai terminé",
+      trialExpiredMessage: "Votre essai gratuit est terminé. Abonnez-vous pour utiliser le tuteur IA.",
+      trialExpiredBanner: "Essai terminé — Abonnez-vous pour utiliser le tuteur",
+      premiumRequired: "Abonnement requis",
+      premiumRequiredMessage: "Abonnez-vous pour utiliser le tuteur IA.",
     },
 
     // Bibliothèque
@@ -702,7 +727,7 @@ export const translations = {
       cancel: "Cancel",
       upgradeTitle: "Upgrade to Premium",
       upgradeDescription: "Access all features without limits!",
-      pay: "Pay €9.99/month",
+      pay: "Pay €11.99/month",
       thankYou: "Thank you!",
       welcomePremium: "Welcome to the Premium version!",
       // Reset
@@ -778,6 +803,8 @@ export const translations = {
       accountDeletedMessage: "Your account and all your data have been permanently deleted.",
       deletionInProgress: "Deletion in progress...",
       deletionError: "Deletion error",
+      locked: "Locked",
+      freeDescription: "Subscribe to unlock all features",
     },
     // Statistics
     statistics: {
@@ -842,9 +869,16 @@ export const translations = {
       changePlan: "Change Plan",
       unlockAll: "🔓 Unlock Everything",
       productsUnavailable: "Products are not available. Please try again later.",
-      legalAutoRenew: "Payment will be charged to your iTunes/Google Play account at confirmation of purchase. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.",
+      legalAutoRenew: "Payment will be charged to your account at confirmation of purchase. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.",
       termsOfUse: "Terms of Use",
       privacyPolicy: "Privacy Policy",
+      trialTitle: "7-day free trial",
+      trialSubtitle: "Try all premium features with no commitment",
+      trialHint: "7 days free, then auto-billed",
+      startTrial: "Start 7-day free trial",
+      trialTitleDynamic: "{{days}}-day free trial",
+      startTrialDynamic: "Start {{days}}-day free trial",
+      trialHintDynamic: "{{days}} days free, then {{price}}",
     },
 
     // Common
@@ -888,8 +922,9 @@ export const translations = {
       reanalyzeDone: "✅ Diacritics added!",
       save: "✅ Validate & Save",
       permissionDenied: "Permission denied",
-      cameraPermission: "Allow camera access.",
-      galleryPermission: "Allow gallery access.",
+      cameraPermission: "Allow camera access in Settings → Fisabil → Camera.",
+      galleryPermission: "Allow gallery access in Settings → Fisabil → Photos.",
+      openSettings: "Open Settings",
       missingImage: "Missing image",
       chooseImage: "Choose a photo or take a photo.",
       missingTitle: "Missing title",
@@ -925,6 +960,8 @@ export const translations = {
       remove: "Remove",
       mergePagesButton: "Merge pages",
       addThisPage: "Add this page",
+      premiumRequired: "Subscription required",
+      premiumRequiredMessage: "Subscribe to scan Arabic texts.",
     },
 
     // Revision
@@ -994,6 +1031,11 @@ export const translations = {
       noVocab: "No vocabulary available",
       extractVocabFirst: "First extract vocabulary from your scanned texts",
       cards: "cards",
+      trialExpired: "Trial expired",
+      trialExpiredMessage: "Your free trial has ended. Subscribe to generate dictations.",
+      trialExpiredBanner: "Trial ended — Subscribe for dictations",
+      premiumRequired: "Subscription required",
+      premiumRequiredMessage: "Subscribe to generate dictations.",
     },
 
     // Playlist
@@ -1080,9 +1122,9 @@ export const translations = {
       addWord: "Add",
       addVerb: "Add",
       addParticle: "Add",
-      enterArabicWord: "Enter an Arabic word...",
-      enterArabicVerb: "Enter an Arabic verb...",
-      enterArabicParticle: "Enter an Arabic particle...",
+      enterArabicWord: "Word in Arabic or English...",
+      enterArabicVerb: "Verb in Arabic or English...",
+      enterArabicParticle: "Particle in Arabic or English...",
       autoComplete: "Auto complete",
       wordAdded: "Word added successfully!",
       completionError: "Unable to auto-complete.",
@@ -1133,6 +1175,11 @@ export const translations = {
       selectText: "Choose a text:",
       allTexts: "All my texts",
       texts: "texts",
+      trialExpired: "Trial expired",
+      trialExpiredMessage: "Your free trial has ended. Subscribe to use the AI tutor.",
+      trialExpiredBanner: "Trial ended — Subscribe to use the tutor",
+      premiumRequired: "Subscription required",
+      premiumRequiredMessage: "Subscribe to use the AI tutor.",
     },
 
     // Library
@@ -1323,7 +1370,7 @@ export const translations = {
       cancel: "Abbrechen",
       upgradeTitle: "Auf Premium upgraden",
       upgradeDescription: "Zugang zu allen Funktionen ohne Limits!",
-      pay: "9,99€/Monat bezahlen",
+      pay: "11,99€/Monat bezahlen",
       thankYou: "Danke!",
       welcomePremium: "Willkommen in der Premium-Version!",
       // Reset
@@ -1355,6 +1402,8 @@ export const translations = {
       change: "Ändern",
       textExtracted: "Text extrahiert!",
       statistics: "Statistiken",
+      locked: "Gesperrt",
+      freeDescription: "Abonnieren Sie, um alle Funktionen freizuschalten",
     },
     // Statistics
     statistics: {
@@ -1418,9 +1467,16 @@ export const translations = {
       changePlan: "Plan ändern",
       unlockAll: "🔓 Alles freischalten",
       productsUnavailable: "Produkte sind nicht verfügbar. Bitte versuchen Sie es später erneut.",
-      legalAutoRenew: "Die Zahlung wird bei Bestätigung des Kaufs Ihrem iTunes/Google Play-Konto belastet. Das Abonnement verlängert sich automatisch, es sei denn, die automatische Verlängerung wird mindestens 24 Stunden vor Ende des aktuellen Zeitraums deaktiviert.",
+      legalAutoRenew: "Die Zahlung wird bei Bestätigung des Kaufs Ihrem Konto belastet. Das Abonnement verlängert sich automatisch, es sei denn, die automatische Verlängerung wird mindestens 24 Stunden vor Ende des aktuellen Zeitraums deaktiviert.",
       termsOfUse: "Nutzungsbedingungen",
       privacyPolicy: "Datenschutzerklärung",
+      trialTitle: "7 Tage kostenlos testen",
+      trialSubtitle: "Alle Premium-Funktionen unverbindlich ausprobieren",
+      trialHint: "7 Tage kostenlos, dann automatische Abrechnung",
+      startTrial: "7 Tage gratis testen",
+      trialTitleDynamic: "{{days}} Tage kostenlos testen",
+      startTrialDynamic: "{{days}} Tage gratis testen",
+      trialHintDynamic: "{{days}} Tage kostenlos, dann {{price}}",
     },
 
     // Common
@@ -1464,8 +1520,9 @@ export const translations = {
       reanalyzeDone: "✅ Diakritische Zeichen hinzugefügt!",
       save: "✅ Validieren & Speichern",
       permissionDenied: "Berechtigung verweigert",
-      cameraPermission: "Kamerazugriff erlauben.",
-      galleryPermission: "Zugriff auf die Galerie erlauben.",
+      cameraPermission: "Kamerazugriff in Einstellungen → Fisabil → Kamera erlauben.",
+      galleryPermission: "Zugriff auf die Galerie in Einstellungen → Fisabil → Fotos erlauben.",
+      openSettings: "Einstellungen öffnen",
       missingImage: "Bild fehlt",
       chooseImage: "Wählen Sie ein Foto oder nehmen Sie ein Foto auf.",
       missingTitle: "Titel fehlt",
@@ -1503,6 +1560,8 @@ export const translations = {
       mergePages: "Seiten zusammenführen",
       mergePagesButton: "Seiten zusammenführen",
       addThisPage: "Diese Seite hinzufügen",
+      premiumRequired: "Abonnement erforderlich",
+      premiumRequiredMessage: "Abonnieren Sie, um arabische Texte zu scannen.",
     },
 
     // Revision
@@ -1572,6 +1631,11 @@ export const translations = {
       noVocab: "Kein Vokabular verfügbar",
       extractVocabFirst: "Extrahieren Sie zuerst das Vokabular aus Ihren gescannten Texten",
       cards: "Karten",
+      trialExpired: "Testphase abgelaufen",
+      trialExpiredMessage: "Ihre kostenlose Testphase ist beendet. Abonnieren Sie, um Diktate zu erstellen.",
+      trialExpiredBanner: "Testphase abgelaufen — Abonnieren Sie für Diktate",
+      premiumRequired: "Abonnement erforderlich",
+      premiumRequiredMessage: "Abonnieren Sie, um Diktate zu erstellen.",
     },
 
     // Playlist
@@ -1638,6 +1702,11 @@ export const translations = {
       disconnect: "Trennen",
       connect: "Verbinden",
       noTextsWarning: "Scannen Sie zuerst einige Texte für eine bessere Erfahrung!",
+      trialExpired: "Testphase abgelaufen",
+      trialExpiredMessage: "Ihre kostenlose Testphase ist beendet. Abonnieren Sie, um den KI-Tutor zu nutzen.",
+      trialExpiredBanner: "Testphase abgelaufen — Abonnieren Sie, um den Tutor zu nutzen",
+      premiumRequired: "Abonnement erforderlich",
+      premiumRequiredMessage: "Abonnieren Sie, um den KI-Tutor zu nutzen.",
     },
 
     // Library
@@ -1736,9 +1805,9 @@ export const translations = {
       addWord: "Hinzufügen",
       addVerb: "Hinzufügen",
       addParticle: "Hinzufügen",
-      enterArabicWord: "Arabisches Wort eingeben...",
-      enterArabicVerb: "Arabisches Verb eingeben...",
-      enterArabicParticle: "Arabische Partikel eingeben...",
+      enterArabicWord: "Wort auf Arabisch oder Deutsch...",
+      enterArabicVerb: "Verb auf Arabisch oder Deutsch...",
+      enterArabicParticle: "Partikel auf Arabisch oder Deutsch...",
       autoComplete: "Auto-Vervollständigung",
       wordAdded: "Wort erfolgreich hinzugefügt!",
       completionError: "Auto-Vervollständigung nicht möglich.",
@@ -1843,7 +1912,7 @@ export const translations = {
       cancel: "Cancelar",
       upgradeTitle: "Actualizar a Premium",
       upgradeDescription: "¡Accede a todas las funciones sin límites!",
-      pay: "Pagar 9,99€/mes",
+      pay: "Pagar 11,99€/mes",
       thankYou: "¡Gracias!",
       welcomePremium: "¡Bienvenido a la versión Premium!",
       // Reset
@@ -1875,6 +1944,8 @@ export const translations = {
       change: "Cambiar",
       textExtracted: "¡Texto extraído!",
       statistics: "Estadísticas",
+      locked: "Bloqueado",
+      freeDescription: "Suscríbase para desbloquear todas las funciones",
     },
     // Statistics
     statistics: {
@@ -1938,9 +2009,16 @@ export const translations = {
       changePlan: "Cambiar plan",
       unlockAll: "🔓 Desbloquear todo",
       productsUnavailable: "Los productos no están disponibles. Inténtalo más tarde.",
-      legalAutoRenew: "El pago se cargará a su cuenta de iTunes/Google Play en la confirmación de la compra. La suscripción se renueva automáticamente a menos que se desactive la renovación automática al menos 24 horas antes del final del período actual.",
+      legalAutoRenew: "El pago se cargará a su cuenta en la confirmación de la compra. La suscripción se renueva automáticamente a menos que se desactive la renovación automática al menos 24 horas antes del final del período actual.",
       termsOfUse: "Términos de uso",
       privacyPolicy: "Política de privacidad",
+      trialTitle: "7 días de prueba gratis",
+      trialSubtitle: "Prueba todas las funciones premium sin compromiso",
+      trialHint: "7 días gratis, luego facturación automática",
+      startTrial: "Prueba gratis 7 días",
+      trialTitleDynamic: "{{days}} días de prueba gratis",
+      startTrialDynamic: "Prueba gratis {{days}} días",
+      trialHintDynamic: "{{days}} días gratis, luego {{price}}",
     },
 
     // Common
@@ -1984,8 +2062,9 @@ export const translations = {
       reanalyzeDone: "✅ ¡Diacríticos añadidos!",
       save: "✅ Validar y guardar",
       permissionDenied: "Permiso denegado",
-      cameraPermission: "Permitir acceso a la cámara.",
-      galleryPermission: "Permitir acceso a la galería.",
+      cameraPermission: "Permitir acceso a la cámara en Ajustes → Fisabil → Cámara.",
+      galleryPermission: "Permitir acceso a la galería en Ajustes → Fisabil → Fotos.",
+      openSettings: "Abrir Ajustes",
       missingImage: "Imagen faltante",
       chooseImage: "Elige una foto o toma una foto.",
       missingTitle: "Título faltante",
@@ -2023,6 +2102,8 @@ export const translations = {
       mergePages: "Fusionar páginas",
       mergePagesButton: "Fusionar páginas",
       addThisPage: "Añadir esta página",
+      premiumRequired: "Suscripción requerida",
+      premiumRequiredMessage: "Suscríbase para escanear textos árabes.",
     },
 
     // Revision
@@ -2092,6 +2173,11 @@ export const translations = {
       noVocab: "No hay vocabulario disponible",
       extractVocabFirst: "Primero extrae el vocabulario de tus textos escaneados",
       cards: "tarjetas",
+      trialExpired: "Prueba finalizada",
+      trialExpiredMessage: "Tu prueba gratuita ha terminado. Suscríbete para generar dictados.",
+      trialExpiredBanner: "Prueba finalizada — Suscríbete para los dictados",
+      premiumRequired: "Suscripción requerida",
+      premiumRequiredMessage: "Suscríbase para generar dictados.",
     },
 
     // Playlist
@@ -2158,6 +2244,11 @@ export const translations = {
       disconnect: "Desconectar",
       connect: "Conectar",
       noTextsWarning: "¡Escanea primero algunos textos para una mejor experiencia!",
+      trialExpired: "Prueba finalizada",
+      trialExpiredMessage: "Tu prueba gratuita ha terminado. Suscríbete para usar el tutor IA.",
+      trialExpiredBanner: "Prueba finalizada — Suscríbete para usar el tutor",
+      premiumRequired: "Suscripción requerida",
+      premiumRequiredMessage: "Suscríbase para usar el tutor de IA.",
     },
 
     // Library
@@ -2256,9 +2347,9 @@ export const translations = {
       addWord: "Añadir",
       addVerb: "Añadir",
       addParticle: "Añadir",
-      enterArabicWord: "Introduce una palabra árabe...",
-      enterArabicVerb: "Introduce un verbo árabe...",
-      enterArabicParticle: "Introduce una partícula árabe...",
+      enterArabicWord: "Palabra en árabe o español...",
+      enterArabicVerb: "Verbo en árabe o español...",
+      enterArabicParticle: "Partícula en árabe o español...",
       autoComplete: "Auto completar",
       wordAdded: "¡Palabra añadida con éxito!",
       completionError: "No se puede auto-completar.",
@@ -2363,7 +2454,7 @@ export const translations = {
       cancel: "Отмена",
       upgradeTitle: "Перейти на Премиум",
       upgradeDescription: "Получите доступ ко всем функциям без ограничений!",
-      pay: "Оплатить 9,99€/месяц",
+      pay: "Оплатить 11,99€/месяц",
       thankYou: "Спасибо!",
       welcomePremium: "Добро пожаловать в Премиум версию!",
       // Reset
@@ -2395,6 +2486,8 @@ export const translations = {
       change: "Изменить",
       textExtracted: "Текст извлечен!",
       statistics: "Статистика",
+      locked: "Заблокировано",
+      freeDescription: "Подпишитесь, чтобы разблокировать все функции",
     },
     // Statistics
     statistics: {
@@ -2458,9 +2551,16 @@ export const translations = {
       changePlan: "Изменить план",
       unlockAll: "🔓 Разблокировать всё",
       productsUnavailable: "Продукты недоступны. Пожалуйста, попробуйте позже.",
-      legalAutoRenew: "Оплата будет списана с вашего аккаунта iTunes/Google Play при подтверждении покупки. Подписка автоматически продлевается, если автопродление не отключено не менее чем за 24 часа до окончания текущего периода.",
+      legalAutoRenew: "Оплата будет списана с вашего аккаунта при подтверждении покупки. Подписка автоматически продлевается, если автопродление не отключено не менее чем за 24 часа до окончания текущего периода.",
       termsOfUse: "Условия использования",
       privacyPolicy: "Политика конфиденциальности",
+      trialTitle: "7 дней бесплатно",
+      trialSubtitle: "Попробуйте все премиум-функции без обязательств",
+      trialHint: "7 дней бесплатно, затем автоматическая оплата",
+      startTrial: "Начать бесплатный период",
+      trialTitleDynamic: "{{days}} дней бесплатно",
+      startTrialDynamic: "Начать {{days}}-дневный период",
+      trialHintDynamic: "{{days}} дней бесплатно, затем {{price}}",
     },
 
     // Common
@@ -2504,8 +2604,9 @@ export const translations = {
       reanalyzeDone: "✅ Диакритические знаки добавлены!",
       save: "✅ Сохранить",
       permissionDenied: "Доступ запрещен",
-      cameraPermission: "Разрешите доступ к камере.",
-      galleryPermission: "Разрешите доступ к галерее.",
+      cameraPermission: "Разрешите доступ к камере в Настройки → Fisabil → Камера.",
+      galleryPermission: "Разрешите доступ к галерее в Настройки → Fisabil → Фото.",
+      openSettings: "Открыть Настройки",
       missingImage: "Изображение отсутствует",
       chooseImage: "Выберите фото или сделайте фото.",
       missingTitle: "Название отсутствует",
@@ -2543,6 +2644,8 @@ export const translations = {
       mergePages: "Объединить страницы",
       mergePagesButton: "Объединить страницы",
       addThisPage: "Добавить эту страницу",
+      premiumRequired: "Требуется подписка",
+      premiumRequiredMessage: "Подпишитесь, чтобы сканировать арабские тексты.",
     },
 
     // Revision
@@ -2612,6 +2715,11 @@ export const translations = {
       noVocab: "Словарь недоступен",
       extractVocabFirst: "Сначала извлеките словарь из отсканированных текстов",
       cards: "карточек",
+      trialExpired: "Пробный период закончился",
+      trialExpiredMessage: "Ваш бесплатный пробный период закончился. Подпишитесь, чтобы создавать диктанты.",
+      trialExpiredBanner: "Пробный период закончился — Подпишитесь для диктантов",
+      premiumRequired: "Требуется подписка",
+      premiumRequiredMessage: "Подпишитесь, чтобы создавать диктанты.",
     },
 
     // Playlist
@@ -2678,6 +2786,11 @@ export const translations = {
       disconnect: "Отключить",
       connect: "Подключить",
       noTextsWarning: "Сначала отсканируйте тексты для лучшего опыта!",
+      trialExpired: "Пробный период закончился",
+      trialExpiredMessage: "Ваш бесплатный пробный период закончился. Подпишитесь, чтобы использовать ИИ-репетитора.",
+      trialExpiredBanner: "Пробный период закончился — Подпишитесь, чтобы использовать репетитора",
+      premiumRequired: "Требуется подписка",
+      premiumRequiredMessage: "Подпишитесь, чтобы использовать ИИ-репетитора.",
     },
 
     // Library
@@ -2776,9 +2889,9 @@ export const translations = {
       addWord: "Добавить",
       addVerb: "Добавить",
       addParticle: "Добавить",
-      enterArabicWord: "Введите арабское слово...",
-      enterArabicVerb: "Введите арабский глагол...",
-      enterArabicParticle: "Введите арабскую частицу...",
+      enterArabicWord: "Слово на арабском или русском...",
+      enterArabicVerb: "Глагол на арабском или русском...",
+      enterArabicParticle: "Частица на арабском или русском...",
       autoComplete: "Автозаполнение",
       wordAdded: "Слово успешно добавлено!",
       completionError: "Невозможно выполнить автозаполнение.",
@@ -2883,7 +2996,7 @@ export const translations = {
       cancel: "Batal",
       upgradeTitle: "Naik taraf ke Premium",
       upgradeDescription: "Akses semua ciri tanpa had!",
-      pay: "Bayar €9.99/bulan",
+      pay: "Bayar €11.99/bulan",
       thankYou: "Terima kasih!",
       welcomePremium: "Selamat datang ke versi Premium!",
       // Reset
@@ -2915,6 +3028,8 @@ export const translations = {
       change: "Tukar",
       textExtracted: "Teks diekstrak!",
       statistics: "Statistik",
+      locked: "Dikunci",
+      freeDescription: "Langgan untuk membuka semua ciri",
     },
     // Statistics
     statistics: {
@@ -2978,9 +3093,16 @@ export const translations = {
       changePlan: "Tukar pelan",
       unlockAll: "🔓 Buka semua",
       productsUnavailable: "Produk tidak tersedia. Sila cuba lagi kemudian.",
-      legalAutoRenew: "Pembayaran akan dicaj ke akaun iTunes/Google Play anda semasa pengesahan pembelian. Langganan diperbaharui secara automatik melainkan pembaharuan automatik dimatikan sekurang-kurangnya 24 jam sebelum akhir tempoh semasa.",
+      legalAutoRenew: "Pembayaran akan dicaj ke akaun anda semasa pengesahan pembelian. Langganan diperbaharui secara automatik melainkan pembaharuan automatik dimatikan sekurang-kurangnya 24 jam sebelum akhir tempoh semasa.",
       termsOfUse: "Terma penggunaan",
       privacyPolicy: "Dasar privasi",
+      trialTitle: "7 hari percubaan percuma",
+      trialSubtitle: "Cuba semua ciri premium tanpa komitmen",
+      trialHint: "7 hari percuma, kemudian bil automatik",
+      startTrial: "Mula percubaan 7 hari",
+      trialTitleDynamic: "{{days}} hari percubaan percuma",
+      startTrialDynamic: "Mula percubaan {{days}} hari",
+      trialHintDynamic: "{{days}} hari percuma, kemudian {{price}}",
     },
 
     // Common
@@ -3024,8 +3146,9 @@ export const translations = {
       reanalyzeDone: "✅ Diakritik ditambah!",
       save: "✅ Sahkan & Simpan",
       permissionDenied: "Kebenaran ditolak",
-      cameraPermission: "Benarkan akses kamera.",
-      galleryPermission: "Benarkan akses galeri.",
+      cameraPermission: "Benarkan akses kamera dalam Tetapan → Fisabil → Kamera.",
+      galleryPermission: "Benarkan akses galeri dalam Tetapan → Fisabil → Foto.",
+      openSettings: "Buka Tetapan",
       missingImage: "Imej tiada",
       chooseImage: "Pilih foto atau ambil foto.",
       missingTitle: "Tajuk tiada",
@@ -3063,6 +3186,8 @@ export const translations = {
       mergePages: "Gabungkan halaman",
       mergePagesButton: "Gabungkan halaman",
       addThisPage: "Tambah halaman ini",
+      premiumRequired: "Langganan diperlukan",
+      premiumRequiredMessage: "Langgan untuk mengimbas teks Arab.",
     },
 
     // Revision
@@ -3132,6 +3257,11 @@ export const translations = {
       noVocab: "Tiada kosa kata tersedia",
       extractVocabFirst: "Ekstrak kosa kata daripada teks yang diimbas dahulu",
       cards: "kad",
+      trialExpired: "Percubaan tamat",
+      trialExpiredMessage: "Percubaan percuma anda telah tamat. Langgan untuk menjana imlak.",
+      trialExpiredBanner: "Percubaan tamat — Langgan untuk imlak",
+      premiumRequired: "Langganan diperlukan",
+      premiumRequiredMessage: "Langgan untuk menjana latihan imla.",
     },
 
     // Playlist
@@ -3218,9 +3348,9 @@ export const translations = {
       addWord: "Tambah",
       addVerb: "Tambah",
       addParticle: "Tambah",
-      enterArabicWord: "Masukkan perkataan Arab...",
-      enterArabicVerb: "Masukkan kata kerja Arab...",
-      enterArabicParticle: "Masukkan partikel Arab...",
+      enterArabicWord: "Perkataan dalam Arab atau Melayu...",
+      enterArabicVerb: "Kata kerja dalam Arab atau Melayu...",
+      enterArabicParticle: "Partikel dalam Arab atau Melayu...",
       autoComplete: "Lengkap auto",
       wordAdded: "Perkataan berjaya ditambah!",
       completionError: "Tidak dapat melengkapkan secara automatik.",
@@ -3270,6 +3400,11 @@ export const translations = {
       connect: "Sambung",
       noTextsWarning: "Imbas beberapa teks dahulu untuk pengalaman lebih baik!",
       startConversation: "Mulakan perbualan",
+      trialExpired: "Percubaan tamat",
+      trialExpiredMessage: "Percubaan percuma anda telah tamat. Langgan untuk menggunakan tutor AI.",
+      trialExpiredBanner: "Percubaan tamat — Langgan untuk menggunakan tutor",
+      premiumRequired: "Langganan diperlukan",
+      premiumRequiredMessage: "Langgan untuk menggunakan tutor AI.",
     },
 
     // Library
@@ -3405,7 +3540,7 @@ export const translations = {
       cancel: "إلغاء",
       upgradeTitle: "الترقية إلى المميز",
       upgradeDescription: "الوصول إلى جميع الميزات بدون حدود!",
-      pay: "ادفع 9.99€/شهر",
+      pay: "ادفع 11.99€/شهر",
       thankYou: "شكراً!",
       welcomePremium: "مرحباً بك في النسخة المميزة!",
       // Reset
@@ -3481,6 +3616,8 @@ export const translations = {
       accountDeletedMessage: "تم حذف حسابك وجميع بياناتك نهائياً.",
       deletionInProgress: "جارٍ الحذف...",
       deletionError: "خطأ في الحذف",
+      locked: "مقفل",
+      freeDescription: "اشترك لفتح جميع الميزات",
     },
     // Statistics
     statistics: {
@@ -3545,9 +3682,16 @@ export const translations = {
       changePlan: "تغيير الخطة",
       unlockAll: "🔓 فتح الكل",
       productsUnavailable: "المنتجات غير متوفرة. يرجى المحاولة لاحقاً.",
-      legalAutoRenew: "سيتم تحصيل الدفع من حساب iTunes/Google Play الخاص بك عند تأكيد الشراء. يتم تجديد الاشتراك تلقائياً ما لم يتم إيقاف التجديد التلقائي قبل 24 ساعة على الأقل من نهاية الفترة الحالية.",
+      legalAutoRenew: "سيتم تحصيل الدفع من حسابك عند تأكيد الشراء. يتم تجديد الاشتراك تلقائياً ما لم يتم إيقاف التجديد التلقائي قبل 24 ساعة على الأقل من نهاية الفترة الحالية.",
       termsOfUse: "شروط الاستخدام",
       privacyPolicy: "سياسة الخصوصية",
+      trialTitle: "٧ أيام تجربة مجانية",
+      trialSubtitle: "جرّب جميع الميزات المتقدمة بدون التزام",
+      trialHint: "٧ أيام مجاناً، ثم فوترة تلقائية",
+      startTrial: "ابدأ التجربة المجانية",
+      trialTitleDynamic: "{{days}} أيام تجربة مجانية",
+      startTrialDynamic: "ابدأ التجربة المجانية {{days}} أيام",
+      trialHintDynamic: "{{days}} أيام مجاناً، ثم {{price}}",
     },
 
     // Common
@@ -3591,8 +3735,9 @@ export const translations = {
       reanalyzeDone: "✅ تمت إضافة الحركات!",
       save: "✅ التحقق والحفظ",
       permissionDenied: "تم رفض الإذن",
-      cameraPermission: "يرجى السماح بالوصول إلى الكاميرا.",
-      galleryPermission: "يرجى السماح بالوصول إلى المعرض.",
+      cameraPermission: "يرجى السماح بالوصول إلى الكاميرا في الإعدادات → Fisabil → الكاميرا.",
+      galleryPermission: "يرجى السماح بالوصول إلى المعرض في الإعدادات → Fisabil → الصور.",
+      openSettings: "فتح الإعدادات",
       missingImage: "الصورة مفقودة",
       chooseImage: "اختر صورة أو التقط صورة.",
       missingTitle: "العنوان مفقود",
@@ -3630,6 +3775,8 @@ export const translations = {
       limitReached: "تم الوصول إلى الحد اليومي",
       limitReachedMessage: "لقد وصلت إلى حد {{limit}} مسح/مسوحات في اليوم. قم بالترقية إلى المميز للوصول غير المحدود!",
       imageTooLarge: "الصورة كبيرة جداً. يرجى التقاط صورة بدقة أقل أو قص الصورة.",
+      premiumRequired: "الاشتراك مطلوب",
+      premiumRequiredMessage: "اشترك لمسح النصوص العربية.",
     },
 
     // Révision
@@ -3699,6 +3846,11 @@ export const translations = {
       noVocab: "لا توجد مفردات متاحة",
       extractVocabFirst: "استخرج أولاً المفردات من نصوصك الممسوحة",
       cards: "بطاقات",
+      trialExpired: "انتهت الفترة التجريبية",
+      trialExpiredMessage: "انتهت فترتك التجريبية المجانية. اشترك لإنشاء الإملاءات.",
+      trialExpiredBanner: "انتهت الفترة التجريبية — اشترك للإملاءات",
+      premiumRequired: "الاشتراك مطلوب",
+      premiumRequiredMessage: "اشترك لإنشاء الإملاءات.",
     },
 
     // Playlist
@@ -3786,9 +3938,9 @@ export const translations = {
       addWord: "إضافة",
       addVerb: "إضافة",
       addParticle: "إضافة",
-      enterArabicWord: "أدخل كلمة عربية...",
-      enterArabicVerb: "أدخل فعلاً عربياً...",
-      enterArabicParticle: "أدخل حرفاً عربياً...",
+      enterArabicWord: "كلمة بالعربية أو بلغتك...",
+      enterArabicVerb: "فعل بالعربية أو بلغتك...",
+      enterArabicParticle: "حرف بالعربية أو بلغتك...",
       autoComplete: "إكمال تلقائي",
       wordAdded: "تمت إضافة الكلمة بنجاح!",
       completionError: "تعذر الإكمال التلقائي.",
@@ -3840,6 +3992,11 @@ export const translations = {
       selectText: "اختر نصاً:",
       allTexts: "كل نصوصي",
       texts: "نصوص",
+      trialExpired: "انتهت الفترة التجريبية",
+      trialExpiredMessage: "انتهت فترتك التجريبية المجانية. اشترك لاستخدام المعلم الذكي.",
+      trialExpiredBanner: "انتهت الفترة التجريبية — اشترك لاستخدام المعلم",
+      premiumRequired: "الاشتراك مطلوب",
+      premiumRequiredMessage: "اشترك لاستخدام المعلم الذكي.",
     },
 
     // Bibliothèque

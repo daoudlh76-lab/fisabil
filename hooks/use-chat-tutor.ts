@@ -181,6 +181,14 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
   // Écoute la fin de reconnaissance (déclenché automatiquement quand l'utilisateur arrête de parler)
   eventHook('end', () => {
     __DEV__ && console.log('🎤 Speech recognition ended');
+
+    // Bail out immediately if disconnected (avoid state updates and new operations)
+    if (!isConnectedRef.current) {
+      isListeningRef.current = false;
+      currentTranscriptRef.current = '';
+      return;
+    }
+
     const finalTranscript = currentTranscriptRef.current;
 
     if (finalTranscript && finalTranscript.trim()) {
@@ -188,9 +196,6 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
       setUserTranscript(finalTranscript);
       setIsListening(false);
       isListeningRef.current = false;
-
-      // Ne pas traiter si déconnecté
-      if (!isConnectedRef.current) return;
 
       setIsTranscribing(true);
 
@@ -409,6 +414,9 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       const assistantMessage = response.content || response.message || '';
       __DEV__ && console.log('[TUTOR] ✅ Conversation response:', assistantMessage.substring(0, 100) + '...');
 
+      // Bail out if disconnected during network call
+      if (!isConnectedRef.current) { setIsTranscribing(false); return; }
+
       if (!assistantMessage) {
         __DEV__ && console.error('[TUTOR] Empty response from Edge Function');
         setError('Erreur de communication avec le tuteur');
@@ -546,9 +554,10 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
     // Note: Prefetch not needed with local TTS (instant playback)
 
     await speakText(assistantMsgText);
+    if (!isConnectedRef.current) return;
 
     // Auto-start listening after asking
-    if (isConnectedRef.current && !isPausedRef.current) {
+    if (!isPausedRef.current) {
       __DEV__ && console.log('🎤 Auto-starting listening after question...');
       setTimeout(() => startListening(), 300);
     }
@@ -604,6 +613,9 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       await speakText(correction);
       setIsTranscribing(false);
       currentQuestionRef.current = null;
+
+      // Bail out if disconnected during TTS
+      if (!isConnectedRef.current) return;
 
       // ═══ AUTO-CHAIN: immediately ask the next question ═══
       const currentCount = questionCountRef.current;
@@ -664,18 +676,23 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       const questionsPromise = prepareQuestionsForText(text.id, text.title, text.content);
 
       await speakText(welcomeText);
+      if (!isConnectedRef.current) return;
 
       // Step 2: Summary — questions are preparing in parallel
       __DEV__ && console.log('[TUTOR] Getting summary (started in background)...');
       const summary = await summaryPromise;
+      if (!isConnectedRef.current) return;
+
       const summaryMsg: ChatMessage = { id: `assistant_summary_${Date.now()}`, role: 'assistant', text: summary, timestamp: Date.now() };
       setMessages(prev => [...prev, summaryMsg]);
 
       // Speak summary while questions finish preparing
       await speakText(summary);
+      if (!isConnectedRef.current) return;
 
       // Wait for questions to be ready (likely already done)
       const count = await questionsPromise;
+      if (!isConnectedRef.current) return;
       __DEV__ && console.log('[TUTOR] Questions ready:', count);
 
       // Step 3: Directly ask the first question (no transition message)
@@ -688,22 +705,29 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
   const disconnect = useCallback(() => {
     __DEV__ && console.log('🔌 Disconnecting...');
 
-    // Arrêter la reconnaissance vocale locale si active
-    if (ExpoSpeechRecognitionModule && isListeningRef.current) {
-      ExpoSpeechRecognitionModule.stop().catch((err: any) =>
-        __DEV__ && console.log('⚠️ Error stopping speech recognition:', err)
-      );
-    }
+    // Mark as disconnected FIRST so all async flows bail out
+    isConnectedRef.current = false;
+    setIsConnected(false);
 
     // Arrêter le TTS local
-    Speech.stop();
+    try { Speech.stop(); } catch (e) { __DEV__ && console.log('⚠️ Speech.stop error:', e); }
 
-    setIsConnected(false);
-    isConnectedRef.current = false;
+    // Arrêter la reconnaissance vocale locale si active
+    if (ExpoSpeechRecognitionModule) {
+      try {
+        ExpoSpeechRecognitionModule.stop().catch((err: any) =>
+          __DEV__ && console.log('⚠️ Error stopping speech recognition:', err)
+        );
+      } catch (e) { __DEV__ && console.log('⚠️ Speech recognition stop error:', e); }
+    }
+
+    // Reset all state
     setIsListening(false);
     setIsSpeaking(false);
     setIsTranscribing(false);
+    setIsPaused(false);
     isListeningRef.current = false;
+    isPausedRef.current = false;
     currentQuestionRef.current = null;
     currentTranscriptRef.current = '';
   }, []);

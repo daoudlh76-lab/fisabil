@@ -12,7 +12,7 @@
  *  5. Listen for real-time changes (renewal, cancellation, etc.)
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import type { PurchasesPackage, PurchasesOfferings } from 'react-native-purchases';
 import { supabase } from '@/src/lib/supabase';
@@ -41,7 +41,6 @@ export interface Feature {
   labelKey: string;
   freeAllowed: boolean;
   premiumAllowed: boolean;
-  freeLimit?: number;
 }
 
 export interface RevenueCatState {
@@ -66,10 +65,10 @@ export interface RevenueCatState {
 const CACHE_KEY = '@fisabil_rc_status';
 
 const FEATURES: Feature[] = [
-  { name: 'tutor', labelKey: 'settings.aiTutor', freeAllowed: true, premiumAllowed: true, freeLimit: 5 },
-  { name: 'dictation', labelKey: 'settings.dictations', freeAllowed: true, premiumAllowed: true, freeLimit: 2 },
+  { name: 'tutor', labelKey: 'settings.aiTutor', freeAllowed: false, premiumAllowed: true },
+  { name: 'dictation', labelKey: 'settings.dictations', freeAllowed: false, premiumAllowed: true },
   { name: 'vocab', labelKey: 'settings.vocabCards', freeAllowed: true, premiumAllowed: true },
-  { name: 'scanner', labelKey: 'settings.scannerFeature', freeAllowed: true, premiumAllowed: true, freeLimit: 1 },
+  { name: 'scanner', labelKey: 'settings.scannerFeature', freeAllowed: false, premiumAllowed: true },
   { name: 'unlimited_messages', labelKey: 'settings.unlimitedMessages', freeAllowed: false, premiumAllowed: true },
 ];
 
@@ -185,7 +184,7 @@ export function useRevenueCat() {
         const { error } = await supabase.from('subscriptions').upsert({
           user_id: userId,
           plan: 'free',
-          is_active: true,
+          is_active: false,
           store_provider: null,
           store_product_id: null,
           auto_renew: false,
@@ -207,9 +206,10 @@ export function useRevenueCat() {
 
     const init = async () => {
       try {
-        // 1. Load cached status first (instant display)
+        // 1. Load cached status first (instant display for FREE users only)
+        // Security: never trust cached isPremium before RC confirms
         const cached = await loadStatusFromCache();
-        if (cached) {
+        if (cached && !cached.isPremium) {
           setState(prev => ({ ...prev, status: cached }));
         }
 
@@ -217,10 +217,9 @@ export function useRevenueCat() {
         const configured = await initRevenueCat();
 
         if (!configured) {
-          if (__DEV__) console.warn('💰 [RC Hook] ⚠️ SDK not configured — running in free mode');
           setState(prev => ({
             ...prev,
-            status: cached ?? DEFAULT_STATUS,
+            status: DEFAULT_STATUS,
             isReady: true,
           }));
           return;
@@ -232,8 +231,8 @@ export function useRevenueCat() {
         if (userId) {
           try {
             await loginRevenueCat(userId);
-          } catch (e) {
-            if (__DEV__) console.warn('💰 [RC Hook] Login skipped:', e);
+          } catch (e: any) {
+            if (__DEV__) console.warn('💰 [RC Hook] Login error:', e?.message ?? e);
           }
         }
 
@@ -243,7 +242,7 @@ export function useRevenueCat() {
           (p: PurchasesPackage) => p.packageType === 'MONTHLY' || p.product.identifier.includes('monthly')
         ) ?? null;
         const annual = offerings?.current?.availablePackages.find(
-          (p: PurchasesPackage) => p.packageType === 'ANNUAL' || p.product.identifier.includes('annual')
+          (p: PurchasesPackage) => p.packageType === 'ANNUAL' || p.product.identifier.includes('annual') || p.product.identifier.includes('yearly')
         ) ?? null;
 
         // 5. Get current subscription status
@@ -392,6 +391,16 @@ export function useRevenueCat() {
   // ═══ Getters ═══
   const getFeaturesList = useCallback(() => FEATURES, []);
 
+  // ═══ Trial eligibility (store intro offer) ═══
+  const isTrialEligible = useMemo(() => {
+    const monthly = state.monthlyPackage;
+    const annual = state.annualPackage;
+    return !!(
+      (monthly?.product?.introPrice && monthly.product.introPrice.price === 0) ||
+      (annual?.product?.introPrice && annual.product.introPrice.price === 0)
+    );
+  }, [state.monthlyPackage, state.annualPackage]);
+
   return {
     // State
     status: state.status,
@@ -405,6 +414,7 @@ export function useRevenueCat() {
     // Derived
     isPremium: state.status.isPremium,
     plan: state.status.plan,
+    isTrialEligible,
 
     // Actions
     purchase,

@@ -5,6 +5,9 @@ import { useLanguage } from '@/hooks/use-language';
 import { supabase } from '@/src/lib/supabase';
 import { invokeEdge } from '@/src/lib/edge-ai';
 import { migrateExtractVocabResult, needsMigration } from '@/src/lib/migrate-vocab-data';
+import { getLocalVocab } from '@/src/lib/local-cache';
+import { useSubscription } from '@/contexts/subscription-context';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
@@ -90,6 +93,8 @@ type ScanChoice = { id: string; title: string; content: string; wordCount: numbe
 
 export default function RevisionScreen() {
   const { t, language } = useLanguage();
+  const { isPremium, isLoaded } = useSubscription();
+  const router = useRouter();
   const [tab, setTab] = useState<'dictation' | 'vocab'>('dictation');
   const [dictPhase, setDictPhase] = useState<'select' | 'dictation'>('select');
   const [currentDictIdx, setCurrentDictIdx] = useState(0);
@@ -152,7 +157,7 @@ export default function RevisionScreen() {
         .select('scan_id, word_ar, difficulty, last_reviewed, next_review, review_count')
         .eq('user_id', userId);
 
-      // Indexer la progression par clé (scan_id + word_ar)
+      // Indexer la progression par word_ar (contrainte unique = user_id + word_ar)
       const progressMap = new Map<string, {
         difficulty: VocabCard['difficulty'];
         lastReviewed: string | null;
@@ -161,7 +166,7 @@ export default function RevisionScreen() {
       }>();
       if (progressRows) {
         for (const row of progressRows) {
-          progressMap.set(`${row.scan_id}_${row.word_ar}`, {
+          progressMap.set(row.word_ar, {
             difficulty: row.difficulty as VocabCard['difficulty'],
             lastReviewed: row.last_reviewed,
             nextReview: row.next_review,
@@ -172,44 +177,45 @@ export default function RevisionScreen() {
       __DEV__ && console.log('📊 Progression chargée:', progressMap.size, 'entrées');
 
       for (const scan of scans) {
-        // Chercher le cache de vocabulaire pour ce scan - priorité à la langue UI actuelle
-        const cacheKeys = [
-          `ai_vocab_${scan.id}_${language}`, // Langue actuelle en premier
-          `ai_vocab_${scan.id}_fr`,
-          `ai_vocab_${scan.id}_en`,
-          `ai_vocab_${scan.id}_de`,
-          `ai_vocab_${scan.id}_es`,
-          `ai_vocab_${scan.id}_ru`,
-        ];
-
-        // Éliminer les doublons si la langue est déjà dans la liste
-        const uniqueKeys = [...new Set(cacheKeys)];
+        // Chercher le cache de vocabulaire — cache local prioritaire (contient les _deleted)
+        const langs = [...new Set([language, 'fr', 'en', 'de', 'es', 'ru'])];
 
         let vocabData = null;
 
-        for (const cacheKey of uniqueKeys) {
-          const { data: cached, error: cacheError } = await supabase
-            .from('ai_cache')
-            .select('payload')
-            .eq('key', cacheKey)
-            .maybeSingle();
-
-          if (cacheError) {
-            __DEV__ && console.error('❌ Erreur cache:', cacheKey, cacheError);
-            continue;
-          }
-
-          if (cached?.payload) {
-            // Migrer automatiquement si nécessaire
-            vocabData = needsMigration(cached.payload)
-              ? migrateExtractVocabResult(cached.payload)
-              : cached.payload;
-            __DEV__ && console.log('📦 Cache trouvé pour:', cacheKey, 'avec', {
-              vocab: vocabData.vocabulaire?.length || 0,
-              verbes: vocabData.verbes?.length || 0,
-              particules: vocabData.particules?.length || 0,
-            });
+        // 1. Essayer le cache local d'abord (contient les suppressions)
+        for (const lang of langs) {
+          const localData = await getLocalVocab(scan.id, lang);
+          if (localData) {
+            vocabData = needsMigration(localData)
+              ? migrateExtractVocabResult(localData)
+              : localData;
+            __DEV__ && console.log('📱 Cache local trouvé pour:', scan.id, lang);
             break;
+          }
+        }
+
+        // 2. Fallback sur Supabase si pas de cache local
+        if (!vocabData) {
+          for (const lang of langs) {
+            const cacheKey = `ai_vocab_${scan.id}_${lang}`;
+            const { data: cached, error: cacheError } = await supabase
+              .from('ai_cache')
+              .select('payload')
+              .eq('key', cacheKey)
+              .maybeSingle();
+
+            if (cacheError) {
+              __DEV__ && console.error('❌ Erreur cache:', cacheKey, cacheError);
+              continue;
+            }
+
+            if (cached?.payload) {
+              vocabData = needsMigration(cached.payload)
+                ? migrateExtractVocabResult(cached.payload)
+                : cached.payload;
+              __DEV__ && console.log('☁️ Cache Supabase trouvé pour:', cacheKey);
+              break;
+            }
           }
         }
 
@@ -218,11 +224,12 @@ export default function RevisionScreen() {
           continue;
         }
 
-        // Ajouter les mots de vocabulaire (singulier)
+        // Ajouter les mots de vocabulaire (singulier) — exclure les supprimés
         if (vocabData.vocabulaire && Array.isArray(vocabData.vocabulaire)) {
           for (const item of vocabData.vocabulaire) {
+            if ((item as any)._deleted) continue;
             if (item.singulier && item.traduction) {
-              const prog = progressMap.get(`${scan.id}_${item.singulier}`);
+              const prog = progressMap.get(item.singulier);
               allCards.push({
                 id: `vocab-${cardIndex++}`,
                 scanId: scan.id,
@@ -238,11 +245,12 @@ export default function RevisionScreen() {
           }
         }
 
-        // Ajouter les verbes (forme au passé)
+        // Ajouter les verbes (forme au passé) — exclure les supprimés
         if (vocabData.verbes && Array.isArray(vocabData.verbes)) {
           for (const item of vocabData.verbes) {
+            if ((item as any)._deleted) continue;
             if (item.passe_3ms && item.traduction) {
-              const prog = progressMap.get(`${scan.id}_${item.passe_3ms}`);
+              const prog = progressMap.get(item.passe_3ms);
               allCards.push({
                 id: `verb-${cardIndex++}`,
                 scanId: scan.id,
@@ -258,11 +266,12 @@ export default function RevisionScreen() {
           }
         }
 
-        // Ajouter les particules
+        // Ajouter les particules — exclure les supprimés
         if (vocabData.particules && Array.isArray(vocabData.particules)) {
           for (const item of vocabData.particules) {
+            if ((item as any)._deleted) continue;
             if (item.particule_ar && item.traduction) {
-              const prog = progressMap.get(`${scan.id}_${item.particule_ar}`);
+              const prog = progressMap.get(item.particule_ar);
               allCards.push({
                 id: `particle-${cardIndex++}`,
                 scanId: scan.id,
@@ -341,6 +350,17 @@ export default function RevisionScreen() {
 
   // --- Générer les dictées pour UN seul texte choisi
   const handlePickText = useCallback(async (scan: ScanChoice) => {
+    if (isLoaded && !isPremium) {
+      Alert.alert(
+        t('revision.premiumRequired'),
+        t('revision.premiumRequiredMessage'),
+        [
+          { text: t('settings.cancel'), style: 'cancel' },
+          { text: t('settings.upgradeToPremium'), onPress: () => router.push('/(tabs)/subscription') },
+        ]
+      );
+      return;
+    }
     setSelectedTextTitle(scan.title);
     setLoadingDictations(true);
     setDictPhase('dictation');
@@ -463,6 +483,15 @@ export default function RevisionScreen() {
       {/* Dictation Tab */}
       {tab === 'dictation' && (
         <View>
+          {/* Bandeau abonnement requis */}
+          {isLoaded && !isPremium && (
+            <View style={styles.trialExpiredBanner}>
+              <Text style={styles.trialExpiredText}>{t('revision.premiumRequired')}</Text>
+              <Pressable style={styles.upgradeBtn} onPress={() => router.push('/(tabs)/subscription')}>
+                <Text style={styles.upgradeBtnText}>{t('settings.upgradeToPremium')}</Text>
+              </Pressable>
+            </View>
+          )}
           {/* ── Phase 1 : Choisir le texte ── */}
           {dictPhase === 'select' && (
             <View style={styles.card}>
@@ -785,6 +814,18 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     backgroundColor: 'transparent',
   },
+  trialExpiredBanner: {
+    backgroundColor: '#FFEBEE',
+    padding: 14,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#D32F2F',
+    alignItems: 'center',
+  },
+  trialExpiredText: { fontSize: 14, fontWeight: '700', color: '#D32F2F', textAlign: 'center' },
+  upgradeBtn: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: GREEN, borderRadius: 6 },
+  upgradeBtnText: { fontSize: 13, fontWeight: '600', color: 'white' },
   header: {
     fontSize: 24,
     fontWeight: '800',

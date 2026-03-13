@@ -1,5 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
@@ -10,7 +11,11 @@ import { VoicePreferenceProvider } from '@/contexts/voice-preference-context';
 import { useAuth } from '@/hooks/use-auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { LanguageProvider } from '@/hooks/use-language';
-import { ActivityIndicator, ImageBackground, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, ImageBackground, StyleSheet, View } from 'react-native';
+
+// Empêcher le splash screen de se cacher automatiquement
+SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -19,6 +24,13 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { isLoading } = useAuth();
+  const [splashHidden, setSplashHidden] = useState(false);
+
+  // Cacher le splash screen natif dès que le layout React est monté
+  // pour laisser voir l'écran de chargement avec la mosquée
+  useEffect(() => {
+    SplashScreen.hideAsync().then(() => setSplashHidden(true));
+  }, []);
 
   // Thème personnalisé avec fond transparent
   const customTheme = {
@@ -37,8 +49,13 @@ export default function RootLayout() {
         style={styles.background}
         resizeMode="cover"
       >
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.7)' }}>
-          <ActivityIndicator size="large" />
+        <View style={styles.loadingContainer}>
+          <Image
+            source={require('@/assets/logo.png')}
+            style={styles.loadingLogo}
+            resizeMode="contain"
+          />
+          <ActivityIndicator size="large" color="#2E7D32" />
         </View>
       </ImageBackground>
     );
@@ -79,5 +96,16 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+  },
+  loadingLogo: {
+    width: 140,
+    height: 140,
+    marginBottom: 24,
   },
 });

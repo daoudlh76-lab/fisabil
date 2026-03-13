@@ -1,6 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +18,6 @@ import {
 
 import { useAudioPlaylistContext } from "@/contexts/audio-playlist-context";
 import { useSubscription } from "@/contexts/subscription-context";
-import { useDailyLimit } from "@/hooks/use-daily-limit";
 import { useDiacritics as useOldDiacritics } from "@/hooks/use-diacritics";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
@@ -32,38 +32,7 @@ const BG = "transparent";
 
 function ScannerScreen() {
   const { t, language } = useLanguage();
-  const { subscription, isLoaded } = useSubscription();
-  const scannerLimitRaw = useDailyLimit("scanner", 1);
-
-  // Demande automatique des permissions micro et caméra après connexion
-  useEffect(() => {
-    async function requestPermissions() {
-      try {
-        // Demande la permission caméra
-        await ImagePicker.requestCameraPermissionsAsync();
-        // Demande la permission micro (expo-permissions supprimé, rien à faire ici)
-      } catch (e) {
-        if (__DEV__) console.log("⚠️ Erreur lors de la demande de permissions :", e);
-      }
-    }
-    if (subscription && subscription.user_id) {
-      requestPermissions();
-    }
-  }, [subscription?.user_id]);
-
-  // IMPORTANT: recalculer scannerLimit quand le plan change
-  const scannerLimit = React.useMemo(() => {
-    // Tant que l’abonnement n’est pas chargé → pas de limite
-    if (!isLoaded) return null;
-
-    // Premium → pas de limite
-    if (subscription.plan === "premium_monthly" || subscription.plan === "premium_annual") {
-      return null;
-    }
-
-    // Free → limites
-    return scannerLimitRaw;
-  }, [isLoaded, subscription.plan, scannerLimitRaw]);
+  const { isPremium, isLoaded } = useSubscription();
 
   const [title, setTitle] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -91,10 +60,29 @@ function ScannerScreen() {
     return title.trim().length > 0 && reviewText.trim().length > 0;
   }, [title, reviewText]);
 
+  async function openAppSettings() {
+    if (Platform.OS === "ios") {
+      await Linking.openURL("app-settings:");
+    } else {
+      await Linking.openSettings();
+    }
+  }
+
   async function pickFromGallery() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert(t("scanner.permissionDenied"), t("scanner.galleryPermission"));
+      if (!perm.canAskAgain) {
+        Alert.alert(
+          t("scanner.permissionDenied"),
+          t("scanner.galleryPermission"),
+          [
+            { text: t("common.cancel"), style: "cancel" },
+            { text: t("scanner.openSettings") || "Réglages", onPress: openAppSettings },
+          ]
+        );
+      } else {
+        Alert.alert(t("scanner.permissionDenied"), t("scanner.galleryPermission"));
+      }
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -115,7 +103,18 @@ function ScannerScreen() {
   async function takePhoto() {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert(t("scanner.permissionDenied"), t("scanner.cameraPermission"));
+      if (!perm.canAskAgain) {
+        Alert.alert(
+          t("scanner.permissionDenied"),
+          t("scanner.cameraPermission"),
+          [
+            { text: t("common.cancel"), style: "cancel" },
+            { text: t("scanner.openSettings") || "Réglages", onPress: openAppSettings },
+          ]
+        );
+      } else {
+        Alert.alert(t("scanner.permissionDenied"), t("scanner.cameraPermission"));
+      }
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -138,22 +137,20 @@ function ScannerScreen() {
       return;
     }
 
-    // Limite free : on bloque l’OCR si plus de scans (mais premium illimité)
-    if (isLoaded && subscription.plan === "free" && scannerLimit) {
-      if (!scannerLimit.canUse) {
-        Alert.alert(
-          t("scanner.limitReached"),
-          t("scanner.limitReachedMessage", { limit: scannerLimit.limit }),
-          [
-            { text: t("settings.cancel"), style: "cancel" },
-            {
-              text: t("settings.upgradeToPremium"),
-              onPress: () => router.push("/(tabs)/settings"),
-            },
-          ]
-        );
-        return;
-      }
+    // Free user: bloquer le scan
+    if (isLoaded && !isPremium) {
+      Alert.alert(
+        t("scanner.premiumRequired"),
+        t("scanner.premiumRequiredMessage"),
+        [
+          { text: t("settings.cancel"), style: "cancel" },
+          {
+            text: t("settings.upgradeToPremium"),
+            onPress: () => router.push("/(tabs)/subscription"),
+          },
+        ]
+      );
+      return;
     }
 
     setOcrLoading(true);
@@ -377,11 +374,6 @@ function ScannerScreen() {
         }
       }
 
-      // ✅ Compter la limite free : 1 fois par document (au moment du save)
-      if (isLoaded && subscription.plan === "free" && scannerLimit) {
-        await scannerLimit.incrementUsage();
-      }
-
       Alert.alert(t("scanner.saved"), t("scanner.savedSuccess"));
 
       setTitle("");
@@ -407,19 +399,13 @@ function ScannerScreen() {
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.header}>{t("scanner.title")}</Text>
 
-        {/* Limite free */}
-        {isLoaded && subscription.plan === "free" && scannerLimit && !scannerLimit.loading && (
-          <View style={scannerLimit.canUse ? styles.limitBanner : styles.limitBannerWarning}>
-            <Text style={styles.limitBannerText}>
-              {scannerLimit.canUse
-                ? t("scanner.scansRemaining", { remaining: scannerLimit.remaining, limit: scannerLimit.limit })
-                : t("scanner.noScansLeft")}
-            </Text>
-            {!scannerLimit.canUse && (
-              <Pressable style={styles.upgradeLinkButton} onPress={() => router.push("/(tabs)/settings")}>
-                <Text style={styles.upgradeLinkText}>{t("settings.upgradeToPremium")}</Text>
-              </Pressable>
-            )}
+        {/* Free user : bandeau abonnement requis */}
+        {isLoaded && !isPremium && (
+          <View style={styles.freeUserBanner}>
+            <Text style={styles.freeUserText}>{t("scanner.premiumRequired")}</Text>
+            <Pressable style={styles.upgradeLinkButton} onPress={() => router.push("/(tabs)/subscription")}>
+              <Text style={styles.upgradeLinkText}>{t("settings.upgradeToPremium")}</Text>
+            </Pressable>
           </View>
         )}
 
@@ -558,23 +544,15 @@ const styles = StyleSheet.create({
   container: { padding: 18, paddingBottom: 40, backgroundColor: BG },
   header: { fontSize: 22, fontWeight: "800", textAlign: "center", marginBottom: 14 },
 
-  limitBanner: {
-    backgroundColor: "#E8F5E9",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: GREEN,
-  },
-  limitBannerWarning: {
+  freeUserBanner: {
     backgroundColor: "#FFF3E0",
-    padding: 12,
+    padding: 14,
     borderRadius: 8,
     marginBottom: 16,
     borderLeftWidth: 4,
     borderLeftColor: "#FF9800",
   },
-  limitBannerText: { fontSize: 14, fontWeight: "600", color: "#333", textAlign: "center" },
+  freeUserText: { fontSize: 14, fontWeight: "700", color: "#E65100", textAlign: "center" },
   upgradeLinkButton: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: GREEN, borderRadius: 6, alignSelf: "center" },
   upgradeLinkText: { fontSize: 13, fontWeight: "600", color: "white" },
 

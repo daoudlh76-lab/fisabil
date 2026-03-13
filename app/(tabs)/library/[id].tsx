@@ -17,6 +17,7 @@ import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
 import { useAudioPlaylistContext } from "@/contexts/audio-playlist-context";
 import { extractVocabularyFromText, VocabItem, VerbItem, ParticleItem } from "@/src/lib/extract-vocabulary";
+import { invokeEdge } from "@/src/lib/edge-ai";
 import { migrateExtractVocabResult, needsMigration } from "@/src/lib/migrate-vocab-data";
 import { updateLocalScan, deleteLocalScan, getLocalVocab, saveLocalVocab } from "@/src/lib/local-cache";
 
@@ -167,36 +168,32 @@ export default function LibraryItemScreen() {
       // Sauvegarder dans le cache local
       updateLocalScan(row);
 
-      // ✅ Charge le cache IA — d'abord local, puis Supabase
+      // ✅ Charge le cache IA — local prioritaire (contient les suppressions)
+      // Le vocabulaire extrait est TOUJOURS chargé, quelle que soit la version du prompt
       try {
-        // 1. Essayer le cache local (instantané)
+        // 1. Essayer le cache local (instantané, contient les _deleted)
         const localVocab = await getLocalVocab(row.id, uiLang);
         if (localVocab) {
           const localData = localVocab as ExtractResponse;
-          if ((localData.meta?.prompt_version || 0) >= VOCAB_PROMPT_VERSION) {
-            const migratedData = needsMigration(localData) ? migrateExtractVocabResult(localData) : localData;
-            setAiData(migratedData);
-            __DEV__ && console.log('📱 Vocabulaire chargé depuis le cache local');
-          }
-        }
+          const migratedData = needsMigration(localData) ? migrateExtractVocabResult(localData) : localData;
+          setAiData(migratedData);
+          __DEV__ && console.log('📱 Vocabulaire chargé depuis le cache local');
+        } else {
+          // 2. Pas de cache local → fallback sur Supabase (premier chargement / nouvel appareil)
+          const cacheKey = `ai_vocab_${row.id}_${uiLang}`;
+          const { data: cached } = await supabase
+            .from("ai_cache")
+            .select("payload")
+            .eq("key", cacheKey)
+            .maybeSingle();
 
-        // 2. Vérifier aussi le cache Supabase (plus à jour)
-        const cacheKey = `ai_vocab_${row.id}_${uiLang}`;
-        const { data: cached } = await supabase
-          .from("ai_cache")
-          .select("payload")
-          .eq("key", cacheKey)
-          .maybeSingle();
-
-        if (cached?.payload) {
-          const data = cached.payload as ExtractResponse;
-          if ((data.meta?.prompt_version || 0) < VOCAB_PROMPT_VERSION) {
-            __DEV__ && console.log('🔄 Cache obsolète (v' + (data.meta?.prompt_version || 0) + ' < v' + VOCAB_PROMPT_VERSION + '), régénération...');
-          } else {
+          if (cached?.payload) {
+            const data = cached.payload as ExtractResponse;
             const migratedData = needsMigration(data) ? migrateExtractVocabResult(data) : data;
             setAiData(migratedData);
-            // Synchroniser le cache local
+            // Synchroniser vers le cache local
             saveLocalVocab(row.id, uiLang, migratedData);
+            __DEV__ && console.log('☁️ Vocabulaire chargé depuis Supabase (pas de cache local)');
           }
         }
       } catch {
@@ -631,17 +628,17 @@ export default function LibraryItemScreen() {
   // Sauvegarder le cache AI après modification
   async function saveAiCache(newData: ExtractResponse) {
     if (!scan) return;
+    // Sauvegarder en local TOUJOURS en premier (garantit la persistance des suppressions)
+    saveLocalVocab(scan.id, uiLang, newData);
     try {
       const cacheKey = `ai_vocab_${scan.id}_${uiLang}`;
       await supabase.from('ai_cache').upsert(
         { key: cacheKey, payload: newData, updated_at: new Date().toISOString() },
         { onConflict: 'key' }
       );
-      // Synchroniser le cache local
-      saveLocalVocab(scan.id, uiLang, newData);
-      __DEV__ && console.log('💾 Cache AI sauvegardé (Supabase + local)');
+      __DEV__ && console.log('💾 Cache AI sauvegardé (local + Supabase)');
     } catch (e) {
-      __DEV__ && console.error('Erreur sauvegarde cache:', e);
+      __DEV__ && console.error('Erreur sauvegarde cache Supabase:', e);
     }
   }
 
@@ -670,11 +667,19 @@ export default function LibraryItemScreen() {
       {
         text: t('libraryDetail.delete'),
         style: 'destructive',
-        onPress: () => {
-          const newVocab = aiData.vocabulaire.filter((_, i) => i !== idx);
+        onPress: async () => {
+          const word = aiData.vocabulaire[idx];
+          const newVocab = [...aiData.vocabulaire];
+          newVocab[idx] = { ...word, _deleted: true } as any;
           const newData = { ...aiData, vocabulaire: newVocab };
           setAiData(newData);
           saveAiCache(newData);
+          // Supprimer la progression de la carte
+          if (scan && word.singulier) {
+            await supabase.from('vocab_cards_progress').delete()
+              .eq('word_ar', word.singulier)
+              .eq('scan_id', scan.id).catch(() => {});
+          }
         },
       },
     ]);
@@ -705,11 +710,18 @@ export default function LibraryItemScreen() {
       {
         text: t('libraryDetail.delete'),
         style: 'destructive',
-        onPress: () => {
-          const newVerbs = aiData.verbes.filter((_, i) => i !== idx);
+        onPress: async () => {
+          const verb = aiData.verbes[idx];
+          const newVerbs = [...aiData.verbes];
+          newVerbs[idx] = { ...verb, _deleted: true } as any;
           const newData = { ...aiData, verbes: newVerbs };
           setAiData(newData);
           saveAiCache(newData);
+          if (scan && verb.passe_3ms) {
+            await supabase.from('vocab_cards_progress').delete()
+              .eq('word_ar', verb.passe_3ms)
+              .eq('scan_id', scan.id).catch(() => {});
+          }
         },
       },
     ]);
@@ -740,11 +752,18 @@ export default function LibraryItemScreen() {
       {
         text: t('libraryDetail.delete'),
         style: 'destructive',
-        onPress: () => {
-          const newParticles = aiData.particules.filter((_, i) => i !== idx);
+        onPress: async () => {
+          const particle = aiData.particules[idx];
+          const newParticles = [...aiData.particules];
+          newParticles[idx] = { ...particle, _deleted: true } as any;
           const newData = { ...aiData, particules: newParticles };
           setAiData(newData);
           saveAiCache(newData);
+          if (scan && particle.particule_ar) {
+            await supabase.from('vocab_cards_progress').delete()
+              .eq('word_ar', particle.particule_ar)
+              .eq('scan_id', scan.id).catch(() => {});
+          }
         },
       },
     ]);
@@ -772,53 +791,26 @@ export default function LibraryItemScreen() {
     }
   }
 
-  // Ajouter un nouveau mot avec complétion automatique
-  async function addNewWord(type: 'word' | 'verb' | 'particle') {
+  // Ajouter un nouveau mot avec auto-complétion IA
+  async function addNewWord() {
     if (!newWordInput.trim() || !aiData) return;
-
-    // Vérifier les doublons AVANT de faire l'appel API
-    if (isDuplicate(type, newWordInput.trim())) {
-      Alert.alert('⚠️', t('libraryDetail.duplicateWord'));
-      return;
-    }
 
     setCompletingWord(true);
     try {
-      // Créer un objet basique sans auto-complétion IA
-      // L'utilisateur devra remplir les détails manuellement
-      let completed: VocabItem | VerbItem | ParticleItem;
+      // Appel à l'Edge Function pour analyser le mot
+      const result = await invokeEdge<{ type: 'word' | 'verb' | 'particle'; data: any }>('complete-word', {
+        word: newWordInput.trim(),
+        ui_lang: uiLang,
+      });
 
-      if (type === 'word') {
-        completed = {
-          singulier: newWordInput.trim(),
-          traduction: '', // À remplir par l'utilisateur
-          pluriel: null,
-          contraire: null,
-          remarque: null,
-        } as VocabItem;
-      } else if (type === 'verb') {
-        completed = {
-          passe_3ms: newWordInput.trim(),
-          traduction: '', // À remplir par l'utilisateur
-          present_3ms: '',
-          imperatif: '',
-          remarque: null,
-        } as VerbItem;
-      } else {
-        completed = {
-          particule_ar: newWordInput.trim(),
-          traduction: '', // À remplir par l'utilisateur
-          type: null,
-          exemple: null,
-        } as ParticleItem;
-      }
+      const { type, data: completed } = result;
 
-      // Vérifier avec le mot de base
+      // Vérifier les doublons avec le mot arabe retourné par l'IA
       const completedWord = type === 'word'
-        ? (completed as VocabItem).singulier
+        ? completed.singulier
         : type === 'verb'
-          ? (completed as VerbItem).passe_3ms
-          : (completed as ParticleItem).particule_ar;
+          ? completed.passe_3ms
+          : completed.particule_ar;
 
       if (isDuplicate(type, completedWord)) {
         Alert.alert('⚠️', t('libraryDetail.duplicateWord'));
@@ -826,8 +818,8 @@ export default function LibraryItemScreen() {
         return;
       }
 
+      // Placer dans la bonne catégorie
       let newData: ExtractResponse;
-
       if (type === 'word') {
         newData = { ...aiData, vocabulaire: [...aiData.vocabulaire, completed as VocabItem] };
       } else if (type === 'verb') {
@@ -842,7 +834,11 @@ export default function LibraryItemScreen() {
       setAddingWord(false);
       setAddingVerb(false);
       setAddingParticle(false);
-      Alert.alert('✅', t('libraryDetail.wordAdded'));
+
+      const typeLabel = type === 'word' ? t('libraryDetail.words')
+        : type === 'verb' ? t('libraryDetail.verbs')
+        : t('libraryDetail.particles');
+      Alert.alert('✅', `${completedWord} → ${typeLabel}`);
     } catch (e: any) {
       Alert.alert(t('libraryDetail.error'), e?.message || 'Unknown error');
     } finally {
@@ -1006,7 +1002,7 @@ export default function LibraryItemScreen() {
                 onPress={() => setShowVocab(!showVocab)}
               >
                 <Text style={[styles.vocabButtonText, showVocab && styles.vocabButtonTextActive]}>
-                  {t('libraryDetail.words')} ({aiData.vocabulaire?.length || 0})
+                  {t('libraryDetail.words')} ({aiData.vocabulaire?.filter((v: any) => !v._deleted)?.length || 0})
                 </Text>
               </Pressable>
 
@@ -1015,7 +1011,7 @@ export default function LibraryItemScreen() {
                 onPress={() => setShowVerbs(!showVerbs)}
               >
                 <Text style={[styles.vocabButtonText, showVerbs && styles.vocabButtonTextActive]}>
-                  {t('libraryDetail.verbs')} ({aiData.verbes?.length || 0})
+                  {t('libraryDetail.verbs')} ({aiData.verbes?.filter((v: any) => !v._deleted)?.length || 0})
                 </Text>
               </Pressable>
 
@@ -1024,7 +1020,7 @@ export default function LibraryItemScreen() {
                 onPress={() => setShowParticles(!showParticles)}
               >
                 <Text style={[styles.vocabButtonText, showParticles && styles.vocabButtonTextActive]}>
-                  {t('libraryDetail.particles')} ({aiData.particules?.length || 0})
+                  {t('libraryDetail.particles')} ({aiData.particules?.filter((v: any) => !v._deleted)?.length || 0})
                 </Text>
               </Pressable>
             </View>
@@ -1059,7 +1055,7 @@ export default function LibraryItemScreen() {
                     <View style={styles.addFormButtons}>
                       <Pressable 
                         style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]} 
-                        onPress={() => addNewWord('word')}
+                        onPress={() => addNewWord()}
                         disabled={completingWord}
                       >
                         {completingWord ? (
@@ -1084,8 +1080,9 @@ export default function LibraryItemScreen() {
                       <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.opposite')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
                     </View>
-                    {aiData.vocabulaire?.length ? (
-                      aiData.vocabulaire.map((v, idx) => (
+                    {aiData.vocabulaire?.filter((v: any) => !v._deleted)?.length ? (
+                      aiData.vocabulaire.map((v: any, idx) => (
+                        (v._deleted) ? null :
                         editingVocabIdx === idx ? (
                           <View key={`v-edit-${idx}`} style={styles.editRow}>
                             <TextInput
@@ -1168,7 +1165,7 @@ export default function LibraryItemScreen() {
                     <View style={styles.addFormButtons}>
                       <Pressable 
                         style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]} 
-                        onPress={() => addNewWord('verb')}
+                        onPress={() => addNewWord()}
                         disabled={completingWord}
                       >
                         {completingWord ? (
@@ -1193,8 +1190,9 @@ export default function LibraryItemScreen() {
                       <Text style={[styles.tableHeaderCell, { width: 95 }]}>{t('libraryDetail.imperative')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
                     </View>
-                    {aiData.verbes?.length ? (
-                      aiData.verbes.map((vb, idx) => (
+                    {aiData.verbes?.filter((v: any) => !v._deleted)?.length ? (
+                      aiData.verbes.map((vb: any, idx) => (
+                        (vb._deleted) ? null :
                         editingVerbIdx === idx ? (
                           <View key={`vb-edit-${idx}`} style={styles.editRow}>
                             <TextInput
@@ -1277,7 +1275,7 @@ export default function LibraryItemScreen() {
                     <View style={styles.addFormButtons}>
                       <Pressable 
                         style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]} 
-                        onPress={() => addNewWord('particle')}
+                        onPress={() => addNewWord()}
                         disabled={completingWord}
                       >
                         {completingWord ? (
@@ -1302,8 +1300,9 @@ export default function LibraryItemScreen() {
                       <Text style={[styles.tableHeaderCell, { width: 130 }]}>{t('libraryDetail.example')}</Text>
                       <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
                     </View>
-                    {aiData.particules?.length ? (
-                      aiData.particules.map((p, idx) => (
+                    {aiData.particules?.filter((v: any) => !v._deleted)?.length ? (
+                      aiData.particules.map((p: any, idx) => (
+                        (p._deleted) ? null :
                         editingParticleIdx === idx ? (
                           <View key={`p-edit-${idx}`} style={styles.editRow}>
                             <TextInput

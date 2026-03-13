@@ -9,6 +9,7 @@ export default function SubscriptionScreen() {
   const {
     subscription,
     isPremium,
+    isTrialEligible,
     monthlyPackage,
     annualPackage,
     purchase,
@@ -16,10 +17,17 @@ export default function SubscriptionScreen() {
     isProcessing,
     isLoaded,
     error,
-    getCurrentPlanInfo,
   } = useSubscription();
 
-  const currentPlan = getCurrentPlanInfo();
+  // ─── Trial period helper (dynamic from store) ──────────────────────
+  const trialDays = (() => {
+    const intro = monthlyPackage?.product?.introPrice ?? annualPackage?.product?.introPrice;
+    if (!intro || intro.price !== 0) return 7; // fallback
+    if (intro.periodUnit === 'DAY') return intro.periodNumberOfUnits;
+    if (intro.periodUnit === 'WEEK') return intro.periodNumberOfUnits * 7;
+    if (intro.periodUnit === 'MONTH') return intro.periodNumberOfUnits * 30;
+    return intro.periodNumberOfUnits;
+  })();
 
   // ─── Purchase handler ──────────────────────────────────────────────
   const handlePurchase = async (type: 'monthly' | 'annual') => {
@@ -69,12 +77,12 @@ export default function SubscriptionScreen() {
   };
 
   // ─── Price helpers ─────────────────────────────────────────────────
-  const monthlyPrice = monthlyPackage?.product.priceString ?? '9.99€';
-  const annualPrice = annualPackage?.product.priceString ?? '99.99€';
+  const monthlyPrice = monthlyPackage?.product.priceString ?? '';
+  const annualPrice = annualPackage?.product.priceString ?? '';
 
   // Calculate savings percentage
-  const monthlyCost = monthlyPackage?.product.price ?? 9.99;
-  const annualCost = annualPackage?.product.price ?? 99.99;
+  const monthlyCost = monthlyPackage?.product.price ?? 0;
+  const annualCost = annualPackage?.product.price ?? 0;
   const savingsPercent = Math.round((1 - annualCost / (monthlyCost * 12)) * 100);
 
   if (!isLoaded) {
@@ -118,25 +126,14 @@ export default function SubscriptionScreen() {
         </View>
       )}
 
-      {/* Free plan card */}
-      {!isPremium && (
-        <View style={styles.freePlanCard}>
-          <View style={styles.planHeader}>
-            <Text style={styles.planIcon}>🆓</Text>
-            <View>
-              <Text style={styles.planName}>{t('subscription.freePlan')}</Text>
-              <Text style={styles.planPrice}>{t('subscription.free')}</Text>
-            </View>
-          </View>
-          <View style={styles.featuresList}>
-            <FeatureRow icon="robot" text={`${t('settings.aiTutor')} (5/${t('subscription.perDay')})`} />
-            <FeatureRow icon="microphone" text={`${t('settings.dictations')} (2/${t('subscription.perDay')})`} />
-            <FeatureRow icon="camera" text={`${t('settings.scannerFeature')} (1/${t('subscription.perDay')})`} />
-            <FeatureRow icon="cards" text={t('settings.vocabCards')} />
-          </View>
-          <View style={styles.currentBadge}>
-            <Text style={styles.currentBadgeText}>{t('subscription.currentPlanBadge')}</Text>
-          </View>
+      {/* Trial banner */}
+      {!isPremium && isTrialEligible && (
+        <View style={styles.trialBanner}>
+          <Text style={styles.trialBannerIcon}>🎁</Text>
+          <Text style={styles.trialBannerTitle}>
+            {t('subscription.trialTitleDynamic', { days: String(trialDays) }) || t('subscription.trialTitle')}
+          </Text>
+          <Text style={styles.trialBannerSubtitle}>{t('subscription.trialSubtitle')}</Text>
         </View>
       )}
 
@@ -173,9 +170,18 @@ export default function SubscriptionScreen() {
             {isProcessing ? (
               <ActivityIndicator color="#FFF" />
             ) : (
-              <Text style={styles.subscribeButtonText}>{t('subscription.subscribe')}</Text>
+              <Text style={styles.subscribeButtonText}>
+                {isTrialEligible
+                  ? (t('subscription.startTrialDynamic', { days: String(trialDays) }) || t('subscription.startTrial'))
+                  : t('subscription.subscribe')}
+              </Text>
             )}
           </View>
+        )}
+        {subscription.plan !== 'premium_monthly' && isTrialEligible && (
+          <Text style={styles.trialHint}>
+            {t('subscription.trialHintDynamic', { days: String(trialDays), price: monthlyPrice }) || t('subscription.trialHint')}
+          </Text>
         )}
       </TouchableOpacity>
 
@@ -215,9 +221,18 @@ export default function SubscriptionScreen() {
             {isProcessing ? (
               <ActivityIndicator color="#FFF" />
             ) : (
-              <Text style={styles.subscribeButtonText}>{t('subscription.subscribe')}</Text>
+              <Text style={styles.subscribeButtonText}>
+                {isTrialEligible
+                  ? (t('subscription.startTrialDynamic', { days: String(trialDays) }) || t('subscription.startTrial'))
+                  : t('subscription.subscribe')}
+              </Text>
             )}
           </View>
+        )}
+        {subscription.plan !== 'premium_annual' && isTrialEligible && (
+          <Text style={styles.trialHint}>
+            {t('subscription.trialHintDynamic', { days: String(trialDays), price: annualPrice }) || t('subscription.trialHint')}
+          </Text>
         )}
       </TouchableOpacity>
 
@@ -236,7 +251,7 @@ export default function SubscriptionScreen() {
       <View style={styles.legalSection}>
         <Text style={styles.legalText}>
           {t('subscription.legalAutoRenew') ||
-            'Payment will be charged to your iTunes/Google Play account at confirmation of purchase. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.'}
+            'Payment will be charged to your account at confirmation of purchase. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.'}
         </Text>
         <View style={styles.legalLinks}>
           <TouchableOpacity onPress={() => Linking.openURL('https://fisabil.app/terms')}>
@@ -343,14 +358,34 @@ const styles = StyleSheet.create({
     color: '#C62828',
     fontSize: 14,
   },
-  freePlanCard: {
-    backgroundColor: '#FFF',
+  trialBanner: {
+    backgroundColor: '#E8F5E9',
     margin: 16,
     marginBottom: 8,
-    borderRadius: 16,
     padding: 20,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  trialBannerIcon: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  trialBannerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 4,
+  },
+  trialBannerSubtitle: {
+    fontSize: 14,
+    color: '#555',
+    textAlign: 'center',
+  },
+  trialHint: {
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 8,
   },
   sectionTitle: {
     fontSize: 18,
@@ -436,17 +471,6 @@ const styles = StyleSheet.create({
   greenFeatureText: {
     color: '#2E7D32',
     fontWeight: '500',
-  },
-  currentBadge: {
-    backgroundColor: '#E0E0E0',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  currentBadgeText: {
-    color: '#666',
-    fontSize: 15,
-    fontWeight: '600',
   },
   activeBadge: {
     backgroundColor: '#2E7D32',

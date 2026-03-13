@@ -58,7 +58,7 @@ export async function speakWithOpenAI(opts: SpeakOptions): Promise<void> {
   // Stop anything currently playing
   await stopTTS();
 
-  const pitch = gender === 'female' ? 1.5 : 0.5;
+  const pitch = 1.0;
   const rate = Math.max(0.1, Math.min(speed, 2.0));
 
   console.log(`🔊 Local TTS: gender=${gender}, pitch=${pitch}, rate=${rate}, lang=${language}, len=${text.length}`);

@@ -273,25 +273,14 @@ export default function SettingsScreen() {
           {subscription.plan === 'free' && (
             <>
               <Text style={styles.planDescription}>
-                {t('settings.trialDescription')}
+                {t('settings.freeDescription')}
               </Text>
-              <View style={styles.timerBox}>
-                <MaterialCommunityIcons
-                  name="clock-outline"
-                  size={24}
-                  color="#FF9800"
-                />
-                <Text style={styles.timerText}>
-                  {subscription.daysRemaining} {t('settings.daysRemaining')}
-                </Text>
-              </View>
-
               <TouchableOpacity
                 style={styles.upgradeButton}
                 onPress={handleUpgrade}
               >
                 <Text style={styles.upgradeButtonText}>
-                  🚀 {t('settings.upgradeToPremium')}
+                  {t('settings.upgradeToPremium')}
                 </Text>
               </TouchableOpacity>
             </>
@@ -339,9 +328,9 @@ export default function SettingsScreen() {
             <View key={feature.name} style={styles.featureRow}>
               <View style={styles.featureInfo}>
                 <Text style={styles.featureName}>{t(feature.labelKey)}</Text>
-                {feature.freeLimit && subscription.plan === 'free' && (
+                {!feature.freeAllowed && subscription.plan === 'free' && (
                   <Text style={styles.featureLimit}>
-                    {t('settings.limitedTo')} {feature.freeLimit}{t('settings.perDay')}
+                    {t('settings.locked')}
                   </Text>
                 )}
               </View>
