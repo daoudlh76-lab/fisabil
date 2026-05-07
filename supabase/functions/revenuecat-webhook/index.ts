@@ -43,6 +43,7 @@ serve(async (req) => {
 
     // Déterminer le plan depuis le product_id RevenueCat
     const productId: string = event.product_id ?? "";
+    console.log(`[RC] product_id extracted: "${productId}" (event.type=${event.type ?? "unknown"})`);
     let plan: "free" | "premium_monthly" | "premium_annual" = "free";
     if (isActive) {
       if (productId.includes("yearly") || productId.includes("annual")) {
@@ -97,7 +98,7 @@ serve(async (req) => {
           is_active: isActive,
           expiry_date: expiresAt,
           store_provider: storeProvider,
-          store_product_id: productId || null,
+          ...(productId ? { store_product_id: productId } : {}),
           auto_renew: event.auto_renew_status ?? false,
           cancel_at_period_end: eventType.includes("CANCELLATION"),
           trial_end: isTrialing ? expiresAt : null,

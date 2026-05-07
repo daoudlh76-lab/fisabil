@@ -1,0 +1,32 @@
+{
+  "api_version": "1.0",
+  "event": {
+    "aliases": ["$RCAnonymousID:test123"],
+    "app_id": "app1234567",
+    "app_user_id": "00000000-0000-0000-0000-000000000001",
+    "commission_percentage": 0.15,
+    "country_code": "FR",
+    "currency": "EUR",
+    "entitlement_id": "Premium",
+    "entitlement_ids": ["Premium"],
+    "environment": "SANDBOX",
+    "event_timestamp_ms": 1746614400000,
+    "expiration_at_ms": 1749206400000,
+    "id": "test-event-id-001",
+    "is_family_share": false,
+    "offer_code": null,
+    "original_app_user_id": "00000000-0000-0000-0000-000000000001",
+    "original_transaction_id": "test-original-tx-001",
+    "period_type": "NORMAL",
+    "presented_offering_id": null,
+    "price": 9.99,
+    "price_in_purchased_currency": 9.99,
+    "product_id": "fisabil_premium_monthly_999",
+    "purchased_at_ms": 1746614400000,
+    "store": "APP_STORE",
+    "subscriber_attributes": {},
+    "transaction_id": "test-tx-001",
+    "type": "INITIAL_PURCHASE",
+    "auto_renew_status": true
+  }
+}
