@@ -1,11 +1,14 @@
 import { useLanguage } from "@/hooks/use-language";
+import { LANGUAGE_NAMES, Language } from "@/constants/translations";
 import { supabase } from "@/src/lib/supabase";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   Alert,
+  FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -18,8 +21,12 @@ import {
 // ✅ RevenueCat
 import { initRevenueCat, loginRevenueCat } from "@/src/lib/revenuecat";
 
+const FLAG: Record<Language, string> = {
+  fr: "🇫🇷", en: "🇬🇧", de: "🇩🇪", es: "🇪🇸", ru: "🇷🇺", ms: "🇲🇾", ar: "🇸🇦",
+};
+
 export default function LoginScreen() {
-  const { t } = useLanguage();
+  const { t, language, setLanguage, availableLanguages } = useLanguage();
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -27,6 +34,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [langModalVisible, setLangModalVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -126,6 +134,54 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
+      {/* Sélecteur de langue en haut à droite */}
+      <Pressable
+        style={styles.langButton}
+        onPress={() => setLangModalVisible(true)}
+      >
+        <Text style={styles.langButtonText}>
+          {FLAG[language]} {LANGUAGE_NAMES[language]}
+        </Text>
+      </Pressable>
+
+      <Modal
+        visible={langModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLangModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setLangModalVisible(false)}
+        >
+          <View style={styles.modalContent}>
+            <FlatList
+              data={availableLanguages}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={[
+                    styles.langOption,
+                    item === language && styles.langOptionActive,
+                  ]}
+                  onPress={() => {
+                    setLanguage(item);
+                    setLangModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.langOptionText}>
+                    {FLAG[item]} {LANGUAGE_NAMES[item]}
+                  </Text>
+                  {item === language && (
+                    <Text style={styles.langCheck}>✓</Text>
+                  )}
+                </Pressable>
+              )}
+            />
+          </View>
+        </Pressable>
+      </Modal>
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -248,4 +304,45 @@ const styles = StyleSheet.create({
   },
   forgotPasswordButton: { marginTop: 12, padding: 8 },
   forgotPasswordText: { textAlign: "center", color: "#2F6B3D", fontSize: 14, fontWeight: "600" },
+  langButton: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 56 : 16,
+    right: 16,
+    zIndex: 10,
+    backgroundColor: "#FFF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  langButtonText: { fontSize: 14, fontWeight: "600", color: "#333" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    paddingVertical: 8,
+    width: 260,
+    maxHeight: 400,
+  },
+  langOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  langOptionActive: { backgroundColor: "#E8F5E9" },
+  langOptionText: { fontSize: 16, color: "#333" },
+  langCheck: { fontSize: 16, color: "#2F6B3D", fontWeight: "700" },
 });

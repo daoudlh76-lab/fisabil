@@ -22,7 +22,7 @@ import { useDiacritics as useOldDiacritics } from "@/hooks/use-diacritics";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
 import { useTextToSpeech } from "@/hooks/use-text-to-speech";
-import { isOcrAvailable, performOcr } from "@/src/lib/google-vision-ocr";
+
 import { supabase } from "@/src/lib/supabase";
 import { updateLocalScan, saveLocalVocab } from "@/src/lib/local-cache";
 import { processArabicImage } from "@/src/lib/process-arabic-text";
@@ -175,38 +175,12 @@ function ScannerScreen() {
           });
         }
       } catch (geminiError: any) {
-        __DEV__ && console.warn("⚠️ Gemini OCR failed, falling back to Google Vision:", geminiError?.message);
+        __DEV__ && console.warn("⚠️ Gemini OCR failed:", geminiError?.message);
       }
 
-      // Fallback : Google Vision OCR si Gemini a échoué
       if (!usedGemini) {
-        if (!isOcrAvailable()) {
-          Alert.alert(t("scanner.error"), "OCR non disponible");
-          return;
-        }
-
-        const ocrResult = await performOcr(imageUri);
-
-        if (ocrResult.error) {
-          if (ocrResult.error === "NO_TEXT_DETECTED") {
-            Alert.alert(t("scanner.error"), t("scanner.noTextDetected"));
-          } else {
-            Alert.alert(t("scanner.error"), `OCR Error: ${ocrResult.error}`);
-          }
-          return;
-        }
-
-        if (!ocrResult.text.trim()) {
-          Alert.alert(t("scanner.error"), t("scanner.noTextDetected"));
-          return;
-        }
-
-        finalText = ocrResult.text;
-        const hasDiacritics = /[\u064B-\u0652]/.test(finalText);
-        if (!hasDiacritics) {
-          finalText = addDiacriticsToText(finalText);
-          setShowDiacritics(true);
-        }
+        Alert.alert(t("scanner.error"), t("scanner.noTextDetected"));
+        return;
       }
 
       if (!finalText.trim()) {

@@ -54,3 +54,5 @@ app-example
 # Build outputs
 build-preview/
 build-preview-android/
+*.apk
+*.aab
