@@ -71,7 +71,6 @@ async function callGemini(
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 16384,
-      responseMimeType: "application/json",
     },
   };
 
@@ -157,7 +156,9 @@ CRITICAL: Add full tashkeel to EVERY Arabic word. This is essential for text-to-
 
 3. "particules" = ONLY function words (حرف) — prepositions, conjunctions, pronouns
    ✅ مِنْ, إِلَى, فِي, هُوَ, وَ
-   ❌ FORBIDDEN: nouns, verbs, adjectives`;
+   ❌ FORBIDDEN: nouns, verbs, adjectives
+
+Your response MUST use the exact marker format specified in the user prompt. Never use JSON for the full text section.`;
 }
 
 function buildUserPrompt(targetLang: string, uiLang: string): string {
@@ -176,21 +177,23 @@ For verbs - VERIFY before adding:
 - present_3ms MUST start with يَ
 - All 3 forms are DIFFERENT
 
-Return JSON with this EXACT structure:
-{
-  "full_text_vocalized": "the complete Arabic text with full tashkeel",
-  "vocabulaire": [
-    { "singulier": "...", "traduction": "...", "pluriel": "...", "contraire": "...", "remarque": null }
-  ],
-  "verbes": [
-    { "passe_3ms": "...", "present_3ms": "...", "imperatif": "...", "traduction": "...", "remarque": null }
-  ],
-  "particules": [
-    { "particule_ar": "...", "type": "preposition|conjunction|pronoun|demonstrative", "traduction": "...", "exemple": null }
-  ]
-}
+IMPORTANT: Use EXACTLY this marker format. Do NOT use JSON for the full text. Do NOT add any text outside the markers.
 
-RETURN ONLY THE JSON. No markdown, no comments.`;
+===VOCALIZED===
+(the complete Arabic text with full tashkeel, exactly as it appears in the image)
+===END_VOCALIZED===
+
+===VOCAB===
+[{"singulier":"...","traduction":"...","pluriel":"...","contraire":null,"remarque":null}]
+===END_VOCAB===
+
+===VERBES===
+[{"passe_3ms":"...","present_3ms":"...","imperatif":"...","traduction":"...","remarque":null}]
+===END_VERBES===
+
+===PARTICULES===
+[{"particule_ar":"...","type":"preposition|conjunction|pronoun|demonstrative","traduction":"...","exemple":null}]
+===END_PARTICULES===`;
 }
 
 // ── Bescherelle correction ──
@@ -267,28 +270,50 @@ async function correctVerbsWithBescherelle(
   return correctedCount;
 }
 
-// ── JSON extraction helpers ──
+// ── Marker-based response parser ──
 
-function extractAndParseJson(raw: string): Record<string, unknown> | null {
-  // 1. Extract from fenced code block if present
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidate = fenced ? fenced[1].trim() : raw.trim();
+type ParsedResult = {
+  full_text_vocalized: string;
+  vocabulaire: unknown[];
+  verbes: unknown[];
+  particules: unknown[];
+};
 
-  // 2. Direct parse
-  try {
-    return JSON.parse(candidate);
-  } catch {}
-
-  // 3. Extract outermost { } — handles trailing garbage or truncated arrays
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start !== -1 && end > start) {
-    try {
-      return JSON.parse(candidate.slice(start, end + 1));
-    } catch {}
+function parseMarkerResponse(raw: string): ParsedResult {
+  // Extract plain text between markers (immune to JSON escaping issues)
+  function extractText(marker: string, endMarker: string): string {
+    const re = new RegExp(`${marker}\\s*([\\s\\S]*?)\\s*${endMarker}`);
+    const m = raw.match(re);
+    return m ? m[1].trim() : "";
   }
 
-  return null;
+  // Extract and parse a JSON array between markers, with fallback to []
+  function extractArray(marker: string, endMarker: string): unknown[] {
+    const text = extractText(marker, endMarker);
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      // Try finding [ ... ] if there's surrounding garbage
+      const start = text.indexOf("[");
+      const end = text.lastIndexOf("]");
+      if (start !== -1 && end > start) {
+        try {
+          const parsed = JSON.parse(text.slice(start, end + 1));
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {}
+      }
+      return [];
+    }
+  }
+
+  return {
+    full_text_vocalized: extractText("===VOCALIZED===", "===END_VOCALIZED==="),
+    vocabulaire: extractArray("===VOCAB===", "===END_VOCAB==="),
+    verbes: extractArray("===VERBES===", "===END_VERBES==="),
+    particules: extractArray("===PARTICULES===", "===END_PARTICULES==="),
+  };
 }
 
 // ── Main handler ──
@@ -362,27 +387,21 @@ Deno.serve(async (req) => {
 
     console.log("[process-arabic-text] Gemini response length:", rawJson.length);
 
-    const parsed = extractAndParseJson(rawJson);
+    const parsed = parseMarkerResponse(rawJson);
 
-    if (!parsed) {
-      console.error("[process-arabic-text] Parse failed, raw preview:", rawJson.slice(0, 500));
-      return json({
-        full_text_vocalized: "",
-        vocabulaire: [],
-        verbes: [],
-        particules: [],
-      });
+    if (!parsed.full_text_vocalized) {
+      console.error("[process-arabic-text] No vocalized text found, raw preview:", rawJson.slice(0, 500));
     }
 
     // ── Step 2: Bescherelle correction (disabled — data quality issues) ──
-    const verbes = parsed.verbes || [];
+    const verbes = parsed.verbes;
 
     // ── Response ──
     const result = {
-      full_text_vocalized: parsed.full_text_vocalized || "",
-      vocabulaire: parsed.vocabulaire || [],
+      full_text_vocalized: parsed.full_text_vocalized,
+      vocabulaire: parsed.vocabulaire,
       verbes,
-      particules: parsed.particules || [],
+      particules: parsed.particules,
     };
 
     console.log(
