@@ -267,6 +267,30 @@ async function correctVerbsWithBescherelle(
   return correctedCount;
 }
 
+// ── JSON extraction helpers ──
+
+function extractAndParseJson(raw: string): Record<string, unknown> | null {
+  // 1. Extract from fenced code block if present
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidate = fenced ? fenced[1].trim() : raw.trim();
+
+  // 2. Direct parse
+  try {
+    return JSON.parse(candidate);
+  } catch {}
+
+  // 3. Extract outermost { } — handles trailing garbage or truncated arrays
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    try {
+      return JSON.parse(candidate.slice(start, end + 1));
+    } catch {}
+  }
+
+  return null;
+}
+
 // ── Main handler ──
 
 Deno.serve(async (req) => {
@@ -338,16 +362,16 @@ Deno.serve(async (req) => {
 
     console.log("[process-arabic-text] Gemini response length:", rawJson.length);
 
-    let parsed;
-    try {
-      parsed = JSON.parse(rawJson.replace(/```json\n?/g, "").replace(/```\n?/g, ""));
-    } catch (parseError) {
-      console.error("[process-arabic-text] Parse error:", parseError);
+    const parsed = extractAndParseJson(rawJson);
+
+    if (!parsed) {
+      console.error("[process-arabic-text] Parse failed, raw preview:", rawJson.slice(0, 500));
       return json({
-        error: "Failed to parse Gemini response",
-        parseError: String(parseError),
-        contentPreview: rawJson.slice(0, 500),
-      }, 500);
+        full_text_vocalized: "",
+        vocabulaire: [],
+        verbes: [],
+        particules: [],
+      });
     }
 
     // ── Step 2: Bescherelle correction (disabled — data quality issues) ──
