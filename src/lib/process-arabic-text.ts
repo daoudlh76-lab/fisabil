@@ -46,13 +46,18 @@ export async function processArabicImage(
     encoding: FileSystem.EncodingType.Base64,
   });
 
+  // Détecter le mimeType réel (PNG, WebP, ou JPEG par défaut)
+  const ext = imageUri.split('?')[0].split('.').pop()?.toLowerCase();
+  const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
   if (__DEV__) {
     const sizeMB = (base64.length / (1024 * 1024)).toFixed(2);
-    __DEV__ && console.log(`📡 [process-arabic-text] Image: ${sizeMB} MB base64, lang=${uiLang}`);
+    __DEV__ && console.log(`📡 [process-arabic-text] Image: ${sizeMB} MB base64, mime=${mimeType}, lang=${uiLang}`);
   }
 
   const data = await invokeEdge<ProcessArabicResult>('process-arabic-text', {
     image_base64: base64,
+    mime_type: mimeType,
     ui_lang: uiLang,
   });
 

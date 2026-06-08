@@ -5,8 +5,9 @@
 
 type RequestBody = {
   image_base64: string;
-  ui_lang?: string; // fr | en | de | es | ru | ms | ar
-  scan_id?: string; // optionnel, pour sauvegarder le résultat
+  mime_type?: string; // image/jpeg | image/png | image/webp
+  ui_lang?: string;   // fr | en | de | es | ru | ms | ar
+  scan_id?: string;
 };
 
 function corsHeaders() {
@@ -42,6 +43,7 @@ function keepShadda(w: string): string {
 async function callGemini(
   apiKey: string,
   imageBase64: string,
+  mimeType: string,
   targetLang: string,
   uiLang: string,
 ): Promise<string> {
@@ -55,7 +57,7 @@ async function callGemini(
         parts: [
           {
             inlineData: {
-              mimeType: "image/jpeg",
+              mimeType: mimeType,
               data: imageBase64,
             },
           },
@@ -73,7 +75,7 @@ async function callGemini(
     },
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -320,6 +322,7 @@ Deno.serve(async (req) => {
     const base64 = body.image_base64.replace(/^data:image\/[a-z]+;base64,/, "");
 
     const uiLang = body.ui_lang || "fr";
+    const mimeType = body.mime_type || "image/jpeg";
     const targetLang = uiLang === "fr" ? "French"
       : uiLang === "en" ? "English"
       : uiLang === "de" ? "German"
@@ -328,10 +331,10 @@ Deno.serve(async (req) => {
       : uiLang === "ms" ? "Malay"
       : "French";
 
-    console.log(`[process-arabic-text] Processing image (${(base64.length / 1024).toFixed(0)} KB base64), lang=${uiLang}`);
+    console.log(`[process-arabic-text] Processing image (${(base64.length / 1024).toFixed(0)} KB base64), mime=${mimeType}, lang=${uiLang}`);
 
     // ── Step 1: Gemini OCR + extraction ──
-    const rawJson = await callGemini(GEMINI_API_KEY, base64, targetLang, uiLang);
+    const rawJson = await callGemini(GEMINI_API_KEY, base64, mimeType, targetLang, uiLang);
 
     console.log("[process-arabic-text] Gemini response length:", rawJson.length);
 
