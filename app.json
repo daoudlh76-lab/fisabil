@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fisabil",
     "slug": "fisabil",
-    "version": "1.1.3",
+    "version": "1.1.4",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "scheme": "fisabil",
