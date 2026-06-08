@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fisabil",
     "slug": "fisabil",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "scheme": "fisabil",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fisabil.app",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -40,8 +40,12 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
-        "android.permission.INTERNET"
-      ]
+        "android.permission.INTERNET",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
 
     "web": {
@@ -65,6 +69,14 @@
       ],
       "expo-asset",
       "./plugins/with-iap.js",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo.png",
+          "color": "#2E7D32",
+          "iosDisplayInForeground": true
+        }
+      ],
       [
         "expo-speech-recognition",
         {
