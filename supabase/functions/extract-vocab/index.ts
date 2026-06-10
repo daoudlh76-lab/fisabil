@@ -146,7 +146,7 @@ RETURN ONLY THE JSON. No markdown, no comments.`;
     },
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -341,7 +341,7 @@ Deno.serve(async (req) => {
         ui_lang: uiLang,
         title: scan.title,
         source: "gemini",
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
       },
       vocabulaire: parsed.vocabulaire || [],
       verbes,
