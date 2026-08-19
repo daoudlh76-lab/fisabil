@@ -323,7 +323,7 @@ export default function StatisticsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F3EC',
   },
   scrollContainer: {
     flex: 1,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   header: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#0D2318',
     paddingVertical: 16,
     paddingHorizontal: 16,
     paddingTop: 50,
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   summaryCount: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#C9A84C',
     marginTop: 8,
   },
   summaryLabel: {
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabActive: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#0D2318',
   },
   tabText: {
     fontSize: 12,

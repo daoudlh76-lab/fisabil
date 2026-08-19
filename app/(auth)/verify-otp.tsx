@@ -153,7 +153,7 @@ export default function VerifyOtpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: "#F8F3EC",
   },
   scrollContent: {
     flexGrow: 1,

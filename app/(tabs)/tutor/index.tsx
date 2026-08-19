@@ -1,14 +1,15 @@
 
-import AnimatedLogoButton from "@/components/AnimatedLogoButton";
 import { useChatTutor } from "@/hooks/use-chat-tutor";
 import { useLanguage } from "@/hooks/use-language";
 import { supabase } from "@/src/lib/supabase";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useSubscription } from "@/contexts/subscription-context";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
+    Animated,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -25,6 +26,11 @@ type Folder = {
   color: string;
   icon: string;
 };
+
+// Détection légère (rendu uniquement) pour distinguer les bulles de récitation arabe
+function isArabicMessage(text: string): boolean {
+  return /[؀-ۿ]/.test(text);
+}
 
 export default function TutorPage() {
   const { language, t } = useLanguage();
@@ -62,6 +68,19 @@ export default function TutorPage() {
   const [inputText, setInputText] = useState("");
   const [connecting, setConnecting] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Pulsation décorative du point "En ligne" dans le header
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulseAnim]);
 
   // Charger les dossiers
   const loadFolders = useCallback(async () => {
@@ -176,6 +195,20 @@ export default function TutorPage() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
+      {/* Header */}
+      <View style={styles.header}>
+        <LinearGradient colors={['#0D2318', '#1A4A2E']} style={styles.headerAvatar}>
+          <Text style={styles.headerAvatarIcon}>🧠</Text>
+        </LinearGradient>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Oustaze</Text>
+          <View style={styles.headerSubtitleRow}>
+            <Animated.View style={[styles.onlineDot, { opacity: pulseAnim }]} />
+            <Text style={styles.headerSubtitle}>Tuteur IA · En ligne</Text>
+          </View>
+        </View>
+      </View>
+
       {/* Bandeau abonnement requis */}
       {isLoaded && !isPremium && (
         <View style={styles.trialExpiredBanner}>
@@ -447,49 +480,47 @@ export default function TutorPage() {
               </View>
             )}
 
-            <Text style={styles.emptyStateHint}>
-              {t("realtimeTutor.pressToStart")}
-            </Text>
-            <AnimatedLogoButton
-              onPress={handleConnect}
-              disabled={connecting}
-              connecting={connecting}
-              size={180}
-            />
           </View>
         )}
 
-        {messages.map((message) => (
-          <View
-            key={message.id}
-            style={[
-              styles.messageWrapper,
-              message.role === "user"
-                ? styles.userMessageWrapper
-                : styles.tutorMessageWrapper,
-            ]}
-          >
+        {messages.map((message) => {
+          const isUser = message.role === "user";
+          const isArabic = !isUser && isArabicMessage(message.text);
+          return (
             <View
+              key={message.id}
               style={[
-                styles.messageBubble,
-                message.role === "user"
-                  ? styles.userMessage
-                  : styles.tutorMessage,
+                styles.messageWrapper,
+                isUser ? styles.userMessageWrapper : styles.tutorMessageWrapper,
               ]}
             >
-              <Text
-                style={[
-                  styles.messageText,
-                  message.role === "user"
-                    ? styles.userMessageText
-                    : styles.tutorMessageText,
-                ]}
-              >
-                {message.text}
-              </Text>
+              {isArabic ? (
+                <LinearGradient
+                  colors={['#0D2318', '#1A4A2E']}
+                  style={[styles.messageBubble, styles.arabicMessage]}
+                >
+                  <Text style={styles.arabicMessageText}>{message.text}</Text>
+                </LinearGradient>
+              ) : (
+                <View
+                  style={[
+                    styles.messageBubble,
+                    isUser ? styles.userMessage : styles.tutorMessage,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.messageText,
+                      isUser ? styles.userMessageText : styles.tutorMessageText,
+                    ]}
+                  >
+                    {message.text}
+                  </Text>
+                </View>
+              )}
             </View>
-          </View>
-        ))}
+          );
+        })}
 
         {/* Ce que l'utilisateur est en train de dire */}
         {userTranscript && (
@@ -522,54 +553,63 @@ export default function TutorPage() {
         )}
       </ScrollView>
 
-      {/* Boutons de contrôle quand connecté */}
-      {isConnected && (
-        <View style={styles.bottomControls}>
-          {/* Bouton micro principal - pour démarrer/arrêter l'enregistrement */}
+      {/* Barre de saisie — toujours visible, se connecte automatiquement au premier usage */}
+      <View style={styles.bottomControls}>
+        <View style={styles.inputBar}>
           <Pressable
             style={[
-              styles.mainMicButton,
-              isListening && styles.mainMicButtonActive,
-              isTranscribing && styles.mainMicButtonTranscribing,
-              isPaused && styles.mainMicButtonPaused,
+              styles.micCircle,
+              isListening && styles.micCircleActive,
+              isTranscribing && styles.micCircleTranscribing,
+              isPaused && styles.micCirclePaused,
             ]}
-            onPress={() => {
+            onPress={async () => {
+              if (!isConnected) {
+                setConnecting(true);
+                await handleConnect();
+                setConnecting(false);
+                return;
+              }
               if (isPaused) {
                 togglePause();
               } else if (isListening) {
-                // Arrêter l'enregistrement et transcrire
                 stopListening();
               } else if (!isSpeaking && !isTranscribing) {
                 startListening();
               }
             }}
-            disabled={isSpeaking || isTranscribing}
+            disabled={connecting || isSpeaking || isTranscribing}
           >
-            <Text style={styles.mainMicButtonText}>
-              {isPaused ? "Reprendre" : isTranscribing ? "Transcription..." : isListening ? "Arrêter" : "Parler"}
+            <Text style={styles.micCircleIcon}>
+              {isListening ? "⏹️" : isPaused ? "▶️" : "🎤"}
             </Text>
           </Pressable>
 
-          {/* Zone de texte fallback */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder={t("realtimeTutor.inputPlaceholder") || "Ou tapez votre message..."}
-              placeholderTextColor="#999"
-              value={inputText}
-              onChangeText={setInputText}
-              multiline
-            />
-            <Pressable
-              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-              onPress={handleSendText}
-              disabled={!inputText.trim()}
-            >
-              <Text style={styles.sendButtonText}>{"📤"}</Text>
-            </Pressable>
-          </View>
+          <TextInput
+            style={styles.input}
+            placeholder={t("realtimeTutor.inputPlaceholder") || "Ou tapez votre message..."}
+            placeholderTextColor="#8A8A8A"
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+          />
+
+          <Pressable
+            style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+            onPress={async () => {
+              if (!isConnected) {
+                setConnecting(true);
+                await handleConnect();
+                setConnecting(false);
+              }
+              handleSendText();
+            }}
+            disabled={!inputText.trim()}
+          >
+            <Text style={styles.sendButtonText}>{"📤"}</Text>
+          </Pressable>
         </View>
-      )}
+      </View>
 
       {/* Boutons d'action en bas */}
       <View style={styles.actionBar}>
@@ -591,7 +631,47 @@ export default function TutorPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: "#F8F3EC",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#0D2318",
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === "android" ? 24 : 56,
+    paddingBottom: 16,
+  },
+  headerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerAvatarIcon: {
+    fontSize: 20,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#F8F3EC",
+  },
+  headerSubtitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#4CAF50",
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: "rgba(248,243,236,0.6)",
   },
   trialExpiredBanner: {
     backgroundColor: "#FFEBEE",
@@ -702,12 +782,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 24,
   },
-  emptyStateHint: {
-    fontSize: 12,
-    color: "#4CAF50",
-    fontWeight: "600",
-    paddingHorizontal: 16,
-  },
   messageWrapper: {
     marginVertical: 8,
     flexDirection: "row",
@@ -725,12 +799,26 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   userMessage: {
-    backgroundColor: "#2E7D32",
+    backgroundColor: "#0D2318",
   },
   tutorMessage: {
     backgroundColor: "#FFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  arabicMessage: {
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "rgba(201,168,76,0.25)",
+  },
+  arabicMessageText: {
+    fontSize: 17,
+    lineHeight: 28,
+    color: "#C9A84C",
+    textAlign: "right",
+    writingDirection: "rtl",
   },
   transcriptBubble: {
     borderWidth: 2,
@@ -774,56 +862,49 @@ const styles = StyleSheet.create({
   bottomControls: {
     backgroundColor: "#FFF",
     borderTopWidth: 1,
-    borderTopColor: "#E0E0E0",
+    borderTopColor: "#F0E8DA",
     padding: 12,
   },
-  mainMicButton: {
+  inputBar: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#4CAF50",
-    paddingVertical: 16,
-    borderRadius: 30,
-    marginBottom: 12,
+    alignItems: "flex-end",
     gap: 8,
   },
-  mainMicButtonActive: {
+  micCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#0D2318",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  micCircleActive: {
     backgroundColor: "#1976D2",
   },
-  mainMicButtonTranscribing: {
+  micCircleTranscribing: {
     backgroundColor: "#9C27B0",
   },
-  mainMicButtonPaused: {
+  micCirclePaused: {
     backgroundColor: "#9E9E9E",
   },
-  mainMicButtonIcon: {
-    fontSize: 24,
-  },
-  mainMicButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFF",
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+  micCircleIcon: {
+    fontSize: 18,
   },
   input: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     maxHeight: 100,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#F8F3EC",
     borderRadius: 20,
     fontSize: 14,
-    marginRight: 8,
   },
   sendButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#2E7D32",
+    backgroundColor: "#0D2318",
     justifyContent: "center",
     alignItems: "center",
   },

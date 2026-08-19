@@ -7,6 +7,7 @@ import { invokeEdge } from '@/src/lib/edge-ai';
 import { migrateExtractVocabResult, needsMigration } from '@/src/lib/migrate-vocab-data';
 import { getLocalVocab } from '@/src/lib/local-cache';
 import { useSubscription } from '@/contexts/subscription-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -20,6 +21,7 @@ import {
     TextInput,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const GREEN = '#2E7D32';
 const BLUE = '#1976d2';
@@ -91,22 +93,68 @@ type DictationItem = {
 
 type ScanChoice = { id: string; title: string; content: string; wordCount: number };
 
+type DictStats = {
+  totalCompleted: number;
+  level: number;
+  progressInLevel: number;
+  streak: number;
+  perScanCounts: Map<string, number>;
+};
+
+const SEGMENTS_PER_LEVEL = 10;
+
+// Nombre de jours consécutifs (jusqu'à aujourd'hui ou hier) avec au moins une dictée complétée
+function computeStreak(daysDesc: string[]): number {
+  if (daysDesc.length === 0) return 0;
+  const oneDay = 86400000;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let cursor = new Date(todayStr);
+
+  if (daysDesc[0] !== todayStr) {
+    const yesterdayStr = new Date(cursor.getTime() - oneDay).toISOString().slice(0, 10);
+    if (daysDesc[0] !== yesterdayStr) return 0;
+    cursor = new Date(yesterdayStr);
+  }
+
+  let streak = 0;
+  for (const day of daysDesc) {
+    const expected = cursor.toISOString().slice(0, 10);
+    if (day === expected) {
+      streak++;
+      cursor = new Date(cursor.getTime() - oneDay);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 export default function RevisionScreen() {
   const { t, language } = useLanguage();
   const { isPremium, isLoaded } = useSubscription();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<'dictation' | 'vocab'>('dictation');
-  const [dictPhase, setDictPhase] = useState<'select' | 'dictation'>('select');
+  const [dictPhase, setDictPhase] = useState<'idle' | 'select' | 'dictation'>('idle');
   const [currentDictIdx, setCurrentDictIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [hasListenedOnce, setHasListenedOnce] = useState(false);
   const [flipAnim] = useState(new Animated.Value(0));
   const [dictationItems, setDictationItems] = useState<DictationItem[]>([]);
   const [loadingDictations, setLoadingDictations] = useState(false);
   const [loadingScans, setLoadingScans] = useState(true);
   const [scanChoices, setScanChoices] = useState<ScanChoice[]>([]);
   const [selectedTextTitle, setSelectedTextTitle] = useState('');
+  const [selectedScan, setSelectedScan] = useState<ScanChoice | null>(null);
   const [vocabCards, setVocabCards] = useState<VocabCard[]>([]);
   const [loadingVocab, setLoadingVocab] = useState(true);
+  const [dictStats, setDictStats] = useState<DictStats>({
+    totalCompleted: 0,
+    level: 1,
+    progressInLevel: 0,
+    streak: 0,
+    perScanCounts: new Map(),
+  });
 
   // --- Charger le vocabulaire depuis le cache AI (ai_cache)
   const loadVocabulary = useCallback(async () => {
@@ -348,6 +396,74 @@ export default function RevisionScreen() {
     }
   }, []);
 
+  // --- Charger les statistiques de dictée (segments complétés, streak, pratique par texte)
+  const loadDictationStats = useCallback(async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+      if (!userId) return;
+
+      const { data: rows, error } = await supabase
+        .from('dictations')
+        .select('scan_id, created_at')
+        .eq('user_id', userId)
+        .eq('completed', true);
+
+      if (error || !rows) {
+        __DEV__ && console.error('Erreur loadDictationStats:', error);
+        return;
+      }
+
+      const totalCompleted = rows.length;
+      const level = Math.floor(totalCompleted / SEGMENTS_PER_LEVEL) + 1;
+      const progressInLevel = (totalCompleted % SEGMENTS_PER_LEVEL) / SEGMENTS_PER_LEVEL;
+
+      const perScanCounts = new Map<string, number>();
+      for (const row of rows) {
+        if (!row.scan_id) continue;
+        perScanCounts.set(row.scan_id, (perScanCounts.get(row.scan_id) || 0) + 1);
+      }
+
+      const daysSet = new Set<string>();
+      for (const row of rows) {
+        daysSet.add(new Date(row.created_at).toISOString().slice(0, 10));
+      }
+      const daysDesc = Array.from(daysSet).sort((a, b) => (a < b ? 1 : -1));
+      const streak = computeStreak(daysDesc);
+
+      setDictStats({ totalCompleted, level, progressInLevel, streak, perScanCounts });
+    } catch (err) {
+      __DEV__ && console.error('Erreur loadDictationStats:', err);
+    }
+  }, []);
+
+  // --- Enregistrer la complétion d'un segment de dictée (appelée à l'étape Correction)
+  const recordDictationCompletion = useCallback(async (scan: ScanChoice, segmentText: string, level: string) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+      if (!userId) return;
+
+      const { error } = await supabase.from('dictations').insert({
+        user_id: userId,
+        scan_id: scan.id,
+        title: scan.title,
+        text: segmentText,
+        difficulty: level,
+        completed: true,
+      });
+
+      if (error) {
+        __DEV__ && console.error('Erreur recordDictationCompletion:', error);
+        return;
+      }
+
+      loadDictationStats();
+    } catch (err) {
+      __DEV__ && console.error('Erreur recordDictationCompletion:', err);
+    }
+  }, [loadDictationStats]);
+
   // --- Générer les dictées pour UN seul texte choisi
   const handlePickText = useCallback(async (scan: ScanChoice) => {
     if (isLoaded && !isPremium) {
@@ -362,10 +478,12 @@ export default function RevisionScreen() {
       return;
     }
     setSelectedTextTitle(scan.title);
+    setSelectedScan(scan);
     setLoadingDictations(true);
     setDictPhase('dictation');
     setCurrentDictIdx(0);
     setShowAnswer(false);
+    setHasListenedOnce(false);
 
     let dictTexts = await generateDictationsWithAI(scan.title, scan.content);
     if (dictTexts.length === 0) dictTexts = splitTextFallback(scan.content);
@@ -385,7 +503,8 @@ export default function RevisionScreen() {
   useEffect(() => {
     loadScanChoices();
     loadVocabulary();
-  }, [loadScanChoices, loadVocabulary]);
+    loadDictationStats();
+  }, [loadScanChoices, loadVocabulary, loadDictationStats]);
 
   // --- Dictation
   const {
@@ -434,6 +553,7 @@ export default function RevisionScreen() {
     if (current && current.text) {
       __DEV__ && console.log('🎧 Lecture dictée:', current.text.substring(0, 50) + '...');
       speakSentence(current.text);
+      setHasListenedOnce(true);
     }
   };
 
@@ -442,6 +562,7 @@ export default function RevisionScreen() {
     setDictationItems([]);
     setCurrentDictIdx(0);
     setShowAnswer(false);
+    setHasListenedOnce(false);
   };
 
   // --- Vocab Animations
@@ -456,29 +577,32 @@ export default function RevisionScreen() {
   });
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
-      {/* Header */}
-      <Text style={styles.header}>{t('revision.title')}</Text>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.container, { paddingTop: insets.top + 16 }]}>
+      {/* Header + tabs partagés — uniquement pour l'onglet Vocabulaire, chaque phase de la Dictée a désormais son propre header */}
+      {tab === 'vocab' && (
+        <>
+          <Text style={styles.header}>{t('revision.title')}</Text>
 
-      {/* Tab Buttons */}
-      <View style={styles.tabContainer}>
-        <Pressable
-          style={[styles.tabButton, tab === 'dictation' && styles.tabButtonActive]}
-          onPress={() => setTab('dictation')}
-        >
-          <Text style={[styles.tabButtonText, tab === 'dictation' && styles.tabButtonTextActive]}>
-            {t('revision.dictation')}
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tabButton, tab === 'vocab' && styles.tabButtonActive]}
-          onPress={() => setTab('vocab')}
-        >
-          <Text style={[styles.tabButtonText, tab === 'vocab' && styles.tabButtonTextActive]}>
-            {t('revision.vocab')}
-          </Text>
-        </Pressable>
-      </View>
+          <View style={styles.tabContainer}>
+            <Pressable
+              style={styles.tabButton}
+              onPress={() => setTab('dictation')}
+            >
+              <Text style={styles.tabButtonText}>
+                {t('revision.dictation')}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tabButton, styles.tabButtonActive]}
+              onPress={() => setTab('vocab')}
+            >
+              <Text style={[styles.tabButtonText, styles.tabButtonTextActive]}>
+                {t('revision.vocab')}
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      )}
 
       {/* Dictation Tab */}
       {tab === 'dictation' && (
@@ -492,9 +616,83 @@ export default function RevisionScreen() {
               </Pressable>
             </View>
           )}
+          {/* ── Phase 0 : Accueil Révision ── */}
+          {dictPhase === 'idle' && (
+            <View>
+              <LinearGradient
+                colors={['#0D2318', '#1A4A2E']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0.6, y: 1 }}
+                style={styles.idleHeader}
+              >
+                <Text style={styles.idleHeaderTitle}>{t('revision.title')}</Text>
+                {dictStats.streak > 0 && (
+                  <View style={styles.streakBadge}>
+                    <Text style={styles.streakBadgeText}>🔥 {t('revision.streakDays', { count: dictStats.streak })}</Text>
+                  </View>
+                )}
+
+                <View style={styles.idlePillTabs}>
+                  <Pressable
+                    style={[styles.idlePillTab, styles.idlePillTabActive]}
+                    onPress={() => setTab('dictation')}
+                  >
+                    <Text style={[styles.idlePillTabText, styles.idlePillTabTextActive]}>
+                      {t('revision.dictation')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.idlePillTab}
+                    onPress={() => setTab('vocab')}
+                  >
+                    <Text style={styles.idlePillTabText}>
+                      {t('revision.vocab')}
+                    </Text>
+                  </Pressable>
+                </View>
+              </LinearGradient>
+
+              <LinearGradient colors={['#0D2318', '#1F5C38']} style={styles.xpCard}>
+                <Text style={styles.xpCardCount}>{dictStats.totalCompleted}</Text>
+                <Text style={styles.xpCardLabel}>{t('revision.segmentsCompleted')}</Text>
+                <View style={styles.xpProgressTrack}>
+                  <View style={[styles.xpProgressFill, { width: `${dictStats.progressInLevel * 100}%` }]} />
+                </View>
+                <View style={styles.xpLevelBadge}>
+                  <Text style={styles.xpLevelBadgeText}>{t('revision.level', { n: dictStats.level })}</Text>
+                </View>
+              </LinearGradient>
+
+              <Pressable style={styles.startDictationButton} onPress={() => setDictPhase('select')}>
+                <Text style={styles.startDictationButtonText}>🎧 {t('revision.startDictation')} →</Text>
+              </Pressable>
+
+              <View style={styles.modeCardsRow}>
+                <Pressable style={styles.modeCard} onPress={() => setDictPhase('select')}>
+                  <Text style={styles.modeCardTitle}>{t('revision.dictation')}</Text>
+                  <Text style={styles.modeCardCount}>{t('revision.dictationsAvailable', { count: scanChoices.length })}</Text>
+                </Pressable>
+                <Pressable style={styles.modeCard} onPress={() => setTab('vocab')}>
+                  <Text style={styles.modeCardTitle}>{t('revision.vocab')}</Text>
+                  <Text style={styles.modeCardCount}>{t('revision.flashcardsAvailable', { count: vocabCards.length })}</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           {/* ── Phase 1 : Choisir le texte ── */}
           {dictPhase === 'select' && (
-            <View style={styles.card}>
+            <View>
+              <View style={styles.selectHeader}>
+                <View style={styles.selectHeaderRow}>
+                  <Pressable onPress={() => setDictPhase('idle')} hitSlop={10}>
+                    <Text style={styles.selectBackArrow}>←</Text>
+                  </Pressable>
+                  <Text style={styles.selectHeaderTitle}>{t('revision.chooseTextTitle')}</Text>
+                </View>
+                <Text style={styles.selectHeaderSubtitle}>{t('revision.chooseTextSubtitle')}</Text>
+              </View>
+
               {loadingScans ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={GREEN} />
@@ -510,29 +708,37 @@ export default function RevisionScreen() {
                 </View>
               ) : (
                 <>
-                  <Text style={styles.pickTitle}>📖 Choisir un texte pour la dictée</Text>
-                  <Text style={styles.pickSubtitle}>Les dictées seront créées à partir du texte choisi uniquement.</Text>
-                  {scanChoices.map((scan, idx) => (
-                    <Pressable
-                      key={scan.id}
-                      style={styles.pickCard}
-                      onPress={() => handlePickText(scan)}
-                    >
-                      <View style={styles.pickCardRow}>
-                        <View style={styles.pickCardNum}>
-                          <Text style={styles.pickCardNumText}>{idx + 1}</Text>
-                        </View>
+                  {scanChoices.map((scan) => {
+                    const segments = Math.max(1, Math.ceil(scan.wordCount / 30));
+                    const practiceCount = dictStats.perScanCounts.get(scan.id) || 0;
+                    return (
+                      <Pressable
+                        key={scan.id}
+                        style={styles.textCard}
+                        onPress={() => handlePickText(scan)}
+                      >
+                        <LinearGradient colors={['#0D2318', '#2D6A45']} style={styles.textCardIcon}>
+                          <Text style={styles.textCardIconText}>📖</Text>
+                        </LinearGradient>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.pickCardTitle} numberOfLines={1}>{scan.title}</Text>
-                          <Text style={styles.pickCardMeta}>{scan.wordCount} mots</Text>
+                          <Text style={styles.textCardTitle} numberOfLines={1}>{scan.title}</Text>
+                          <Text style={styles.textCardMeta}>
+                            {t('revision.segmentsCount', { count: segments })} · {t('revision.wordsEach')}
+                          </Text>
+                          {practiceCount > 0 ? (
+                            <View style={[styles.practiceBadge, styles.practiceBadgeDone]}>
+                              <Text style={styles.practiceBadgeDoneText}>✅ {t('revision.alreadyPracticed', { count: practiceCount })}</Text>
+                            </View>
+                          ) : (
+                            <View style={[styles.practiceBadge, styles.practiceBadgeNew]}>
+                              <Text style={styles.practiceBadgeNewText}>🆕 {t('revision.newBadge')}</Text>
+                            </View>
+                          )}
                         </View>
-                        <Text style={{ color: GREEN, fontSize: 16 }}>▶</Text>
-                      </View>
-                      <Text style={styles.pickCardPreview} numberOfLines={2}>
-                        {scan.content.substring(0, 100)}…
-                      </Text>
-                    </Pressable>
-                  ))}
+                        <Text style={styles.textCardArrow}>›</Text>
+                      </Pressable>
+                    );
+                  })}
                   <Pressable style={[styles.refreshButton, { marginTop: 12, alignSelf: 'center' }]} onPress={loadScanChoices}>
                     <Text style={styles.refreshButtonText}>🔄 {t('revision.refresh')}</Text>
                   </Pressable>
@@ -543,84 +749,107 @@ export default function RevisionScreen() {
 
           {/* ── Phase 2 : Dictée (un seul texte) ── */}
           {dictPhase === 'dictation' && (
-            <View style={styles.card}>
-              {loadingDictations ? (
+            loadingDictations ? (
+              <View style={styles.card}>
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={GREEN} />
                   <Text style={styles.loadingText}>Analyse du texte en cours…</Text>
                   <Text style={{ fontSize: 14, color: GREEN, fontWeight: '600', marginTop: 6, textAlign: 'center' }}>« {selectedTextTitle} »</Text>
                 </View>
-              ) : !current ? (
+              </View>
+            ) : !current ? (
+              <View style={styles.card}>
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>Aucune dictée générée.</Text>
                   <Pressable style={styles.refreshButton} onPress={handleBackToTextList}>
                     <Text style={styles.refreshButtonText}>← Choisir un autre texte</Text>
                   </Pressable>
                 </View>
-              ) : (
-                <>
-                  {/* Bandeau retour + titre */}
-                  <Pressable style={styles.backBar} onPress={handleBackToTextList}>
-                    <Text style={{ color: GREEN, fontWeight: 'bold', fontSize: 18 }}>←</Text>
-                    <Text style={styles.backBarTitle} numberOfLines={1}>{selectedTextTitle}</Text>
-                    <Text style={{ color: GREEN, fontSize: 13, fontWeight: '600' }}>Changer</Text>
-                  </Pressable>
+              </View>
+            ) : !showAnswer ? (
+              /* ── Étape C : Dictée en cours ── */
+              <View style={styles.dictatingScreen}>
+                <Pressable style={styles.dictatingBackBar} onPress={handleBackToTextList} hitSlop={10}>
+                  <Text style={styles.dictatingBackArrow}>←</Text>
+                  <Text style={styles.dictatingBackTitle} numberOfLines={1}>{selectedTextTitle}</Text>
+                </Pressable>
 
-                  <View style={styles.dictationHeader}>
-                    <View style={styles.levelBadge}>
-                      <Text style={styles.levelText}>{t(`revision.${current.level}`)}</Text>
+                <View style={styles.segmentPillRow}>
+                  <View style={styles.segmentPill}>
+                    <Text style={styles.segmentPillText}>
+                      {t('revision.segmentOf', { current: currentDictIdx + 1, total: dictationItems.length })}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.dictatingProgressTrack}>
+                  <View style={[styles.dictatingProgressFill, { width: `${((currentDictIdx + 1) / dictationItems.length) * 100}%` }]} />
+                </View>
+
+                <View style={styles.instructionsColumn}>
+                  <View style={styles.instructionRow}>
+                    <View style={[styles.instructionCircle, isSpeaking && styles.instructionCircleActive]}>
+                      <Text style={styles.instructionIcon}>🎧</Text>
                     </View>
-                    <Text style={styles.wordCountBadge}>
-                      📝 {current.wordCount} {t('revision.words')}
-                    </Text>
-                    <Text style={styles.dictCounter}>
-                      {currentDictIdx + 1}/{dictationItems.length}
+                    <Text style={[styles.instructionLabel, isSpeaking && styles.instructionLabelActive]}>
+                      {t('revision.listenCarefully')}
                     </Text>
                   </View>
-
-                  <View style={styles.instructionsContainer}>
-                    <Text style={styles.instruction}>📝 {t('revision.listenCarefully')}</Text>
-                    <Text style={styles.instruction}>✍️ {t('revision.writeOnPaper')}</Text>
-                    <Text style={styles.instruction}>👁️ {t('revision.checkYourAnswer')}</Text>
+                  <View style={styles.instructionRow}>
+                    <View style={[styles.instructionCircle, hasListenedOnce && styles.instructionCircleActive]}>
+                      <Text style={styles.instructionIcon}>✍️</Text>
+                    </View>
+                    <Text style={[styles.instructionLabel, hasListenedOnce && styles.instructionLabelActive]}>
+                      {t('revision.writeOnSheet')}
+                    </Text>
                   </View>
+                  <View style={styles.instructionRow}>
+                    <View style={styles.instructionCircle}>
+                      <Text style={styles.instructionIcon}>👁️</Text>
+                    </View>
+                    <Text style={styles.instructionLabel}>
+                      {t('revision.checkYourAnswerStep')}
+                    </Text>
+                  </View>
+                </View>
 
+                <View style={styles.audioCard}>
                   <Pressable
-                    style={[styles.speakButton, isSpeaking && styles.speaking]}
+                    style={[styles.listenSegmentButton, isSpeaking && styles.speaking]}
                     onPress={handleSpeak}
                     disabled={isSpeaking || isPaused}
                   >
-                    <Text style={styles.speakButtonText}>🎧 {t('revision.listen')}</Text>
+                    <Text style={styles.listenSegmentButtonText}>{t('revision.listenSegment')}</Text>
                   </Pressable>
 
                   {(isSpeaking || isPaused) && (
-                    <View style={styles.audioControlsContainer}>
-                      <View style={styles.progressBarContainer}>
-                        <View style={[styles.progressBar, { width: `${progress}%` }]} />
+                    <View style={styles.audioControlsContainerDark}>
+                      <View style={styles.progressBarContainerDark}>
+                        <View style={[styles.progressBarDark, { width: `${progress}%` }]} />
                       </View>
                       <View style={styles.audioControlsRow}>
-                        <Pressable style={styles.controlButton} onPress={rewind10s}>
-                          <Text style={styles.controlButtonText}>⏪ 10s</Text>
+                        <Pressable style={styles.controlButtonDark} onPress={rewind10s}>
+                          <Text style={styles.controlButtonDarkText}>⏪ 10s</Text>
                         </Pressable>
-                        <Pressable style={styles.controlButton} onPress={rewind5s}>
-                          <Text style={styles.controlButtonText}>⏪ 5s</Text>
+                        <Pressable style={styles.controlButtonDark} onPress={rewind5s}>
+                          <Text style={styles.controlButtonDarkText}>⏪ 5s</Text>
                         </Pressable>
-                        <Pressable style={styles.playPauseButton} onPress={togglePlayPause}>
+                        <Pressable style={styles.playPauseButtonDark} onPress={togglePlayPause}>
                           <Text style={styles.playPauseButtonText}>{isSpeaking ? '⏸️' : '▶️'}</Text>
                         </Pressable>
-                        <Pressable style={styles.controlButton} onPress={stop}>
-                          <Text style={styles.controlButtonText}>⏹️</Text>
+                        <Pressable style={styles.controlButtonDark} onPress={stop}>
+                          <Text style={styles.controlButtonDarkText}>⏹️</Text>
                         </Pressable>
                       </View>
                       <View style={styles.speedControlContainer}>
-                        <Text style={styles.speedLabel}>{t('revision.speed')}:</Text>
+                        <Text style={styles.speedLabelDark}>{t('revision.speed')}:</Text>
                         <View style={styles.speedButtonsRow}>
                           {PLAYBACK_SPEEDS.map((speed) => (
                             <Pressable
                               key={speed}
-                              style={[styles.speedButton, playbackSpeed === speed && styles.speedButtonActive]}
+                              style={[styles.speedButtonDark, playbackSpeed === speed && styles.speedButtonActiveDark]}
                               onPress={() => changeSpeed(speed)}
                             >
-                              <Text style={[styles.speedButtonText, playbackSpeed === speed && styles.speedButtonTextActive]}>{speed}x</Text>
+                              <Text style={[styles.speedButtonDarkText, playbackSpeed === speed && styles.speedButtonActiveDarkText]}>{speed}x</Text>
                             </Pressable>
                           ))}
                         </View>
@@ -628,46 +857,81 @@ export default function RevisionScreen() {
                     </View>
                   )}
 
-                  <View style={styles.buttonRow}>
-                    <Pressable style={styles.showAnswerButton} onPress={() => setShowAnswer(!showAnswer)}>
-                      <Text style={styles.showAnswerButtonText}>
-                        {showAnswer ? '🔒 ' + t('revision.hideAnswer') : '👁️ ' + t('revision.showAnswer')}
-                      </Text>
-                    </Pressable>
-                  </View>
+                  <Text style={styles.replayHint}>{t('revision.replayAsNeeded')}</Text>
+                </View>
 
-                  {showAnswer && (
-                    <View style={styles.answerCard}>
-                      <View style={styles.answerHeader}>
-                        <Text style={styles.answerHeaderText}>✅ {t('revision.correctAnswer')}</Text>
-                      </View>
-                      <Text style={styles.answerText}>{current.text}</Text>
-                    </View>
-                  )}
+                <Pressable style={styles.viewCorrectionButton} onPress={() => setShowAnswer(true)}>
+                  <Text style={styles.viewCorrectionButtonText}>👁️ {t('revision.viewCorrection')}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              /* ── Étape D : Correction ── */
+              <View style={styles.dictatingScreen}>
+                <Pressable style={styles.dictatingBackBar} onPress={handleBackToTextList} hitSlop={10}>
+                  <Text style={styles.dictatingBackArrow}>←</Text>
+                  <Text style={styles.dictatingBackTitle} numberOfLines={1}>{selectedTextTitle}</Text>
+                </Pressable>
 
-                  {/* Bouton Suivant toujours visible */}
-                  <Pressable
-                    style={styles.nextButtonMain}
-                    onPress={() => {
-                      if (currentDictIdx < dictationItems.length - 1) {
-                        setCurrentDictIdx(currentDictIdx + 1);
-                        setShowAnswer(false);
-                      } else {
-                        Alert.alert(t('revision.finished'), t('revision.allDictationsComplete'), [
-                          { text: 'OK', onPress: () => { setCurrentDictIdx(0); setShowAnswer(false); } },
-                        ]);
-                      }
-                    }}
-                  >
-                    <Text style={styles.nextButtonMainText}>
-                      {currentDictIdx < dictationItems.length - 1
-                        ? `➡️ ${t('revision.next')} (${currentDictIdx + 2}/${dictationItems.length})`
-                        : '🔄 Terminé — Recommencer'}
+                <View style={styles.segmentPillRow}>
+                  <View style={styles.segmentPill}>
+                    <Text style={styles.segmentPillText}>
+                      {t('revision.segmentOf', { current: currentDictIdx + 1, total: dictationItems.length })}
                     </Text>
-                  </Pressable>
-                </>
-              )}
-            </View>
+                  </View>
+                </View>
+                <View style={styles.dictatingProgressTrack}>
+                  <View style={[styles.dictatingProgressFill, { width: `${((currentDictIdx + 1) / dictationItems.length) * 100}%` }]} />
+                </View>
+
+                <View style={styles.heardCard}>
+                  <Text style={styles.heardCardLabel}>{t('revision.whatYouHeard')}</Text>
+                  <Text style={styles.heardCardText}>{current.text}</Text>
+                </View>
+
+                <LinearGradient colors={['#0a2e18', '#1a4a2e']} style={styles.correctionCard}>
+                  <View style={styles.correctionHeader}>
+                    <View style={styles.correctionCheckCircle}>
+                      <Text style={styles.correctionCheckIcon}>✓</Text>
+                    </View>
+                    <Text style={styles.correctionHeaderText}>{t('revision.correctText')}</Text>
+                  </View>
+                  <Text style={styles.correctionText}>{current.text}</Text>
+                </LinearGradient>
+
+                <Pressable
+                  style={styles.nextSegmentButton}
+                  onPress={() => {
+                    if (selectedScan) recordDictationCompletion(selectedScan, current.text, current.level);
+                    if (currentDictIdx < dictationItems.length - 1) {
+                      setCurrentDictIdx(currentDictIdx + 1);
+                      setShowAnswer(false);
+                      setHasListenedOnce(false);
+                    } else {
+                      Alert.alert(t('revision.finished'), t('revision.allDictationsComplete'), [
+                        {
+                          text: 'OK', onPress: () => {
+                            setCurrentDictIdx(0);
+                            setShowAnswer(false);
+                            setHasListenedOnce(false);
+                            setDictPhase('idle');
+                          }
+                        },
+                      ]);
+                    }
+                  }}
+                >
+                  <Text style={styles.nextSegmentButtonText}>
+                    {currentDictIdx < dictationItems.length - 1
+                      ? `${t('revision.nextSegment')} → (${currentDictIdx + 2}/${dictationItems.length})`
+                      : `🔄 ${t('revision.finished')}`}
+                  </Text>
+                </Pressable>
+
+                <Pressable style={styles.replaySegmentButton} onPress={handleSpeak}>
+                  <Text style={styles.replaySegmentButtonText}>{t('revision.replaySegment')}</Text>
+                </Pressable>
+              </View>
+            )
           )}
         </View>
       )}
@@ -812,7 +1076,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     paddingBottom: 40,
-    backgroundColor: 'transparent',
+    backgroundColor: '#0D2318',
   },
   trialExpiredBanner: {
     backgroundColor: '#FFEBEE',
@@ -858,6 +1122,131 @@ const styles = StyleSheet.create({
   tabButtonTextActive: {
     color: '#fff',
   },
+  // ─── Écran Accueil (dictPhase === 'idle') ───
+  idleHeader: {
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  idleHeaderTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#F8F3EC',
+  },
+  streakBadge: {
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  streakBadgeText: {
+    color: '#C9A84C',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  idlePillTabs: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 14,
+    padding: 4,
+    width: '100%',
+  },
+  idlePillTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  idlePillTabActive: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  idlePillTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  idlePillTabTextActive: {
+    color: '#0D2318',
+  },
+  xpCard: {
+    borderRadius: 18,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  xpCardCount: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#F8F3EC',
+  },
+  xpCardLabel: {
+    fontSize: 13,
+    color: 'rgba(248,243,236,0.7)',
+    marginTop: 2,
+    marginBottom: 14,
+  },
+  xpProgressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    overflow: 'hidden',
+  },
+  xpProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: '#C9A84C',
+  },
+  xpLevelBadge: {
+    marginTop: 12,
+    backgroundColor: 'rgba(201,168,76,0.18)',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  xpLevelBadgeText: {
+    color: '#C9A84C',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  startDictationButton: {
+    backgroundColor: '#0D2318',
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  startDictationButtonText: {
+    color: '#C9A84C',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  modeCardsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modeCard: {
+    flex: 1,
+    backgroundColor: 'white',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E0D5',
+  },
+  modeCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0D2318',
+  },
+  modeCardCount: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+  },
   card: {
     backgroundColor: 'white',
     borderRadius: 12,
@@ -865,59 +1254,91 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   // ─── Sélection de texte ───
-  pickTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+  // ─── Écran Sélection texte (dictPhase === 'select') ───
+  selectHeader: {
+    backgroundColor: '#0D2318',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 16,
   },
-  pickSubtitle: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 14,
-  },
-  pickCard: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e8e8e8',
-  },
-  pickCardRow: {
+  selectHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    gap: 12,
   },
-  pickCardNum: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: GREEN,
+  selectBackArrow: {
+    color: '#F8F3EC',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  selectHeaderTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#F8F3EC',
+  },
+  selectHeaderSubtitle: {
+    fontSize: 13,
+    color: 'rgba(248,243,236,0.7)',
+    marginTop: 8,
+  },
+  textCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E0D5',
+    gap: 12,
+  },
+  textCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
   },
-  pickCardNumText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: 'bold',
+  textCardIconText: {
+    fontSize: 20,
   },
-  pickCardTitle: {
+  textCardTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#333',
   },
-  pickCardMeta: {
-    fontSize: 11,
+  textCardMeta: {
+    fontSize: 12,
     color: '#999',
-    marginTop: 1,
+    marginTop: 2,
+    marginBottom: 6,
   },
-  pickCardPreview: {
-    fontSize: 13,
-    color: '#777',
-    textAlign: 'right',
-    lineHeight: 20,
+  practiceBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  practiceBadgeDone: {
+    backgroundColor: '#E8F5E9',
+  },
+  practiceBadgeDoneText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  practiceBadgeNew: {
+    backgroundColor: '#FFF3E0',
+  },
+  practiceBadgeNewText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#E65100',
+  },
+  textCardArrow: {
+    fontSize: 22,
+    color: '#0D2318',
+    fontWeight: '700',
   },
   // ─── Bandeau retour ───
   backBar: {
@@ -1325,5 +1746,268 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 12,
     fontWeight: '500',
+  },
+  // ─── Écran Dictée en cours (dictPhase === 'dictation' && !showAnswer) ───
+  dictatingScreen: {
+    backgroundColor: '#0D2318',
+    borderRadius: 20,
+    padding: 18,
+  },
+  dictatingBackBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  dictatingBackArrow: {
+    color: '#F8F3EC',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  dictatingBackTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(248,243,236,0.85)',
+  },
+  segmentPillRow: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  segmentPill: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  segmentPillText: {
+    color: '#C9A84C',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dictatingProgressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    overflow: 'hidden',
+    marginBottom: 22,
+  },
+  dictatingProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: '#C9A84C',
+  },
+  instructionsColumn: {
+    gap: 14,
+    marginBottom: 20,
+  },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  instructionCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  instructionCircleActive: {
+    backgroundColor: 'rgba(201,168,76,0.2)',
+  },
+  instructionIcon: {
+    fontSize: 18,
+  },
+  instructionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(248,243,236,0.5)',
+  },
+  instructionLabelActive: {
+    color: '#C9A84C',
+  },
+  audioCard: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  listenSegmentButton: {
+    backgroundColor: '#C9A84C',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  listenSegmentButtonText: {
+    color: '#0D2318',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  audioControlsContainerDark: {
+    marginTop: 14,
+  },
+  progressBarContainerDark: {
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 3,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  progressBarDark: {
+    height: '100%',
+    backgroundColor: '#C9A84C',
+    borderRadius: 3,
+  },
+  controlButtonDark: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  controlButtonDarkText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#F8F3EC',
+  },
+  playPauseButtonDark: {
+    backgroundColor: '#C9A84C',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  speedLabelDark: {
+    fontSize: 13,
+    color: 'rgba(248,243,236,0.6)',
+    fontWeight: '500',
+  },
+  speedButtonDark: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  speedButtonActiveDark: {
+    backgroundColor: '#C9A84C',
+    borderColor: '#C9A84C',
+  },
+  speedButtonDarkText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(248,243,236,0.7)',
+  },
+  speedButtonActiveDarkText: {
+    color: '#0D2318',
+  },
+  replayHint: {
+    fontSize: 12,
+    color: 'rgba(248,243,236,0.5)',
+    textAlign: 'center',
+    marginTop: 14,
+  },
+  viewCorrectionButton: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  viewCorrectionButtonText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  // ─── Écran Correction (dictPhase === 'dictation' && showAnswer) ───
+  heardCard: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  heardCardLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(248,243,236,0.5)',
+    marginBottom: 6,
+  },
+  heardCardText: {
+    fontSize: 16,
+    color: 'rgba(248,243,236,0.6)',
+    fontStyle: 'italic',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    lineHeight: 26,
+  },
+  correctionCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(106,191,75,0.2)',
+    padding: 16,
+    marginBottom: 16,
+  },
+  correctionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  correctionCheckCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  correctionCheckIcon: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  correctionHeaderText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#F8F3EC',
+  },
+  correctionText: {
+    fontSize: 20,
+    color: 'white',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    lineHeight: 34,
+    fontWeight: '500',
+  },
+  nextSegmentButton: {
+    backgroundColor: '#C9A84C',
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  nextSegmentButtonText: {
+    color: '#0D2318',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  replaySegmentButton: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  replaySegmentButtonText: {
+    color: 'rgba(248,243,236,0.75)',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

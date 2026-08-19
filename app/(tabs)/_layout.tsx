@@ -43,6 +43,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: t("nav.scanner"),
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <Ionicons name="camera" size={24} color={color} />
           ),
@@ -56,6 +57,7 @@ export default function TabsLayout() {
         name="library/index"
         options={{
           title: t("nav.library"),
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <Ionicons name="library" size={24} color={color} />
           ),
@@ -67,6 +69,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="library/[id]"
         options={{
+          title: t('libraryDetail.details'),
+          headerShown: false,
           href: null,
         }}
       />
@@ -75,6 +79,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="library/folder/[id]"
         options={{
+          title: t('libraryDetail.folder'),
           href: null,
         }}
       />
@@ -84,6 +89,7 @@ export default function TabsLayout() {
         name="revision/index"
         options={{
           title: t("nav.revision"),
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <Ionicons name="book" size={24} color={color} />
           ),
@@ -130,6 +136,7 @@ export default function TabsLayout() {
         name="tutor/index"
         options={{
           title: t("nav.tutor"),
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <Ionicons name="chatbubbles" size={24} color={color} />
           ),
@@ -142,6 +149,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: t("nav.settings"),
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons name="cog" size={24} color={color} />
           ),
@@ -177,6 +185,7 @@ export default function TabsLayout() {
         name="statistics"
         options={{
           title: t("settings.statistics"),
+          headerShown: false,
           href: null,
         }}
       />

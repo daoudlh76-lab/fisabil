@@ -1,13 +1,9 @@
 import { Stack } from "expo-router";
-import { ImageBackground, StyleSheet, Platform } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 export default function AuthLayout() {
   return (
-    <ImageBackground
-      source={require("@/assets/images/bg-mosque.png")}
-      style={styles.background}
-      resizeMode="cover"
-    >
+    <View style={styles.background}>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -23,13 +19,13 @@ export default function AuthLayout() {
         <Stack.Screen name="verify-otp" />
         <Stack.Screen name="verify-email" />
       </Stack>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   background: {
     flex: 1,
-    backgroundColor: "#F7F8FA",
+    backgroundColor: "#F8F3EC",
   },
 });

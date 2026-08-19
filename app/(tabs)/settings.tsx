@@ -579,10 +579,10 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(tabs)/settings/delete-account')}
         >
           <View>
-            <Text style={[styles.accountLabel, { color: '#FF5722' }]}>{t('settings.deleteAccount')}</Text>
-            <Text style={[styles.accountValue, { color: '#FF5722' }]}>{t('settings.deleteAccountDescription')}</Text>
+            <Text style={[styles.accountLabel, { color: '#C0392B' }]}>{t('settings.deleteAccount')}</Text>
+            <Text style={[styles.accountValue, { color: '#C0392B' }]}>{t('settings.deleteAccountDescription')}</Text>
           </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#FF5722" />
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#C0392B" />
         </TouchableOpacity>
       </View>
 
@@ -599,7 +599,7 @@ export default function SettingsScreen() {
             <MaterialCommunityIcons
               name="refresh"
               size={24}
-              color="#FF5722"
+              color="#C0392B"
             />
           </View>
           <View style={styles.resetInfo}>
@@ -883,27 +883,29 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#F8F3EC',
   },
   header: {
-    backgroundColor: '#1976d2',
+    backgroundColor: '#0D2318',
     paddingVertical: 20,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 56,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: '900',
+    color: '#F8F3EC',
   },
   section: {
     paddingHorizontal: 16,
     marginVertical: 16,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#8A8A8A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 12,
   },
   subscriptionCard: {
@@ -994,7 +996,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
   },
   featureInfo: {
@@ -1031,7 +1033,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#F0E8DA',
   },
   comparisonLabel: {
     flex: 1,
@@ -1047,7 +1049,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#eee',
+    backgroundColor: '#F0E8DA',
   },
   settingRow: {
     flexDirection: 'row',
@@ -1056,7 +1058,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
   },
   settingLabel: {
@@ -1075,7 +1077,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
   },
   supportIcon: {
@@ -1104,7 +1106,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1121,7 +1123,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   logoutButton: {
-    backgroundColor: '#f44336',
+    backgroundColor: '#C0392B',
     marginHorizontal: 16,
     marginVertical: 20,
     paddingVertical: 14,
@@ -1213,7 +1215,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#F0E8DA',
   },
   languageModalTitle: {
     fontSize: 18,
@@ -1254,16 +1256,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#FF5722',
+    borderLeftColor: '#C0392B',
   },
   resetIcon: {
     width: 45,
     height: 45,
     borderRadius: 12,
-    backgroundColor: '#FBE9E7',
+    backgroundColor: '#FEF0EE',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1274,15 +1276,15 @@ const styles = StyleSheet.create({
   resetLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF5722',
+    color: '#C0392B',
   },
   resetDescription: {
     fontSize: 12,
-    color: '#999',
+    color: '#8A8A8A',
     marginTop: 2,
   },
   resetConfirmButton: {
-    backgroundColor: '#FF5722',
+    backgroundColor: '#C0392B',
   },
   // Styles pour les inputs des modals
   modalInput: {

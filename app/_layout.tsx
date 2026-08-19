@@ -10,9 +10,10 @@ import { SubscriptionProvider } from '@/contexts/subscription-context';
 import { VoicePreferenceProvider } from '@/contexts/voice-preference-context';
 import { useAuth } from '@/hooks/use-auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { LanguageProvider } from '@/hooks/use-language';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ImageBackground, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
 
 // Empêcher le splash screen de se cacher automatiquement
 SplashScreen.preventAutoHideAsync();
@@ -23,8 +24,9 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const { isLoading } = useAuth();
+  const { isLoading, session } = useAuth();
   const [splashHidden, setSplashHidden] = useState(false);
+  usePushNotifications(session?.user?.id);
 
   // Cacher le splash screen natif dès que le layout React est monté
   // pour laisser voir l'écran de chargement avec la mosquée
@@ -44,11 +46,7 @@ export default function RootLayout() {
 
   if (isLoading) {
     return (
-      <ImageBackground
-        source={require('@/assets/images/bg-mosque.png')}
-        style={styles.background}
-        resizeMode="cover"
-      >
+      <View style={styles.background}>
         <View style={styles.loadingContainer}>
           <Image
             source={require('@/assets/logo.png')}
@@ -57,17 +55,13 @@ export default function RootLayout() {
           />
           <ActivityIndicator size="large" color="#2E7D32" />
         </View>
-      </ImageBackground>
+      </View>
     );
   }
 
   return (
     <ErrorBoundary>
-    <ImageBackground
-      source={require('@/assets/images/bg-mosque.png')}
-      style={styles.background}
-      resizeMode="cover"
-    >
+    <View style={styles.background}>
       <SubscriptionProvider>
         <VoicePreferenceProvider>
           <AudioPlaylistProvider>
@@ -86,7 +80,7 @@ export default function RootLayout() {
           </AudioPlaylistProvider>
         </VoicePreferenceProvider>
       </SubscriptionProvider>
-    </ImageBackground>
+    </View>
     </ErrorBoundary>
   );
 }
@@ -96,12 +90,12 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
+    backgroundColor: '#F8F3EC',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.7)',
   },
   loadingLogo: {
     width: 140,

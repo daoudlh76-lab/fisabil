@@ -199,6 +199,7 @@ export default function LoginScreen() {
         <TextInput
           style={styles.input}
           placeholder={t("auth.emailPlaceholder")}
+          placeholderTextColor="rgba(255,255,255,0.4)"
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
@@ -209,6 +210,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.passwordInput}
             placeholder={t("auth.passwordPlaceholder")}
+            placeholderTextColor="rgba(255,255,255,0.4)"
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
@@ -258,7 +260,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "transparent" },
+  container: { flex: 1, backgroundColor: "#0D2318" },
   scrollContent: { flexGrow: 1, padding: 24, justifyContent: "center" },
   logo: { width: 140, height: 140, alignSelf: "center", marginBottom: 18 },
   title: {
@@ -266,62 +268,59 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
     marginBottom: 18,
-    color: "#2F6B3D",
+    color: "#F8F3EC",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "rgba(255,255,255,0.15)",
     borderRadius: 12,
     padding: 12,
     marginTop: 10,
-    backgroundColor: "#FFF",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    color: "#F8F3EC",
   },
   passwordContainer: { position: "relative", marginTop: 10 },
   passwordInput: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "rgba(255,255,255,0.15)",
     borderRadius: 12,
     padding: 12,
     paddingRight: 50,
-    backgroundColor: "#FFF",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    color: "#F8F3EC",
   },
   eyeButton: { position: "absolute", right: 12, top: 12 },
   eyeIcon: { fontSize: 20 },
   button: {
-    backgroundColor: "#2F6B3D",
+    backgroundColor: "#C9A84C",
     padding: 16,
     borderRadius: 16,
     marginTop: 24,
     alignItems: "center",
   },
-  buttonText: { color: "#FFF", fontWeight: "800", fontSize: 16 },
+  buttonText: { color: "#0D2318", fontWeight: "800", fontSize: 16 },
   toggleText: {
     textAlign: "center",
     marginTop: 16,
-    color: "#2F6B3D",
+    color: "rgba(255,255,255,0.5)",
     textDecorationLine: "underline",
     fontWeight: "600",
   },
   forgotPasswordButton: { marginTop: 12, padding: 8 },
-  forgotPasswordText: { textAlign: "center", color: "#2F6B3D", fontSize: 14, fontWeight: "600" },
+  forgotPasswordText: { textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: 14, fontWeight: "600" },
   langButton: {
     position: "absolute",
     top: Platform.OS === "ios" ? 56 : 16,
     right: 16,
     zIndex: 10,
-    backgroundColor: "#FFF",
+    backgroundColor: "rgba(255,255,255,0.1)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderColor: "rgba(255,255,255,0.15)",
   },
-  langButtonText: { fontSize: 14, fontWeight: "600", color: "#333" },
+  langButtonText: { fontSize: 14, fontWeight: "600", color: "#F8F3EC" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",

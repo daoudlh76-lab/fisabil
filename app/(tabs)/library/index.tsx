@@ -1,6 +1,6 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Modal,
@@ -12,9 +12,22 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/hooks/use-language";
-import { getLocalScans, saveLocalScans, getLocalFolders, saveLocalFolders } from "@/src/lib/local-cache";
+import { useAudioPlaylistContext } from "@/contexts/audio-playlist-context";
+import { getLocalScans, saveLocalScans, getLocalFolders, saveLocalFolders, getLocalVocab } from "@/src/lib/local-cache";
+
+function formatRelativeDate(dateStr: string, t: (path: string, vars?: Record<string, string | number>) => string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+
+  if (diffDays <= 0) return t('library.dateToday');
+  if (diffDays === 1) return t('library.dateYesterday');
+  return t('library.dateDaysAgo', { count: diffDays });
+}
 
 type Scan = {
   id: string;
@@ -32,8 +45,10 @@ type Folder = {
 };
 
 export default function LibraryScreen() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const router = useRouter();
+  const { playlist } = useAudioPlaylistContext();
+  const insets = useSafeAreaInsets();
 
   const [scans, setScans] = useState<Scan[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -41,6 +56,7 @@ export default function LibraryScreen() {
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderIcon, setNewFolderIcon] = useState("📁");
+  const [wordCounts, setWordCounts] = useState<Record<string, number>>({});
 
   const loadFolders = useCallback(async () => {
     // Charger d'abord depuis le cache local (affichage instantané)
@@ -106,6 +122,32 @@ export default function LibraryScreen() {
     setScans(scansData);
     saveLocalScans(scansData);
   }, [router, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWordCounts() {
+      const entries = await Promise.all(
+        scans.map(async (s) => {
+          const vocab = await getLocalVocab(s.id, language);
+          const count = vocab?.vocabulaire?.filter((v: any) => !v._deleted)?.length ?? null;
+          return [s.id, count] as const;
+        })
+      );
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      for (const [id, count] of entries) {
+        if (count) map[id] = count;
+      }
+      setWordCounts(map);
+    }
+
+    if (scans.length > 0) loadWordCounts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scans, language]);
 
   const deleteFolder = useCallback(async (folderId: string, folderName: string) => {
     Alert.alert(
@@ -228,27 +270,30 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('library.title')}</Text>
-        <TouchableOpacity
-          style={styles.addFolderBtn}
-          onPress={() => setShowNewFolderModal(true)}
-        >
-          <Text style={styles.addFolderText}>+ {t('library.newFolder')}</Text>
-        </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.headerTopRow}>
+          <Text style={styles.title}>{t('library.title')}</Text>
+          <Pressable
+            style={styles.addFolderCircle}
+            onPress={() => setShowNewFolderModal(true)}
+            hitSlop={8}
+          >
+            <Text style={styles.addFolderCircleIcon}>+</Text>
+          </Pressable>
+        </View>
+
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t('library.search')}
+          placeholderTextColor="rgba(248,243,236,0.5)"
+          style={styles.search}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
       </View>
 
-      {/* Barre de recherche */}
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder={t('library.search')}
-        style={styles.search}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-
+      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <View>
         {/* Dossiers créés par l'apprenant */}
         {folders.length > 0 && (
@@ -267,6 +312,7 @@ export default function LibraryScreen() {
                     <Text style={styles.folderIcon}>{folder.icon}</Text>
                     <Text style={styles.folderName}>{folder.name}</Text>
                     <Text style={styles.folderCount}>({getFolderCount(folder.id)})</Text>
+                    <Text style={styles.folderArrow}>›</Text>
                   </Pressable>
                   <Pressable
                     style={styles.deleteFolderButton}
@@ -284,18 +330,37 @@ export default function LibraryScreen() {
         {unclassifiedScans.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('library.unclassified')}</Text>
-            {unclassifiedScans.map((item) => (
-              <Pressable
-                key={item.id}
-                style={styles.card}
-                onPress={() => router.push(`/library/${item.id}`)}
-              >
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text numberOfLines={2} style={styles.preview}>
-                  {item.content}
-                </Text>
-              </Pressable>
-            ))}
+            {unclassifiedScans.map((item) => {
+              const wordCount = wordCounts[item.id];
+              const hasAudio = playlist.tracks.some((tr) => tr.scanId === item.id);
+              return (
+                <Pressable
+                  key={item.id}
+                  style={styles.card}
+                  onPress={() => router.push(`/library/${item.id}`)}
+                >
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <View style={styles.cardMetaRow}>
+                    {wordCount ? (
+                      <>
+                        <Text style={styles.cardMetaText}>{wordCount} {t('library.wordsCount')}</Text>
+                        <Text style={styles.cardMetaDot}>·</Text>
+                      </>
+                    ) : null}
+                    <Text style={styles.cardMetaText}>{formatRelativeDate(item.created_at, t)}</Text>
+                    {hasAudio && (
+                      <>
+                        <Text style={styles.cardMetaDot}>·</Text>
+                        <Text style={styles.cardMetaBadge}>{t('library.audioBadge')}</Text>
+                      </>
+                    )}
+                  </View>
+                  <Text numberOfLines={2} style={styles.preview}>
+                    {item.content}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
 
@@ -377,23 +442,36 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "transparent" },
+  container: { flex: 1, backgroundColor: "#F8F3EC" },
   scrollContainer: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 120 },
   header: {
+    backgroundColor: "#0D2318",
+    paddingTop: 12,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
   },
-  title: { fontSize: 22, fontWeight: "bold" },
-  addFolderBtn: {
-    backgroundColor: "#2E7D32",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+  title: { fontSize: 22, fontWeight: "900", color: "#F8F3EC" },
+  addFolderCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#C9A84C",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  addFolderText: { color: "white", fontSize: 14, fontWeight: "600" },
+  addFolderCircleIcon: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#0D2318",
+    lineHeight: 24,
+  },
   foldersScroll: { marginBottom: 12 },
   foldersContainer: { paddingRight: 16 },
   folderChip: {
@@ -414,23 +492,32 @@ const styles = StyleSheet.create({
   folderIcon: { fontSize: 18, marginRight: 6 },
   folderName: { fontSize: 14, fontWeight: "600", color: "#333" },
   search: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 12,
     paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 14,
+    color: "#F8F3EC",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
   },
   count: { marginBottom: 10, color: "#666" },
   card: {
-    backgroundColor: "#E8F5E9",
+    backgroundColor: "white",
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  cardTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 6 },
-  preview: { color: "#333" },
+  cardTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 4, color: "#1a1a1a" },
+  cardMetaRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
+  cardMetaText: { fontSize: 12, color: "#8A8A8A" },
+  cardMetaDot: { fontSize: 12, color: "#8A8A8A", marginHorizontal: 6 },
+  cardMetaBadge: { fontSize: 12, color: "#2E7D32", fontWeight: "700" },
+  preview: { color: "#8A8A8A", textAlign: "right", writingDirection: "rtl" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -521,9 +608,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8A8A8A",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
     marginBottom: 12,
     marginTop: 8,
   },
@@ -534,18 +623,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
-    gap: 8,
+    gap: 4,
   },
   folderCard: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#E8F5E9",
+    backgroundColor: "white",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#C8E6C9",
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
   },
   folderHeader: {
     flexDirection: "row",
@@ -558,21 +650,24 @@ const styles = StyleSheet.create({
   },
   folderCount: {
     fontSize: 14,
-    color: "#666",
+    color: "#8A8A8A",
     marginLeft: 8,
   },
+  folderArrow: {
+    fontSize: 20,
+    color: "#8A8A8A",
+    marginLeft: "auto",
+    paddingLeft: 8,
+  },
   deleteFolderButton: {
-    backgroundColor: "#FFEBEE",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#FFCDD2",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     justifyContent: "center",
     alignItems: "center",
+    opacity: 0.5,
   },
   deleteFolderText: {
-    fontSize: 20,
+    fontSize: 16,
   },
   emptyState: {
     flex: 1,

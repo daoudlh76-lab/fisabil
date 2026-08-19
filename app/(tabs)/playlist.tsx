@@ -699,7 +699,7 @@ export default function PlaylistScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#F8F3EC',
   },
   header: {
     backgroundColor: 'transparent',

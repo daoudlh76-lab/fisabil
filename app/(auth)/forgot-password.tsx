@@ -75,6 +75,7 @@ export default function ForgotPasswordScreen() {
           <TextInput
             style={styles.input}
             placeholder={t('auth.emailPlaceholder')}
+            placeholderTextColor="rgba(255,255,255,0.4)"
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -88,7 +89,7 @@ export default function ForgotPasswordScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#FFF" />
+              <ActivityIndicator color="#0D2318" />
             ) : (
               <Text style={styles.buttonText}>{t('auth.sendResetLink')}</Text>
             )}
@@ -109,7 +110,7 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: "#0D2318",
   },
   scrollContent: {
     flexGrow: 1,
@@ -127,31 +128,32 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
     marginBottom: 16,
-    color: "#2F6B3D",
+    color: "#F8F3EC",
   },
   description: {
     fontSize: 16,
     textAlign: "center",
     marginBottom: 24,
-    color: "#666",
+    color: "rgba(255,255,255,0.6)",
     lineHeight: 24,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "rgba(255,255,255,0.15)",
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
-    backgroundColor: "#FFF",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    color: "#F8F3EC",
   },
   button: {
-    backgroundColor: "#2F6B3D",
+    backgroundColor: "#C9A84C",
     padding: 16,
     borderRadius: 16,
     alignItems: "center",
   },
   buttonText: {
-    color: "#FFF",
+    color: "#0D2318",
     fontWeight: "800",
     fontSize: 16,
   },
@@ -161,7 +163,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     textAlign: "center",
-    color: "#2F6B3D",
+    color: "rgba(255,255,255,0.5)",
     textDecorationLine: "underline",
     fontWeight: "600",
   },

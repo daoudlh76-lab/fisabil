@@ -1,10 +1,12 @@
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAudioPlaylistContext } from "@/contexts/audio-playlist-context";
 import { useSubscription } from "@/contexts/subscription-context";
@@ -27,12 +30,19 @@ import { supabase } from "@/src/lib/supabase";
 import { updateLocalScan, saveLocalVocab } from "@/src/lib/local-cache";
 import { processArabicImage } from "@/src/lib/process-arabic-text";
 
-const GREEN = "#2E7D32";
-const BG = "transparent";
+const DARK = "#0D2318";
+const DARK_MEDIUM = "#1A4A2E";
+const ZONE_BG = "#060f0a";
+const GOLD = "#C9A84C";
+const CREAM = "#F8F3EC";
+const MUTED = "#8A8A8A";
+
+const SCAN_ZONE_HEIGHT = 240;
 
 function ScannerScreen() {
   const { t, language } = useLanguage();
   const { isPremium, isLoaded } = useSubscription();
+  const insets = useSafeAreaInsets();
 
   const [title, setTitle] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -56,9 +66,34 @@ function ScannerScreen() {
   // Résultat Gemini (vocab extrait lors du scan) pour sauvegarder avec le scan
   const [lastGeminiVocab, setLastGeminiVocab] = useState<any>(null);
 
+  // États purement visuels (redesign) — n'affectent aucune logique métier
+  const [sourceSelected, setSourceSelected] = useState<"device" | "gallery" | "pdf" | null>(null);
+  const [editingText, setEditingText] = useState(false);
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
+
   const canSave = useMemo(() => {
     return title.trim().length > 0 && reviewText.trim().length > 0;
   }, [title, reviewText]);
+
+  const phase: "capture" | "loading" | "result" = ocrLoading
+    ? "loading"
+    : reviewText.trim().length > 0
+    ? "result"
+    : "capture";
+
+  useEffect(() => {
+    if (phase !== "capture") return;
+    scanLineAnim.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(scanLineAnim, {
+        toValue: 1,
+        duration: 2200,
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [phase]);
 
   async function openAppSettings() {
     if (Platform.OS === "ios") {
@@ -69,6 +104,7 @@ function ScannerScreen() {
   }
 
   async function pickFromGallery() {
+    setSourceSelected("gallery");
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       if (!perm.canAskAgain) {
@@ -101,6 +137,7 @@ function ScannerScreen() {
   }
 
   async function takePhoto() {
+    setSourceSelected("device");
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
       if (!perm.canAskAgain) {
@@ -129,6 +166,11 @@ function ScannerScreen() {
     setOcrText("");
     setReviewText("");
     setShowDiacritics(false);
+  }
+
+  function pickPdf() {
+    setSourceSelected("pdf");
+    Alert.alert(t("scanner.sourcePdf"), t("scanner.pdfComingSoon"));
   }
 
   async function runOcr() {
@@ -190,6 +232,7 @@ function ScannerScreen() {
 
       setOcrText(finalText);
       setReviewText(finalText);
+      setEditingText(false);
       if (usedGemini) setShowDiacritics(true);
 
       // ✅ Multi-page: on n'ajoute PAS à la playlist tout de suite
@@ -234,6 +277,7 @@ function ScannerScreen() {
     setReviewText("");
     setImageUri(null);
     setShowDiacritics(false);
+    setEditingText(false);
 
     Alert.alert(`✅ ${t("scanner.pageAdded")}`, `${scannedTexts.length + 1} ${t("scanner.pagesScanned")}`);
   }
@@ -348,8 +392,6 @@ function ScannerScreen() {
         }
       }
 
-      Alert.alert(t("scanner.saved"), t("scanner.savedSuccess"));
-
       setTitle("");
       setImageUri(null);
       setOcrText("");
@@ -358,229 +400,512 @@ function ScannerScreen() {
       setScannedTexts([]);
       setLastTrackId(null);
       setLastGeminiVocab(null);
+      setEditingText(false);
+      setSourceSelected(null);
+
+      if (scanId) {
+        router.push(`/library/${scanId}`);
+      }
     } catch (e: any) {
       __DEV__ && console.log("SAVE ERROR:", e);
       Alert.alert(t("scanner.error"), e?.message ?? t("scanner.saveError"));
     }
   }
 
+  const vocabPreviewItems: { singulier: string; traduction: string }[] =
+    lastGeminiVocab?.vocabulaire?.slice(0, 3) ?? [];
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.header}>{t("scanner.title")}</Text>
-
-        {/* Free user : bandeau abonnement requis */}
-        {isLoaded && !isPremium && (
-          <View style={styles.freeUserBanner}>
-            <Text style={styles.freeUserText}>{t("scanner.premiumRequired")}</Text>
-            <Pressable style={styles.upgradeLinkButton} onPress={() => router.push("/(tabs)/subscription")}>
-              <Text style={styles.upgradeLinkText}>{t("settings.upgradeToPremium")}</Text>
-            </Pressable>
-          </View>
-        )}
-
-        <Text style={styles.label}>{t("scanner.titleInput")}</Text>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          placeholder={t("scanner.titlePlaceholder")}
-          style={styles.input}
-        />
-
-        <Text style={[styles.label, { marginTop: 16 }]}>{t("scanner.scanMode")}</Text>
-        <View style={styles.modeSelector}>
-          <Pressable
-            style={[styles.modeButton, !multiPageMode && styles.modeButtonActive]}
-            onPress={() => setMultiPageMode(false)}
-          >
-            <Text style={[styles.modeButtonText, !multiPageMode && styles.modeButtonTextActive]}>
-              📄 {t("scanner.singlePage")}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.modeButton, multiPageMode && styles.modeButtonActive]}
-            onPress={() => setMultiPageMode(true)}
-          >
-            <Text style={[styles.modeButtonText, multiPageMode && styles.modeButtonTextActive]}>
-              📚 {t("scanner.multiplePages")}
-            </Text>
-          </Pressable>
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <LinearGradient colors={[DARK, DARK_MEDIUM]} style={styles.headerLogo}>
+          <Text style={styles.headerLogoIcon}>🧠</Text>
+        </LinearGradient>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>{t("nav.scanner")}</Text>
+          <Text style={styles.headerSubtitle}>{t("scanner.subtitle")}</Text>
         </View>
+      </View>
 
-        <Text style={[styles.label, { marginTop: 16 }]}>{t("scanner.import")}</Text>
-
-        <View style={styles.buttonRow}>
-          <Pressable style={styles.boxButton} onPress={takePhoto}>
-            <Text style={styles.boxIcon}>📷</Text>
-            <Text style={styles.boxText}>{t("scanner.photo")}</Text>
-          </Pressable>
-
-          <Pressable style={styles.boxButton} onPress={pickFromGallery}>
-            <Text style={styles.boxIcon}>🖼️</Text>
-            <Text style={styles.boxText}>{t("scanner.gallery")}</Text>
-          </Pressable>
-        </View>
-
-        <Text style={[styles.label, { marginTop: 16 }]}>{t("scanner.preview")}</Text>
-        <View style={styles.preview}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.previewImg} />
-          ) : (
-            <Text style={styles.previewEmpty}>{t("scanner.previewEmpty")}</Text>
-          )}
-        </View>
-
-        <Pressable style={[styles.primaryButton, ocrLoading && { opacity: 0.7 }]} onPress={runOcr} disabled={ocrLoading}>
-          {ocrLoading ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <ActivityIndicator color="white" size="small" />
-              <Text style={styles.primaryButtonText}>{t("scanner.ocrLoading")}</Text>
-            </View>
-          ) : (
-            <Text style={styles.primaryButtonText}>{t("scanner.ocr")}</Text>
-          )}
-        </Pressable>
-
-        {multiPageMode && scannedTexts.length > 0 && (
-          <View style={styles.pagesContainer}>
-            <Text style={[styles.label, { marginTop: 16 }]}>
-              {t("scanner.scannedPages")} ({scannedTexts.length})
-            </Text>
-            <View style={styles.pagesList}>
-              {scannedTexts.map((text, index) => (
-                <View key={index} style={styles.pageCard}>
-                  <View style={styles.pageCardHeader}>
-                    <Text style={styles.pageCardTitle}>
-                      📄 {t("scanner.page")} {index + 1}
-                    </Text>
-                    <Text style={styles.pageCardPreview} numberOfLines={1}>
-                      {text.substring(0, 30)}...
-                    </Text>
-                  </View>
-                  <Pressable style={styles.pageCardRemoveButton} onPress={() => removeScannedText(index)}>
-                    <Text style={styles.pageCardRemoveText}>❌ {t("scanner.remove")}</Text>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { backgroundColor: phase === "result" ? CREAM : DARK },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          {phase === "capture" && (
+            <>
+              {isLoaded && !isPremium && (
+                <View style={styles.freeUserBanner}>
+                  <Text style={styles.freeUserText}>{t("scanner.premiumRequired")}</Text>
+                  <Pressable style={styles.upgradeLinkButton} onPress={() => router.push("/(tabs)/subscription")}>
+                    <Text style={styles.upgradeLinkText}>{t("settings.upgradeToPremium")}</Text>
                   </Pressable>
                 </View>
-              ))}
+              )}
+
+              <View style={styles.scanZone}>
+                {imageUri ? (
+                  <Image source={{ uri: imageUri }} style={styles.scanZoneImage} />
+                ) : (
+                  <>
+                    <Text style={styles.scanZoneEmptyIcon}>📷</Text>
+                    <Text style={styles.scanZoneEmptyText}>{t("scanner.previewEmpty")}</Text>
+                  </>
+                )}
+
+                <View style={[styles.corner, styles.cornerTL]} />
+                <View style={[styles.corner, styles.cornerTR]} />
+                <View style={[styles.corner, styles.cornerBL]} />
+                <View style={[styles.corner, styles.cornerBR]} />
+
+                <Animated.View
+                  style={[
+                    styles.scanLine,
+                    {
+                      transform: [
+                        {
+                          translateY: scanLineAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [8, SCAN_ZONE_HEIGHT - 10],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.sheet}>
+                <Text style={styles.sheetLabel}>{t("scanner.source")}</Text>
+                <View style={styles.sourceRow}>
+                  <Pressable
+                    style={[styles.sourceButton, sourceSelected === "device" && styles.sourceButtonActive]}
+                    onPress={takePhoto}
+                  >
+                    <Text
+                      style={[
+                        styles.sourceButtonText,
+                        sourceSelected === "device" && styles.sourceButtonTextActive,
+                      ]}
+                    >
+                      {t("scanner.sourceDevice")}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.sourceButton, sourceSelected === "gallery" && styles.sourceButtonActive]}
+                    onPress={pickFromGallery}
+                  >
+                    <Text
+                      style={[
+                        styles.sourceButtonText,
+                        sourceSelected === "gallery" && styles.sourceButtonTextActive,
+                      ]}
+                    >
+                      {t("scanner.gallery")}
+                    </Text>
+                  </Pressable>
+                  <Pressable style={[styles.sourceButton, styles.sourceButtonMuted]} onPress={pickPdf}>
+                    <Text style={styles.sourceButtonTextMuted}>{t("scanner.sourcePdf")}</Text>
+                  </Pressable>
+                </View>
+
+                <Text style={[styles.sheetLabel, { marginTop: 18 }]}>{t("scanner.modeLabel")}</Text>
+                <View style={styles.modeToggle}>
+                  <Pressable
+                    style={[styles.modeToggleOption, !multiPageMode && styles.modeToggleOptionActive]}
+                    onPress={() => setMultiPageMode(false)}
+                  >
+                    <Text style={[styles.modeToggleText, !multiPageMode && styles.modeToggleTextActive]}>
+                      {t("scanner.singlePage")}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.modeToggleOption, multiPageMode && styles.modeToggleOptionActive]}
+                    onPress={() => setMultiPageMode(true)}
+                  >
+                    <Text style={[styles.modeToggleText, multiPageMode && styles.modeToggleTextActive]}>
+                      {t("scanner.multiplePages")}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {multiPageMode && scannedTexts.length > 0 && (
+                  <View style={styles.pagesContainer}>
+                    <Text style={[styles.sheetLabel, { marginTop: 18 }]}>
+                      {t("scanner.scannedPages")} ({scannedTexts.length})
+                    </Text>
+                    <View style={styles.pagesList}>
+                      {scannedTexts.map((text, index) => (
+                        <View key={index} style={styles.pageCard}>
+                          <View style={styles.pageCardHeader}>
+                            <Text style={styles.pageCardTitle}>
+                              {t("scanner.page")} {index + 1}
+                            </Text>
+                            <Text style={styles.pageCardPreview} numberOfLines={1}>
+                              {text.substring(0, 30)}...
+                            </Text>
+                          </View>
+                          <Pressable style={styles.pageCardRemoveButton} onPress={() => removeScannedText(index)}>
+                            <Text style={styles.pageCardRemoveText}>{t("scanner.remove")}</Text>
+                          </Pressable>
+                        </View>
+                      ))}
+                    </View>
+                    <Pressable style={styles.secondaryDarkButton} onPress={mergeScannedTexts}>
+                      <Text style={styles.secondaryDarkButtonText}>{t("scanner.mergePagesButton")}</Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                <Pressable
+                  style={[styles.darkButton, { marginTop: 18 }, !imageUri && { opacity: 0.5 }]}
+                  onPress={runOcr}
+                  disabled={!imageUri}
+                >
+                  <Text style={styles.darkButtonText}>{t("scanner.analyzeButton")} →</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+
+          {phase === "loading" && (
+            <View style={styles.loadingWrap}>
+              <View style={styles.stepRow}>
+                <View style={[styles.stepIconWrap, styles.stepIconDone]}>
+                  <Text style={styles.stepIconTextDone}>✓</Text>
+                </View>
+                <Text style={[styles.stepText, styles.stepTextDone]}>{t("scanner.stepReadText")}</Text>
+              </View>
+
+              <View style={styles.stepRow}>
+                <View style={[styles.stepIconWrap, styles.stepIconActive]}>
+                  <ActivityIndicator size="small" color={DARK} />
+                </View>
+                <Text style={[styles.stepText, styles.stepTextActive]}>{t("scanner.stepAddVowels")}</Text>
+              </View>
+
+              <View style={[styles.stepRow, { opacity: 0.4 }]}>
+                <View style={styles.stepIconWrap}>
+                  <Text style={styles.stepIconTextPending}>3</Text>
+                </View>
+                <Text style={styles.stepText}>{t("scanner.stepExtractVocab")}</Text>
+              </View>
             </View>
-            <Pressable style={styles.mergeButton} onPress={mergeScannedTexts}>
-              <Text style={styles.mergeButtonText}>🔗 {t("scanner.mergePagesButton")}</Text>
-            </Pressable>
-          </View>
-        )}
+          )}
 
-        {multiPageMode && (
-          <Pressable style={styles.addButton} onPress={addScannedText}>
-            <Text style={styles.addButtonText}>➕ {t("scanner.addThisPage")}</Text>
-          </Pressable>
-        )}
+          {phase === "result" && (
+            <View style={styles.resultWrap}>
+              <Text style={styles.resultLabel}>{t("scanner.titleInput")}</Text>
+              <TextInput
+                value={title}
+                onChangeText={setTitle}
+                placeholder={t("scanner.titlePlaceholder")}
+                placeholderTextColor={MUTED}
+                style={styles.titleInput}
+              />
 
-        <Text style={[styles.label, { marginTop: 16 }]}>{t("scanner.textDetected")}</Text>
-        <View style={styles.card}>
-          <Text style={styles.smallOk}>{ocrText ? t("scanner.ocrOk") : t("scanner.ocrEmpty")}</Text>
-          {ocrText ? <Text style={styles.detected}>{ocrText}</Text> : null}
-        </View>
+              <View style={styles.textCard}>
+                <View style={styles.textCardHeader}>
+                  <Text style={styles.textCardTitle}>{t("scanner.textDetected")}</Text>
+                  <Pressable onPress={() => setEditingText((v) => !v)} hitSlop={8}>
+                    <Text style={styles.correctButton}>✏️ {t("scanner.correctButton")}</Text>
+                  </Pressable>
+                </View>
+                {editingText ? (
+                  <TextInput
+                    value={reviewText}
+                    onChangeText={setReviewText}
+                    multiline
+                    style={styles.textCardEditable}
+                  />
+                ) : (
+                  <Text style={styles.textCardContent}>{reviewText}</Text>
+                )}
+              </View>
 
-        <Text style={[styles.label, { marginTop: 16 }]}>{t("scanner.review")}</Text>
-        <TextInput
-          value={reviewText}
-          onChangeText={setReviewText}
-          placeholder={t("scanner.reviewPlaceholder")}
-          multiline
-          style={styles.textarea}
-        />
+              <Pressable
+                style={[styles.reanalyzeLink, diacriticsLoading && { opacity: 0.5 }]}
+                onPress={handleAddDiacritics}
+                disabled={diacriticsLoading}
+              >
+                <Text style={styles.reanalyzeLinkText}>
+                  {diacriticsLoading ? t("scanner.reanalyzing") : t("scanner.reanalyze")}
+                </Text>
+              </Pressable>
 
-        <Pressable style={[styles.addVowelsButton, diacriticsLoading && { opacity: 0.5 }]} onPress={handleAddDiacritics} disabled={diacriticsLoading}>
-          <Text style={styles.addVowelsButtonText}>
-            {diacriticsLoading ? t("scanner.reanalyzing") : t("scanner.reanalyze")}
-          </Text>
-        </Pressable>
+              {showDiacritics && (
+                <View style={styles.vowelsInfo}>
+                  <Text style={styles.vowelsInfoText}>{t("scanner.reanalyzeDone")}</Text>
+                </View>
+              )}
 
-        {showDiacritics && (
-          <View style={styles.vowelsInfo}>
-            <Text style={styles.vowelsInfoText}>{t("scanner.reanalyzeDone")}</Text>
-          </View>
-        )}
+              {vocabPreviewItems.length > 0 && (
+                <View style={styles.vocabCard}>
+                  <Text style={styles.vocabCardTitle}>{t("scanner.vocabPreview")}</Text>
+                  {vocabPreviewItems.map((v, i) => (
+                    <View key={i} style={styles.vocabRow}>
+                      <Text style={styles.vocabWord}>{v.singulier}</Text>
+                      <Text style={styles.vocabTranslation}>{v.traduction}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
 
-        <Pressable style={[styles.saveButton, !canSave && { opacity: 0.5 }]} onPress={saveScan} disabled={!canSave}>
-          <Text style={styles.saveButtonText}>{t("scanner.save")}</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+              {multiPageMode ? (
+                <Pressable style={styles.darkButton} onPress={addScannedText}>
+                  <Text style={styles.darkButtonText}>{t("scanner.addThisPage")}</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={[styles.darkButton, !canSave && { opacity: 0.5 }]}
+                  onPress={saveScan}
+                  disabled={!canSave}
+                >
+                  <Text style={styles.darkButtonText}>{t("scanner.saveAndOpen")} →</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 18, paddingBottom: 40, backgroundColor: BG },
-  header: { fontSize: 22, fontWeight: "800", textAlign: "center", marginBottom: 14 },
+  container: { flex: 1, backgroundColor: DARK },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: DARK,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  headerLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerLogoIcon: { fontSize: 18 },
+  headerTitle: { fontSize: 20, fontWeight: "900", color: CREAM },
+  headerSubtitle: { fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 2 },
+
+  scrollContent: { flexGrow: 1, paddingBottom: 40 },
 
   freeUserBanner: {
-    backgroundColor: "#FFF3E0",
+    backgroundColor: "rgba(201,168,76,0.12)",
     padding: 14,
-    borderRadius: 8,
-    marginBottom: 16,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
     borderLeftWidth: 4,
-    borderLeftColor: "#FF9800",
+    borderLeftColor: GOLD,
   },
-  freeUserText: { fontSize: 14, fontWeight: "700", color: "#E65100", textAlign: "center" },
-  upgradeLinkButton: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: GREEN, borderRadius: 6, alignSelf: "center" },
-  upgradeLinkText: { fontSize: 13, fontWeight: "600", color: "white" },
+  freeUserText: { fontSize: 14, fontWeight: "700", color: CREAM, textAlign: "center" },
+  upgradeLinkButton: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: GOLD, borderRadius: 6, alignSelf: "center" },
+  upgradeLinkText: { fontSize: 13, fontWeight: "700", color: DARK },
 
-  label: { fontSize: 14, fontWeight: "700", color: GREEN, marginBottom: 8 },
-  input: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  scanZone: {
+    height: SCAN_ZONE_HEIGHT,
+    backgroundColor: ZONE_BG,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(201,168,76,0.2)",
+    marginHorizontal: 16,
+    marginTop: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    position: "relative",
+  },
+  scanZoneImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  scanZoneEmptyIcon: { fontSize: 34, marginBottom: 8, opacity: 0.35 },
+  scanZoneEmptyText: { color: "rgba(248,243,236,0.35)", fontSize: 13 },
+  corner: { position: "absolute", width: 22, height: 22, borderColor: GOLD },
+  cornerTL: { top: 10, left: 10, borderTopWidth: 2, borderLeftWidth: 2, borderTopLeftRadius: 6 },
+  cornerTR: { top: 10, right: 10, borderTopWidth: 2, borderRightWidth: 2, borderTopRightRadius: 6 },
+  cornerBL: { bottom: 10, left: 10, borderBottomWidth: 2, borderLeftWidth: 2, borderBottomLeftRadius: 6 },
+  cornerBR: { bottom: 10, right: 10, borderBottomWidth: 2, borderRightWidth: 2, borderBottomRightRadius: 6 },
+  scanLine: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    height: 2,
+    backgroundColor: GOLD,
+    opacity: 0.85,
+    shadowColor: GOLD,
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
 
-  buttonRow: { flexDirection: "row", gap: 12 },
-  boxButton: { flex: 1, backgroundColor: "#EAF4EA", borderWidth: 2, borderColor: GREEN, borderStyle: "dashed", borderRadius: 14, paddingVertical: 18, alignItems: "center", justifyContent: "center" },
-  boxIcon: { fontSize: 18, marginBottom: 6 },
-  boxText: { fontSize: 16, fontWeight: "700", color: GREEN },
+  sheet: {
+    backgroundColor: CREAM,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    marginTop: 16,
+    padding: 18,
+    flex: 1,
+  },
+  sheetLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
 
-  preview: { backgroundColor: "#fff", borderRadius: 14, borderWidth: 1, borderColor: "#E5E7EB", height: 220, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  previewImg: { width: "100%", height: "100%", resizeMode: "cover" },
-  previewEmpty: { color: "#6B7280" },
+  sourceRow: { flexDirection: "row", gap: 10 },
+  sourceButton: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  sourceButtonActive: { borderColor: DARK_MEDIUM, backgroundColor: "#f0f7f2" },
+  sourceButtonText: { fontSize: 13, fontWeight: "700", color: DARK },
+  sourceButtonTextActive: { color: DARK_MEDIUM },
+  sourceButtonMuted: { opacity: 0.55 },
+  sourceButtonTextMuted: { fontSize: 13, fontWeight: "700", color: MUTED },
 
-  primaryButton: { marginTop: 14, backgroundColor: GREEN, borderRadius: 14, paddingVertical: 16, alignItems: "center" },
-  primaryButtonText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  modeToggle: {
+    flexDirection: "row",
+    backgroundColor: "rgba(0,0,0,0.06)",
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
+  },
+  modeToggleOption: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: "center" },
+  modeToggleOptionActive: { backgroundColor: "#fff" },
+  modeToggleText: { fontSize: 13, fontWeight: "700", color: MUTED },
+  modeToggleTextActive: { color: DARK },
 
-  card: { backgroundColor: "#fff", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#E5E7EB" },
-  smallOk: { color: "#111827", marginBottom: 8, fontWeight: "600" },
-  detected: { color: "#111827", lineHeight: 20 },
-
-  textarea: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 14, padding: 14, minHeight: 150, textAlignVertical: "top" },
-
-  addVowelsButton: { marginTop: 14, backgroundColor: "#6366f1", borderRadius: 14, paddingVertical: 14, alignItems: "center" },
-  addVowelsButtonText: { color: "#fff", fontWeight: "800", fontSize: 14 },
-
-  vowelsInfo: { backgroundColor: "#d4edda", borderWidth: 1, borderColor: "#c3e6cb", borderRadius: 12, padding: 12, marginTop: 10 },
-  vowelsInfoText: { color: "#155724", fontWeight: "600", fontSize: 14 },
-
-  saveButton: { marginTop: 16, backgroundColor: GREEN, borderRadius: 14, paddingVertical: 16, alignItems: "center" },
-  saveButtonText: { color: "#fff", fontSize: 16, fontWeight: "900" },
-
-  modeSelector: { flexDirection: "row", gap: 10 },
-  modeButton: { flex: 1, backgroundColor: "#E5E7EB", borderWidth: 2, borderColor: "#D1D5DB", borderRadius: 12, paddingVertical: 12, alignItems: "center" },
-  modeButtonActive: { backgroundColor: GREEN, borderColor: GREEN },
-  modeButtonText: { fontSize: 14, fontWeight: "700", color: "#6B7280" },
-  modeButtonTextActive: { color: "#fff" },
-
-  pagesContainer: { marginTop: 16 },
+  pagesContainer: { marginTop: 4 },
   pagesList: { gap: 10 },
-
-  pageCard: { backgroundColor: "#fff", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#E5E7EB", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  pageCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   pageCardHeader: { flex: 1 },
-  pageCardTitle: { fontSize: 14, fontWeight: "700", color: GREEN, marginBottom: 4 },
-  pageCardPreview: { fontSize: 12, color: "#6B7280" },
-  pageCardRemoveButton: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "#FEE2E2", borderRadius: 8 },
-  pageCardRemoveText: { fontSize: 12, fontWeight: "600", color: "#DC2626" },
+  pageCardTitle: { fontSize: 14, fontWeight: "700", color: DARK, marginBottom: 4 },
+  pageCardPreview: { fontSize: 12, color: MUTED },
+  pageCardRemoveButton: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "#FEECEA", borderRadius: 8 },
+  pageCardRemoveText: { fontSize: 12, fontWeight: "700", color: "#C0392B" },
 
-  mergeButton: { marginTop: 12, backgroundColor: "#3B82F6", borderRadius: 12, paddingVertical: 14, alignItems: "center" },
-  mergeButtonText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  secondaryDarkButton: {
+    marginTop: 12,
+    backgroundColor: "rgba(13,35,24,0.08)",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  secondaryDarkButtonText: { color: DARK, fontWeight: "800", fontSize: 14 },
 
-  addButton: { marginTop: 14, backgroundColor: "#8B5CF6", borderRadius: 14, paddingVertical: 14, alignItems: "center" },
-  addButtonText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  darkButton: {
+    backgroundColor: DARK,
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  darkButtonText: { color: GOLD, fontSize: 16, fontWeight: "800" },
+
+  loadingWrap: { flex: 1, paddingHorizontal: 24, paddingTop: 60, gap: 24 },
+  stepRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  stepIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  stepIconDone: { backgroundColor: GOLD },
+  stepIconActive: { backgroundColor: "rgba(201,168,76,0.15)", borderWidth: 1.5, borderColor: GOLD },
+  stepIconTextDone: { color: DARK, fontWeight: "900", fontSize: 15 },
+  stepIconTextPending: { color: "rgba(255,255,255,0.4)", fontWeight: "700", fontSize: 13 },
+  stepText: { fontSize: 15, fontWeight: "600", color: "rgba(255,255,255,0.4)" },
+  stepTextDone: { color: GOLD, fontWeight: "700" },
+  stepTextActive: { color: CREAM, fontWeight: "700" },
+
+  resultWrap: { padding: 18, gap: 14 },
+  resultLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: -6,
+  },
+  titleInput: {
+    backgroundColor: "#f2f2f2",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: DARK,
+    fontSize: 15,
+  },
+
+  textCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    gap: 10,
+  },
+  textCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  textCardTitle: { fontSize: 11, fontWeight: "800", color: MUTED, textTransform: "uppercase", letterSpacing: 0.5 },
+  correctButton: { fontSize: 13, fontWeight: "700", color: DARK_MEDIUM },
+  textCardContent: { color: "#1a1a1a", lineHeight: 26, fontSize: 16, textAlign: "right", writingDirection: "rtl" },
+  textCardEditable: {
+    color: "#1a1a1a",
+    lineHeight: 26,
+    fontSize: 16,
+    textAlign: "right",
+    writingDirection: "rtl",
+    minHeight: 120,
+    textAlignVertical: "top",
+  },
+
+  reanalyzeLink: { alignSelf: "flex-start" },
+  reanalyzeLinkText: { fontSize: 13, fontWeight: "700", color: MUTED, textDecorationLine: "underline" },
+
+  vowelsInfo: { backgroundColor: "#eaf5ec", borderRadius: 12, padding: 12 },
+  vowelsInfoText: { color: DARK_MEDIUM, fontWeight: "600", fontSize: 13 },
+
+  vocabCard: { backgroundColor: "#fff", borderRadius: 14, padding: 14, gap: 8 },
+  vocabCardTitle: { fontSize: 11, fontWeight: "800", color: MUTED, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 },
+  vocabRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  vocabWord: { fontSize: 16, fontWeight: "700", color: DARK, textAlign: "right", writingDirection: "rtl" },
+  vocabTranslation: { fontSize: 13, color: MUTED },
 });
 
 export default ScannerScreen;

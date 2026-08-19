@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -75,10 +75,12 @@ export default function FolderDetailScreen() {
     setScans((data ?? []) as Scan[]);
   }, [id, t]);
 
-  useEffect(() => {
-    loadFolder();
-    loadScans();
-  }, [loadFolder, loadScans]);
+  useFocusEffect(
+    useCallback(() => {
+      loadFolder();
+      loadScans();
+    }, [loadFolder, loadScans])
+  );
 
   const filteredScans = scans.filter((scan) => {
     const q = query.trim().toLowerCase();
@@ -143,7 +145,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "transparent",
+    backgroundColor: "#F8F3EC",
   },
   header: {
     marginBottom: 12,

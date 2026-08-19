@@ -12,6 +12,7 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/src/lib/supabase";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
@@ -57,6 +58,7 @@ type ExtractResponse = {
 export default function LibraryItemScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const id = useMemo(() => String(params.id ?? ""), [params.id]);
 
   const [loading, setLoading] = useState(true);
@@ -93,6 +95,12 @@ export default function LibraryItemScreen() {
   const [addingParticle, setAddingParticle] = useState(false);
   const [newWordInput, setNewWordInput] = useState('');
   const [completingWord, setCompletingWord] = useState(false);
+  // --- Carte ouverte par onglet (une seule à la fois par catégorie)
+  const [expandedIndex, setExpandedIndex] = useState<Record<'mots' | 'verbes' | 'particules', string | null>>({
+    mots: null,
+    verbes: null,
+    particules: null,
+  });
 
   const canSave = useMemo(() => {
     if (!editing) return false;
@@ -868,14 +876,15 @@ export default function LibraryItemScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: '#0D2318' }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{editing ? t('libraryDetail.edit') : t('libraryDetail.details')}</Text>
+      <ScrollView style={{ backgroundColor: '#F8F3EC' }} contentContainerStyle={styles.pageContainer} keyboardShouldPersistTaps="handled">
+      <View style={[styles.zoneTop, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.titleOnDark}>{editing ? t('libraryDetail.edit') : t('libraryDetail.details')}</Text>
 
-      <Text style={styles.label}>{t('libraryDetail.title')}</Text>
+      <Text style={styles.labelOnDark}>{t('libraryDetail.title')}</Text>
       <TextInput
         style={[styles.input, !editing && styles.inputDisabled]}
         value={newTitle}
@@ -884,7 +893,7 @@ export default function LibraryItemScreen() {
         placeholder={t('libraryDetail.title')}
       />
 
-      <Text style={styles.label}>{t('libraryDetail.text')}</Text>
+      <Text style={styles.labelOnDark}>{t('libraryDetail.text')}</Text>
       <TextInput
         style={[styles.textarea, !editing && styles.inputDisabled]}
         value={newContent}
@@ -898,7 +907,7 @@ export default function LibraryItemScreen() {
       {/* Sélection du dossier - Toujours visible */}
       {!editing && (
         <View style={styles.folderSection}>
-          <Text style={styles.label}>📁 {t('libraryDetail.folder')}</Text>
+          <Text style={styles.labelOnDark}>📁 {t('libraryDetail.folder')}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -968,7 +977,9 @@ export default function LibraryItemScreen() {
           </>
         )}
       </View>
+      </View>
 
+      <View style={styles.zoneBottom}>
       {/* ============================= */}
       {/* ✅ SECTION IA */}
       {/* ============================= */}
@@ -984,13 +995,21 @@ export default function LibraryItemScreen() {
           </View>
         )}
 
-        {/* Bouton d'extraction si pas encore de données */}
+        {/* État vide : vocabulaire pas encore extrait */}
         {!aiData && !aiLoading && (
-          <Pressable style={styles.extractButton} onPress={generateVocab}>
-            <Text style={styles.extractButtonText}>
-              ✨ {t('libraryDetail.extractVocab') || "Extraire le vocabulaire"}
-            </Text>
-          </Pressable>
+          <View style={styles.emptyVocab}>
+            <View style={styles.emptyVocabIconCircle}>
+              <Text style={styles.emptyVocabIcon}>✨</Text>
+            </View>
+            <Text style={styles.emptyVocabTitle}>{t('libraryDetail.emptyVocabTitle')}</Text>
+            <Text style={styles.emptyVocabSubtitle}>{t('libraryDetail.emptyVocabSubtitle')}</Text>
+            <Pressable style={styles.extractButton} onPress={generateVocab}>
+              <Text style={styles.extractButtonText}>
+                ✨ {t('libraryDetail.extractVocab')}
+              </Text>
+            </Pressable>
+            <Text style={styles.emptyVocabHint}>{t('libraryDetail.emptyVocabHint')}</Text>
+          </View>
         )}
 
         {!!aiData && (
@@ -1028,19 +1047,105 @@ export default function LibraryItemScreen() {
             {/* Bouton régénérer pour forcer la ré-extraction */}
             <Pressable style={styles.regenerateButton} onPress={regenerateVocab}>
               <Text style={styles.regenerateButtonText}>
-                🔄 {t('libraryDetail.regenerate')}
+                ⚠️ {t('libraryDetail.regenerate')}
               </Text>
             </Pressable>
 
             {/* LISTE DES MOTS */}
             {showVocab && (
-              <View style={styles.tableContainer}>
-                <View style={styles.tableTitleRow}>
-                  <Text style={styles.tableTitle}>{t('libraryDetail.wordsList')}</Text>
-                  <Pressable style={styles.addButton} onPress={() => { setAddingWord(true); setNewWordInput(''); }}>
-                    <Text style={styles.addButtonText}>+ {t('libraryDetail.addWord')}</Text>
-                  </Pressable>
-                </View>
+              <View style={styles.vocabSection}>
+                <Text style={styles.vocabSectionTitle}>{t('libraryDetail.wordsList')}</Text>
+
+                {aiData.vocabulaire?.filter((v: any) => !v._deleted)?.length ? (
+                  aiData.vocabulaire.map((v: any, idx) => {
+                    if (v._deleted) return null;
+                    const cardKey = `mots-${idx}`;
+                    const isExpanded = expandedIndex.mots === cardKey;
+
+                    if (editingVocabIdx === idx) {
+                      return (
+                        <View key={`v-edit-${idx}`} style={styles.editCard}>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.translation')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputFull]}
+                              value={editedItem?.traduction || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, traduction: text })}
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.singular')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, styles.editInputFull]}
+                              value={editedItem?.singulier || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, singulier: text })}
+                              textAlign="right"
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.plural')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, styles.editInputFull]}
+                              value={editedItem?.pluriel || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, pluriel: text })}
+                              textAlign="right"
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.opposite')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, styles.editInputFull]}
+                              value={editedItem?.contraire || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, contraire: text })}
+                              textAlign="right"
+                            />
+                          </View>
+                          <View style={styles.editActionsRow}>
+                            <Pressable onPress={saveEditVocab}><Text style={styles.saveBtn}>✓</Text></Pressable>
+                            <Pressable onPress={() => { setEditingVocabIdx(null); setEditedItem(null); }}><Text style={styles.cancelBtn}>✕</Text></Pressable>
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <Pressable
+                        key={`v-${idx}`}
+                        style={styles.wordCard}
+                        onPress={() => setExpandedIndex((prev) => ({ ...prev, mots: isExpanded ? null : cardKey }))}
+                      >
+                        <View style={styles.wordCardHeader}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.wordCardArabic}>{v.singulier ? addDiacriticsToWord(v.singulier) : "-"}</Text>
+                            <Text style={styles.wordCardTranslation}>{v.traduction}</Text>
+                          </View>
+                          <View style={styles.wordCardActions}>
+                            <Pressable onPress={() => startEditVocab(idx)}><Text style={styles.editBtn}>✏️</Text></Pressable>
+                            <Pressable onPress={() => deleteVocab(idx)}><Text style={styles.deleteBtn}>🗑</Text></Pressable>
+                          </View>
+                        </View>
+                        {isExpanded && (
+                          <View style={styles.wordCardGrid}>
+                            <View style={styles.wordCardGridCol}>
+                              <Text style={styles.wordCardGridLabel}>{t('libraryDetail.singular')}</Text>
+                              <Text style={styles.wordCardGridValue}>{v.singulier ? addDiacriticsToWord(v.singulier) : "-"}</Text>
+                            </View>
+                            <View style={styles.wordCardGridCol}>
+                              <Text style={styles.wordCardGridLabel}>{t('libraryDetail.plural')}</Text>
+                              <Text style={styles.wordCardGridValue}>{v.pluriel ? addDiacriticsToWord(v.pluriel) : "-"}</Text>
+                            </View>
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <Text style={styles.emptyList}>{t('libraryDetail.noWords')}</Text>
+                )}
+
+                <Pressable style={styles.addCardButton} onPress={() => { setAddingWord(true); setNewWordInput(''); }}>
+                  <Text style={styles.addCardButtonText}>+ {t('libraryDetail.addWord')}</Text>
+                </Pressable>
 
                 {/* Formulaire d'ajout de mot */}
                 {addingWord && (
@@ -1053,8 +1158,8 @@ export default function LibraryItemScreen() {
                       textAlign="right"
                     />
                     <View style={styles.addFormButtons}>
-                      <Pressable 
-                        style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]} 
+                      <Pressable
+                        style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]}
                         onPress={() => addNewWord()}
                         disabled={completingWord}
                       >
@@ -1070,87 +1175,108 @@ export default function LibraryItemScreen() {
                     </View>
                   </View>
                 )}
-
-                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                  <View style={{ minWidth: 540 }}>
-                    <View style={styles.tableHeader}>
-                      <Text style={[styles.tableHeaderCell, { width: 120 }]}>{t('libraryDetail.translation')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.singular')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.plural')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.opposite')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
-                    </View>
-                    {aiData.vocabulaire?.filter((v: any) => !v._deleted)?.length ? (
-                      aiData.vocabulaire.map((v: any, idx) => (
-                        (v._deleted) ? null :
-                        editingVocabIdx === idx ? (
-                          <View key={`v-edit-${idx}`} style={styles.editRow}>
-                            <TextInput
-                              style={[styles.editInput, { width: 120 }]}
-                              value={editedItem?.traduction || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, traduction: text })}
-                            />
-                            <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 100 }]}
-                              value={editedItem?.singulier || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, singulier: text })}
-                              textAlign="right"
-                            />
-                            <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 100 }]}
-                              value={editedItem?.pluriel || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, pluriel: text })}
-                              textAlign="right"
-                            />
-                            <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 100 }]}
-                              value={editedItem?.contraire || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, contraire: text })}
-                              textAlign="right"
-                            />
-                            <View style={styles.editActions}>
-                              <Pressable onPress={saveEditVocab}><Text style={styles.saveBtn}>✓</Text></Pressable>
-                              <Pressable onPress={() => { setEditingVocabIdx(null); setEditedItem(null); }}><Text style={styles.cancelBtn}>✕</Text></Pressable>
-                            </View>
-                          </View>
-                        ) : (
-                          <Pressable key={`v-${idx}`} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowEven]} onPress={() => startEditVocab(idx)}>
-                            <Text style={[styles.tableCell, { width: 120 }]} numberOfLines={2}>
-                              {v.traduction}
-                            </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 100 }]} numberOfLines={1}>
-                              {v.singulier ? addDiacriticsToWord(v.singulier) : "-"}
-                            </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 100 }]} numberOfLines={1}>
-                              {v.pluriel ? addDiacriticsToWord(v.pluriel) : "-"}
-                            </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 100 }]} numberOfLines={1}>
-                              {v.contraire ? addDiacriticsToWord(v.contraire) : "-"}
-                            </Text>
-                            <View style={[styles.tableCell, { width: 60, flexDirection: 'row', justifyContent: 'center' }]}>
-                              <Pressable onPress={() => startEditVocab(idx)}><Text style={styles.editBtn}>✏️</Text></Pressable>
-                              <Pressable onPress={() => deleteVocab(idx)}><Text style={styles.deleteBtn}>🗑</Text></Pressable>
-                            </View>
-                          </Pressable>
-                        )
-                      ))
-                    ) : (
-                      <Text style={styles.emptyList}>{t('libraryDetail.noWords')}</Text>
-                    )}
-                  </View>
-                </ScrollView>
               </View>
             )}
 
             {/* LISTE DES VERBES */}
             {showVerbs && (
-              <View style={styles.tableContainer}>
-                <View style={styles.tableTitleRow}>
-                  <Text style={styles.tableTitle}>{t('libraryDetail.verbsList')}</Text>
-                  <Pressable style={styles.addButton} onPress={() => { setAddingVerb(true); setNewWordInput(''); }}>
-                    <Text style={styles.addButtonText}>+ {t('libraryDetail.addVerb')}</Text>
-                  </Pressable>
-                </View>
+              <View style={styles.vocabSection}>
+                <Text style={styles.vocabSectionTitle}>{t('libraryDetail.verbsList')}</Text>
+
+                {aiData.verbes?.filter((v: any) => !v._deleted)?.length ? (
+                  aiData.verbes.map((vb: any, idx) => {
+                    if (vb._deleted) return null;
+                    const cardKey = `verbes-${idx}`;
+                    const isExpanded = expandedIndex.verbes === cardKey;
+
+                    if (editingVerbIdx === idx) {
+                      return (
+                        <View key={`vb-edit-${idx}`} style={styles.editCard}>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.translation')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputFull]}
+                              value={editedItem?.traduction || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, traduction: text })}
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.past')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, styles.editInputFull]}
+                              value={editedItem?.passe_3ms || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, passe_3ms: text })}
+                              textAlign="right"
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.present')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, styles.editInputFull]}
+                              value={editedItem?.present_3ms || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, present_3ms: text })}
+                              textAlign="right"
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.imperative')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, styles.editInputFull]}
+                              value={editedItem?.imperatif || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, imperatif: text })}
+                              textAlign="right"
+                            />
+                          </View>
+                          <View style={styles.editActionsRow}>
+                            <Pressable onPress={saveEditVerb}><Text style={styles.saveBtn}>✓</Text></Pressable>
+                            <Pressable onPress={() => { setEditingVerbIdx(null); setEditedItem(null); }}><Text style={styles.cancelBtn}>✕</Text></Pressable>
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <Pressable
+                        key={`vb-${idx}`}
+                        style={styles.wordCard}
+                        onPress={() => setExpandedIndex((prev) => ({ ...prev, verbes: isExpanded ? null : cardKey }))}
+                      >
+                        <View style={styles.wordCardHeader}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.wordCardArabic}>{addDiacriticsToWord(vb.passe_3ms)}</Text>
+                            <Text style={styles.wordCardTranslation}>{vb.traduction}</Text>
+                          </View>
+                          <View style={styles.wordCardActions}>
+                            <Pressable onPress={() => startEditVerb(idx)}><Text style={styles.editBtn}>✏️</Text></Pressable>
+                            <Pressable onPress={() => deleteVerb(idx)}><Text style={styles.deleteBtn}>🗑</Text></Pressable>
+                          </View>
+                        </View>
+                        {isExpanded && (
+                          <View style={styles.wordCardGrid}>
+                            <View style={styles.wordCardGridCol}>
+                              <Text style={styles.wordCardGridLabel}>{t('libraryDetail.past')}</Text>
+                              <Text style={styles.wordCardGridValue}>{addDiacriticsToWord(vb.passe_3ms)}</Text>
+                            </View>
+                            <View style={styles.wordCardGridCol}>
+                              <Text style={styles.wordCardGridLabel}>{t('libraryDetail.present')}</Text>
+                              <Text style={styles.wordCardGridValue}>{addDiacriticsToWord(vb.present_3ms)}</Text>
+                            </View>
+                            <View style={[styles.wordCardGridCol, styles.wordCardGridColImperative]}>
+                              <Text style={styles.wordCardGridLabel}>{t('libraryDetail.imperative')}</Text>
+                              <Text style={styles.wordCardGridValue}>{addDiacriticsToWord(vb.imperatif)}</Text>
+                            </View>
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <Text style={styles.emptyList}>{t('libraryDetail.noVerbs')}</Text>
+                )}
+
+                <Pressable style={styles.addCardButton} onPress={() => { setAddingVerb(true); setNewWordInput(''); }}>
+                  <Text style={styles.addCardButtonText}>+ {t('libraryDetail.addVerb')}</Text>
+                </Pressable>
 
                 {/* Formulaire d'ajout de verbe */}
                 {addingVerb && (
@@ -1163,8 +1289,8 @@ export default function LibraryItemScreen() {
                       textAlign="right"
                     />
                     <View style={styles.addFormButtons}>
-                      <Pressable 
-                        style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]} 
+                      <Pressable
+                        style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]}
                         onPress={() => addNewWord()}
                         disabled={completingWord}
                       >
@@ -1180,87 +1306,97 @@ export default function LibraryItemScreen() {
                     </View>
                   </View>
                 )}
-
-                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                  <View style={{ minWidth: 515 }}>
-                    <View style={styles.tableHeader}>
-                      <Text style={[styles.tableHeaderCell, { width: 110 }]}>{t('libraryDetail.translation')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 95 }]}>{t('libraryDetail.past')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 95 }]}>{t('libraryDetail.present')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 95 }]}>{t('libraryDetail.imperative')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
-                    </View>
-                    {aiData.verbes?.filter((v: any) => !v._deleted)?.length ? (
-                      aiData.verbes.map((vb: any, idx) => (
-                        (vb._deleted) ? null :
-                        editingVerbIdx === idx ? (
-                          <View key={`vb-edit-${idx}`} style={styles.editRow}>
-                            <TextInput
-                              style={[styles.editInput, { width: 110 }]}
-                              value={editedItem?.traduction || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, traduction: text })}
-                            />
-                            <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 95 }]}
-                              value={editedItem?.passe_3ms || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, passe_3ms: text })}
-                              textAlign="right"
-                            />
-                            <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 95 }]}
-                              value={editedItem?.present_3ms || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, present_3ms: text })}
-                              textAlign="right"
-                            />
-                            <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 95 }]}
-                              value={editedItem?.imperatif || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, imperatif: text })}
-                              textAlign="right"
-                            />
-                            <View style={styles.editActions}>
-                              <Pressable onPress={saveEditVerb}><Text style={styles.saveBtn}>✓</Text></Pressable>
-                              <Pressable onPress={() => { setEditingVerbIdx(null); setEditedItem(null); }}><Text style={styles.cancelBtn}>✕</Text></Pressable>
-                            </View>
-                          </View>
-                        ) : (
-                          <Pressable key={`vb-${idx}`} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowEven]} onPress={() => startEditVerb(idx)}>
-                            <Text style={[styles.tableCell, { width: 110 }]} numberOfLines={2}>
-                              {vb.traduction}
-                            </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 95 }]} numberOfLines={1}>
-                              {addDiacriticsToWord(vb.passe_3ms)}
-                            </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 95 }]} numberOfLines={1}>
-                              {addDiacriticsToWord(vb.present_3ms)}
-                            </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 95 }]} numberOfLines={1}>
-                              {addDiacriticsToWord(vb.imperatif)}
-                            </Text>
-                            <View style={[styles.tableCell, { width: 60, flexDirection: 'row', justifyContent: 'center' }]}>
-                              <Pressable onPress={() => startEditVerb(idx)}><Text style={styles.editBtn}>✏️</Text></Pressable>
-                              <Pressable onPress={() => deleteVerb(idx)}><Text style={styles.deleteBtn}>🗑</Text></Pressable>
-                            </View>
-                          </Pressable>
-                        )
-                      ))
-                    ) : (
-                      <Text style={styles.emptyList}>{t('libraryDetail.noVerbs')}</Text>
-                    )}
-                  </View>
-                </ScrollView>
               </View>
             )}
 
             {/* LISTE DES PARTICULES */}
             {showParticles && (
-              <View style={styles.tableContainer}>
-                <View style={styles.tableTitleRow}>
-                  <Text style={styles.tableTitle}>{t('libraryDetail.particlesList')}</Text>
-                  <Pressable style={styles.addButton} onPress={() => { setAddingParticle(true); setNewWordInput(''); }}>
-                    <Text style={styles.addButtonText}>+ {t('libraryDetail.addParticle')}</Text>
-                  </Pressable>
-                </View>
+              <View style={styles.vocabSection}>
+                <Text style={styles.vocabSectionTitle}>{t('libraryDetail.particlesList')}</Text>
+
+                {aiData.particules?.filter((v: any) => !v._deleted)?.length ? (
+                  aiData.particules.map((p: any, idx) => {
+                    if (p._deleted) return null;
+                    const cardKey = `particules-${idx}`;
+                    const isExpanded = expandedIndex.particules === cardKey;
+
+                    if (editingParticleIdx === idx) {
+                      return (
+                        <View key={`p-edit-${idx}`} style={styles.editCard}>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.particle')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, styles.editInputFull]}
+                              value={editedItem?.particule_ar || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, particule_ar: text })}
+                              textAlign="right"
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.translation')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputFull]}
+                              value={editedItem?.traduction || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, traduction: text })}
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.type')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputFull]}
+                              value={editedItem?.type || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, type: text })}
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={styles.editFieldLabel}>{t('libraryDetail.example')}</Text>
+                            <TextInput
+                              style={[styles.editInput, styles.editInputArabic, styles.editInputFull]}
+                              value={editedItem?.exemple || ''}
+                              onChangeText={(text) => setEditedItem({ ...editedItem, exemple: text })}
+                              textAlign="right"
+                            />
+                          </View>
+                          <View style={styles.editActionsRow}>
+                            <Pressable onPress={saveEditParticle}><Text style={styles.saveBtn}>✓</Text></Pressable>
+                            <Pressable onPress={() => { setEditingParticleIdx(null); setEditedItem(null); }}><Text style={styles.cancelBtn}>✕</Text></Pressable>
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <Pressable
+                        key={`p-${idx}`}
+                        style={styles.wordCard}
+                        onPress={() => setExpandedIndex((prev) => ({ ...prev, particules: isExpanded ? null : cardKey }))}
+                      >
+                        <View style={styles.wordCardHeader}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.wordCardArabic}>{addDiacriticsToWord(p.particule_ar)}</Text>
+                            <Text style={styles.wordCardTranslation}>{p.traduction}</Text>
+                          </View>
+                          <View style={styles.wordCardActions}>
+                            <Pressable onPress={() => startEditParticle(idx)}><Text style={styles.editBtn}>✏️</Text></Pressable>
+                            <Pressable onPress={() => deleteParticle(idx)}><Text style={styles.deleteBtn}>🗑</Text></Pressable>
+                          </View>
+                        </View>
+                        {isExpanded && !!p.exemple && (
+                          <View style={styles.particleExampleBox}>
+                            <Text style={styles.wordCardGridLabel}>{t('libraryDetail.exampleUsage')}</Text>
+                            <Text style={styles.particleExampleValue}>{p.exemple}</Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <Text style={styles.emptyList}>{t('libraryDetail.noParticles')}</Text>
+                )}
+
+                <Pressable style={styles.addCardButton} onPress={() => { setAddingParticle(true); setNewWordInput(''); }}>
+                  <Text style={styles.addCardButtonText}>+ {t('libraryDetail.addParticle')}</Text>
+                </Pressable>
 
                 {/* Formulaire d'ajout de particule */}
                 {addingParticle && (
@@ -1273,8 +1409,8 @@ export default function LibraryItemScreen() {
                       textAlign="right"
                     />
                     <View style={styles.addFormButtons}>
-                      <Pressable 
-                        style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]} 
+                      <Pressable
+                        style={[styles.addFormBtn, styles.addFormBtnPrimary, completingWord && styles.btnDisabled]}
                         onPress={() => addNewWord()}
                         disabled={completingWord}
                       >
@@ -1290,74 +1426,6 @@ export default function LibraryItemScreen() {
                     </View>
                   </View>
                 )}
-
-                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                  <View style={{ minWidth: 560 }}>
-                    <View style={styles.tableHeader}>
-                      <Text style={[styles.tableHeaderCell, { width: 80 }]}>{t('libraryDetail.particle')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 100 }]}>{t('libraryDetail.translation')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 90 }]}>{t('libraryDetail.type')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 130 }]}>{t('libraryDetail.example')}</Text>
-                      <Text style={[styles.tableHeaderCell, { width: 60 }]}></Text>
-                    </View>
-                    {aiData.particules?.filter((v: any) => !v._deleted)?.length ? (
-                      aiData.particules.map((p: any, idx) => (
-                        (p._deleted) ? null :
-                        editingParticleIdx === idx ? (
-                          <View key={`p-edit-${idx}`} style={styles.editRow}>
-                            <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 80 }]}
-                              value={editedItem?.particule_ar || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, particule_ar: text })}
-                              textAlign="right"
-                            />
-                            <TextInput
-                              style={[styles.editInput, { width: 100 }]}
-                              value={editedItem?.traduction || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, traduction: text })}
-                            />
-                            <TextInput
-                              style={[styles.editInput, { width: 90 }]}
-                              value={editedItem?.type || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, type: text })}
-                            />
-                            <TextInput
-                              style={[styles.editInput, styles.editInputArabic, { width: 130 }]}
-                              value={editedItem?.exemple || ''}
-                              onChangeText={(text) => setEditedItem({ ...editedItem, exemple: text })}
-                              textAlign="right"
-                            />
-                            <View style={styles.editActions}>
-                              <Pressable onPress={saveEditParticle}><Text style={styles.saveBtn}>✓</Text></Pressable>
-                              <Pressable onPress={() => { setEditingParticleIdx(null); setEditedItem(null); }}><Text style={styles.cancelBtn}>✕</Text></Pressable>
-                            </View>
-                          </View>
-                        ) : (
-                          <Pressable key={`p-${idx}`} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowEven]} onPress={() => startEditParticle(idx)}>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 80 }]} numberOfLines={1}>
-                              {addDiacriticsToWord(p.particule_ar)}
-                            </Text>
-                            <Text style={[styles.tableCell, { width: 100 }]} numberOfLines={2}>
-                              {p.traduction}
-                            </Text>
-                            <Text style={[styles.tableCell, { width: 90 }]} numberOfLines={1}>
-                              {p.type || "-"}
-                            </Text>
-                            <Text style={[styles.tableCell, styles.tableCellArabic, { width: 130 }]} numberOfLines={2}>
-                              {p.exemple || "-"}
-                            </Text>
-                            <View style={[styles.tableCell, { width: 60, flexDirection: 'row', justifyContent: 'center' }]}>
-                              <Pressable onPress={() => startEditParticle(idx)}><Text style={styles.editBtn}>✏️</Text></Pressable>
-                              <Pressable onPress={() => deleteParticle(idx)}><Text style={styles.deleteBtn}>🗑</Text></Pressable>
-                            </View>
-                          </Pressable>
-                        )
-                      ))
-                    ) : (
-                      <Text style={styles.emptyList}>{t('libraryDetail.noParticles')}</Text>
-                    )}
-                  </View>
-                </ScrollView>
               </View>
             )}
           </>
@@ -1367,6 +1435,7 @@ export default function LibraryItemScreen() {
       <Text style={styles.meta}>
         {t('libraryDetail.createdAt')} {new Date(scan.created_at).toLocaleString()}
       </Text>
+      </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -1382,11 +1451,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 20,
   },
-  container: {
+  pageContainer: {
+    paddingBottom: 40,
+    backgroundColor: '#F8F3EC',
+  },
+  zoneTop: {
+    backgroundColor: '#0D2318',
+    padding: 16,
+    paddingBottom: 20,
+    gap: 12,
+  },
+  zoneBottom: {
+    backgroundColor: '#F8F3EC',
     padding: 16,
     paddingBottom: 40,
     gap: 12,
-    backgroundColor: 'transparent',
   },
   back: {
     alignSelf: "flex-start",
@@ -1399,16 +1478,16 @@ const styles = StyleSheet.create({
     color: "#1b5e20",
     fontWeight: "700",
   },
-  title: {
+  titleOnDark: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#1b5e20",
+    color: "#F8F3EC",
     marginTop: 6,
   },
-  label: {
+  labelOnDark: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#1b5e20",
+    color: "#C9A84C",
     marginTop: 6,
   },
   input: {
@@ -1548,18 +1627,55 @@ const styles = StyleSheet.create({
     color: "white",
   },
   // Bouton extraire vocabulaire (première fois)
+  emptyVocab: {
+    alignItems: "center",
+    paddingVertical: 20,
+    paddingHorizontal: 10,
+  },
+  emptyVocabIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#0D2318",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  emptyVocabIcon: {
+    fontSize: 28,
+  },
+  emptyVocabTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0D2318",
+    textAlign: "center",
+  },
+  emptyVocabSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  emptyVocabHint: {
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 10,
+  },
   extractButton: {
-    marginTop: 12,
+    marginTop: 18,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     borderRadius: 12,
-    backgroundColor: "#2e7d32",
+    backgroundColor: "#0D2318",
     alignItems: "center",
   },
   extractButtonText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "white",
+    color: "#C9A84C",
   },
   // Bouton régénérer vocabulaire
   regenerateButton: {
@@ -1567,78 +1683,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
-    backgroundColor: "#fff3e0",
-    borderWidth: 2,
-    borderColor: "#ffcc80",
+    backgroundColor: "#FEF0EE",
+    borderWidth: 1,
+    borderColor: "rgba(192,57,43,0.15)",
     alignSelf: "flex-start",
   },
   regenerateButtonText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#e65100",
+    color: "#C0392B",
   },
   // Styles pour les tableaux
-  tableContainer: {
+  vocabSection: {
     marginTop: 10,
-    backgroundColor: "white",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    overflow: "hidden",
   },
-  tableScrollContainer: {
-    // Pour permettre le défilement horizontal
-  },
-  tableTitle: {
+  vocabSectionTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#1b5e20",
-    padding: 12,
-    backgroundColor: "#e8f5e9",
-    borderBottomWidth: 1,
-    borderBottomColor: "#c8e6c9",
-  },
-  tableHeader: {
-    flexDirection: "row",
-    backgroundColor: "#f5f5f5",
-    borderBottomWidth: 2,
-    borderBottomColor: "#2e7d32",
+    color: "#0D2318",
     paddingVertical: 10,
-    paddingHorizontal: 8,
-    minWidth: "100%",
-  },
-  tableHeaderCell: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#1b5e20",
-    textAlign: "center",
-    flexShrink: 0,
-  },
-  tableRow: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    minWidth: "100%",
-    alignItems: "center",
-  },
-  tableRowEven: {
-    backgroundColor: "#fafafa",
-  },
-  tableCell: {
-    fontSize: 13,
-    color: "#333",
-    textAlign: "center",
-    paddingHorizontal: 4,
-    flexShrink: 0,
-  },
-  tableCellArabic: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111",
-    writingDirection: "rtl",
-    textAlign: "right",
   },
   emptyList: {
     padding: 16,
@@ -1646,25 +1709,93 @@ const styles = StyleSheet.create({
     color: "#666",
     fontStyle: "italic",
   },
-  // Styles pour édition et ajout
-  tableTitleRow: {
+  // Cartes de vocabulaire (mots / verbes / particules)
+  wordCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E0D5",
+    padding: 14,
+    marginBottom: 10,
+  },
+  wordCardHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
-    backgroundColor: "#e8f5e9",
-    borderBottomWidth: 1,
-    borderBottomColor: "#c8e6c9",
   },
-  addButton: {
-    backgroundColor: "#2e7d32",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+  wordCardArabic: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111",
+    writingDirection: "rtl",
+    textAlign: "right",
   },
-  addButtonText: {
-    color: "white",
+  wordCardTranslation: {
     fontSize: 13,
+    color: "#666",
+    marginTop: 2,
+  },
+  wordCardActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginLeft: 10,
+  },
+  wordCardGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F0EBE0",
+  },
+  wordCardGridCol: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#FAFAFA",
+  },
+  wordCardGridColImperative: {
+    backgroundColor: "#E8F5E9",
+  },
+  wordCardGridLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#888",
+    marginBottom: 4,
+  },
+  wordCardGridValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111",
+    writingDirection: "rtl",
+    textAlign: "center",
+  },
+  particleExampleBox: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F0EBE0",
+  },
+  particleExampleValue: {
+    fontSize: 15,
+    color: "#111",
+    writingDirection: "rtl",
+    textAlign: "right",
+    marginTop: 4,
+  },
+  // Styles pour édition et ajout
+  addCardButton: {
+    marginTop: 4,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "#0D2318",
+    alignItems: "center",
+  },
+  addCardButtonText: {
+    color: "#0D2318",
+    fontSize: 14,
     fontWeight: "700",
   },
   addForm: {
@@ -1704,14 +1835,22 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "white",
   },
-  editRow: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    backgroundColor: "#fffde7",
-    alignItems: "center",
+  editCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F0E0A8",
+    backgroundColor: "#FFFDE7",
+    padding: 14,
+    marginBottom: 10,
+  },
+  editField: {
+    marginBottom: 10,
+  },
+  editFieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#666",
+    marginBottom: 4,
   },
   editInput: {
     borderWidth: 1,
@@ -1720,17 +1859,19 @@ const styles = StyleSheet.create({
     padding: 6,
     fontSize: 13,
     backgroundColor: "white",
-    marginHorizontal: 2,
+  },
+  editInputFull: {
+    width: "100%",
   },
   editInputArabic: {
     fontSize: 15,
     writingDirection: "rtl",
   },
-  editActions: {
+  editActionsRow: {
     flexDirection: "row",
-    justifyContent: "center",
-    width: 60,
-    gap: 8,
+    justifyContent: "flex-end",
+    gap: 16,
+    marginTop: 4,
   },
   saveBtn: {
     fontSize: 18,
