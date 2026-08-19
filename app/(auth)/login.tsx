@@ -20,6 +20,7 @@ import {
 
 // ✅ RevenueCat
 import { initRevenueCat, loginRevenueCat } from "@/src/lib/revenuecat";
+import { Colors } from "@/constants/colors";
 
 const FLAG: Record<Language, string> = {
   fr: "🇫🇷", en: "🇬🇧", de: "🇩🇪", es: "🇪🇸", ru: "🇷🇺", ms: "🇲🇾", ar: "🇸🇦",
@@ -260,7 +261,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0D2318" },
+  container: { flex: 1, backgroundColor: Colors.deep },
   scrollContent: { flexGrow: 1, padding: 24, justifyContent: "center" },
   logo: { width: 140, height: 140, alignSelf: "center", marginBottom: 18 },
   title: {
@@ -268,7 +269,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
     marginBottom: 18,
-    color: "#F8F3EC",
+    color: Colors.cream,
   },
   input: {
     borderWidth: 1,
@@ -277,7 +278,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 10,
     backgroundColor: "rgba(255,255,255,0.1)",
-    color: "#F8F3EC",
+    color: Colors.cream,
   },
   passwordContainer: { position: "relative", marginTop: 10 },
   passwordInput: {
@@ -287,18 +288,18 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingRight: 50,
     backgroundColor: "rgba(255,255,255,0.1)",
-    color: "#F8F3EC",
+    color: Colors.cream,
   },
   eyeButton: { position: "absolute", right: 12, top: 12 },
   eyeIcon: { fontSize: 20 },
   button: {
-    backgroundColor: "#C9A84C",
+    backgroundColor: Colors.accent,
     padding: 16,
     borderRadius: 16,
     marginTop: 24,
     alignItems: "center",
   },
-  buttonText: { color: "#0D2318", fontWeight: "800", fontSize: 16 },
+  buttonText: { color: Colors.deep, fontWeight: "800", fontSize: 16 },
   toggleText: {
     textAlign: "center",
     marginTop: 16,
@@ -320,7 +321,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
   },
-  langButtonText: { fontSize: 14, fontWeight: "600", color: "#F8F3EC" },
+  langButtonText: { fontSize: 14, fontWeight: "600", color: Colors.cream },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",

@@ -14,6 +14,7 @@ import { useLanguage } from '@/hooks/use-language';
 import { supabase } from '@/src/lib/supabase';
 import { useFocusEffect } from '@react-navigation/native';
 import { migrateExtractVocabResult, needsMigration } from '@/src/lib/migrate-vocab-data';
+import { Colors } from "@/constants/colors";
 
 type Tab = 'vocabulary' | 'verbs' | 'particles';
 
@@ -323,7 +324,7 @@ export default function StatisticsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F3EC',
+    backgroundColor: Colors.cream,
   },
   scrollContainer: {
     flex: 1,
@@ -332,7 +333,7 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   header: {
-    backgroundColor: '#0D2318',
+    backgroundColor: Colors.deep,
     paddingVertical: 16,
     paddingHorizontal: 16,
     paddingTop: 50,
@@ -385,7 +386,7 @@ const styles = StyleSheet.create({
   summaryCount: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#C9A84C',
+    color: Colors.accent,
     marginTop: 8,
   },
   summaryLabel: {
@@ -409,7 +410,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabActive: {
-    backgroundColor: '#0D2318',
+    backgroundColor: Colors.deep,
   },
   tabText: {
     fontSize: 12,

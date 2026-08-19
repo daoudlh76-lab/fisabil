@@ -22,6 +22,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors } from "@/constants/colors";
 
 const GREEN = '#2E7D32';
 const BLUE = '#1976d2';
@@ -620,7 +621,7 @@ export default function RevisionScreen() {
           {dictPhase === 'idle' && (
             <View>
               <LinearGradient
-                colors={['#0D2318', '#1A4A2E']}
+                colors={[Colors.deep, Colors.green]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0.6, y: 1 }}
                 style={styles.idleHeader}
@@ -652,7 +653,7 @@ export default function RevisionScreen() {
                 </View>
               </LinearGradient>
 
-              <LinearGradient colors={['#0D2318', '#1F5C38']} style={styles.xpCard}>
+              <LinearGradient colors={[Colors.deep, '#1F5C38']} style={styles.xpCard}>
                 <Text style={styles.xpCardCount}>{dictStats.totalCompleted}</Text>
                 <Text style={styles.xpCardLabel}>{t('revision.segmentsCompleted')}</Text>
                 <View style={styles.xpProgressTrack}>
@@ -717,7 +718,7 @@ export default function RevisionScreen() {
                         style={styles.textCard}
                         onPress={() => handlePickText(scan)}
                       >
-                        <LinearGradient colors={['#0D2318', '#2D6A45']} style={styles.textCardIcon}>
+                        <LinearGradient colors={[Colors.deep, Colors.mid]} style={styles.textCardIcon}>
                           <Text style={styles.textCardIconText}>📖</Text>
                         </LinearGradient>
                         <View style={{ flex: 1 }}>
@@ -888,7 +889,7 @@ export default function RevisionScreen() {
                   <Text style={styles.heardCardText}>{current.text}</Text>
                 </View>
 
-                <LinearGradient colors={['#0a2e18', '#1a4a2e']} style={styles.correctionCard}>
+                <LinearGradient colors={['#0a2e18', Colors.green]} style={styles.correctionCard}>
                   <View style={styles.correctionHeader}>
                     <View style={styles.correctionCheckCircle}>
                       <Text style={styles.correctionCheckIcon}>✓</Text>
@@ -1076,7 +1077,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     paddingBottom: 40,
-    backgroundColor: '#0D2318',
+    backgroundColor: Colors.deep,
   },
   trialExpiredBanner: {
     backgroundColor: '#FFEBEE',
@@ -1132,7 +1133,7 @@ const styles = StyleSheet.create({
   idleHeaderTitle: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#F8F3EC',
+    color: Colors.cream,
   },
   streakBadge: {
     marginTop: 8,
@@ -1142,7 +1143,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   streakBadgeText: {
-    color: '#C9A84C',
+    color: Colors.accent,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -1170,7 +1171,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
   },
   idlePillTabTextActive: {
-    color: '#0D2318',
+    color: Colors.deep,
   },
   xpCard: {
     borderRadius: 18,
@@ -1181,7 +1182,7 @@ const styles = StyleSheet.create({
   xpCardCount: {
     fontSize: 34,
     fontWeight: '800',
-    color: '#F8F3EC',
+    color: Colors.cream,
   },
   xpCardLabel: {
     fontSize: 13,
@@ -1199,7 +1200,7 @@ const styles = StyleSheet.create({
   xpProgressFill: {
     height: '100%',
     borderRadius: 4,
-    backgroundColor: '#C9A84C',
+    backgroundColor: Colors.accent,
   },
   xpLevelBadge: {
     marginTop: 12,
@@ -1209,19 +1210,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   xpLevelBadgeText: {
-    color: '#C9A84C',
+    color: Colors.accent,
     fontWeight: '700',
     fontSize: 13,
   },
   startDictationButton: {
-    backgroundColor: '#0D2318',
+    backgroundColor: Colors.deep,
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
     marginBottom: 16,
   },
   startDictationButtonText: {
-    color: '#C9A84C',
+    color: Colors.accent,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -1240,7 +1241,7 @@ const styles = StyleSheet.create({
   modeCardTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0D2318',
+    color: Colors.deep,
   },
   modeCardCount: {
     fontSize: 12,
@@ -1256,7 +1257,7 @@ const styles = StyleSheet.create({
   // ─── Sélection de texte ───
   // ─── Écran Sélection texte (dictPhase === 'select') ───
   selectHeader: {
-    backgroundColor: '#0D2318',
+    backgroundColor: Colors.deep,
     borderRadius: 18,
     padding: 18,
     marginBottom: 16,
@@ -1267,14 +1268,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   selectBackArrow: {
-    color: '#F8F3EC',
+    color: Colors.cream,
     fontSize: 22,
     fontWeight: '700',
   },
   selectHeaderTitle: {
     fontSize: 19,
     fontWeight: '800',
-    color: '#F8F3EC',
+    color: Colors.cream,
   },
   selectHeaderSubtitle: {
     fontSize: 13,
@@ -1337,7 +1338,7 @@ const styles = StyleSheet.create({
   },
   textCardArrow: {
     fontSize: 22,
-    color: '#0D2318',
+    color: Colors.deep,
     fontWeight: '700',
   },
   // ─── Bandeau retour ───
@@ -1749,7 +1750,7 @@ const styles = StyleSheet.create({
   },
   // ─── Écran Dictée en cours (dictPhase === 'dictation' && !showAnswer) ───
   dictatingScreen: {
-    backgroundColor: '#0D2318',
+    backgroundColor: Colors.deep,
     borderRadius: 20,
     padding: 18,
   },
@@ -1760,7 +1761,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   dictatingBackArrow: {
-    color: '#F8F3EC',
+    color: Colors.cream,
     fontSize: 20,
     fontWeight: '700',
   },
@@ -1781,7 +1782,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   segmentPillText: {
-    color: '#C9A84C',
+    color: Colors.accent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1795,7 +1796,7 @@ const styles = StyleSheet.create({
   dictatingProgressFill: {
     height: '100%',
     borderRadius: 3,
-    backgroundColor: '#C9A84C',
+    backgroundColor: Colors.accent,
   },
   instructionsColumn: {
     gap: 14,
@@ -1826,7 +1827,7 @@ const styles = StyleSheet.create({
     color: 'rgba(248,243,236,0.5)',
   },
   instructionLabelActive: {
-    color: '#C9A84C',
+    color: Colors.accent,
   },
   audioCard: {
     backgroundColor: 'rgba(255,255,255,0.07)',
@@ -1837,13 +1838,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   listenSegmentButton: {
-    backgroundColor: '#C9A84C',
+    backgroundColor: Colors.accent,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   listenSegmentButtonText: {
-    color: '#0D2318',
+    color: Colors.deep,
     fontSize: 15,
     fontWeight: '800',
   },
@@ -1859,7 +1860,7 @@ const styles = StyleSheet.create({
   },
   progressBarDark: {
     height: '100%',
-    backgroundColor: '#C9A84C',
+    backgroundColor: Colors.accent,
     borderRadius: 3,
   },
   controlButtonDark: {
@@ -1873,10 +1874,10 @@ const styles = StyleSheet.create({
   controlButtonDarkText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#F8F3EC',
+    color: Colors.cream,
   },
   playPauseButtonDark: {
-    backgroundColor: '#C9A84C',
+    backgroundColor: Colors.accent,
     width: 52,
     height: 52,
     borderRadius: 26,
@@ -1897,8 +1898,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
   },
   speedButtonActiveDark: {
-    backgroundColor: '#C9A84C',
-    borderColor: '#C9A84C',
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
   },
   speedButtonDarkText: {
     fontSize: 12,
@@ -1906,7 +1907,7 @@ const styles = StyleSheet.create({
     color: 'rgba(248,243,236,0.7)',
   },
   speedButtonActiveDarkText: {
-    color: '#0D2318',
+    color: Colors.deep,
   },
   replayHint: {
     fontSize: 12,
@@ -1977,7 +1978,7 @@ const styles = StyleSheet.create({
   correctionHeaderText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#F8F3EC',
+    color: Colors.cream,
   },
   correctionText: {
     fontSize: 20,
@@ -1988,14 +1989,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   nextSegmentButton: {
-    backgroundColor: '#C9A84C',
+    backgroundColor: Colors.accent,
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
     marginBottom: 10,
   },
   nextSegmentButtonText: {
-    color: '#0D2318',
+    color: Colors.deep,
     fontSize: 16,
     fontWeight: '800',
   },

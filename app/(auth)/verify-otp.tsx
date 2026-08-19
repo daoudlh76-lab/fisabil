@@ -3,6 +3,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { Colors } from "@/constants/colors";
 
 export default function VerifyOtpScreen() {
   const { t } = useLanguage();
@@ -153,7 +154,7 @@ export default function VerifyOtpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F3EC",
+    backgroundColor: Colors.cream,
   },
   scrollContent: {
     flexGrow: 1,

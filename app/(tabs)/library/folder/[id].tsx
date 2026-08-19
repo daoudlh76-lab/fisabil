@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/hooks/use-language";
+import { Colors } from "@/constants/colors";
 
 type Scan = {
   id: string;
@@ -145,7 +146,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#F8F3EC",
+    backgroundColor: Colors.cream,
   },
   header: {
     marginBottom: 12,

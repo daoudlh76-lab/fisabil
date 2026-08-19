@@ -1,5 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
 import { useAuth } from "@/hooks/use-auth";
+import { MiniPlayer } from "@/components/mini-player";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
@@ -20,6 +21,7 @@ export default function TabsLayout() {
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: true,
@@ -207,5 +209,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    {session && <MiniPlayer />}
+    </View>
   );
 }

@@ -19,6 +19,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { Colors } from "@/constants/colors";
 
 type Folder = {
   id: string;
@@ -197,7 +198,7 @@ export default function TutorPage() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <LinearGradient colors={['#0D2318', '#1A4A2E']} style={styles.headerAvatar}>
+        <LinearGradient colors={[Colors.deep, Colors.green]} style={styles.headerAvatar}>
           <Text style={styles.headerAvatarIcon}>🧠</Text>
         </LinearGradient>
         <View style={{ flex: 1 }}>
@@ -496,7 +497,7 @@ export default function TutorPage() {
             >
               {isArabic ? (
                 <LinearGradient
-                  colors={['#0D2318', '#1A4A2E']}
+                  colors={[Colors.deep, Colors.green]}
                   style={[styles.messageBubble, styles.arabicMessage]}
                 >
                   <Text style={styles.arabicMessageText}>{message.text}</Text>
@@ -588,7 +589,7 @@ export default function TutorPage() {
           <TextInput
             style={styles.input}
             placeholder={t("realtimeTutor.inputPlaceholder") || "Ou tapez votre message..."}
-            placeholderTextColor="#8A8A8A"
+            placeholderTextColor={Colors.muted}
             value={inputText}
             onChangeText={setInputText}
             multiline
@@ -631,13 +632,13 @@ export default function TutorPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F3EC",
+    backgroundColor: Colors.cream,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === "android" ? 24 : 56,
     paddingBottom: 16,
@@ -655,7 +656,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: "#F8F3EC",
+    color: Colors.cream,
   },
   headerSubtitleRow: {
     flexDirection: "row",
@@ -799,7 +800,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   userMessage: {
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
   },
   tutorMessage: {
     backgroundColor: "#FFF",
@@ -816,7 +817,7 @@ const styles = StyleSheet.create({
   arabicMessageText: {
     fontSize: 17,
     lineHeight: 28,
-    color: "#C9A84C",
+    color: Colors.accent,
     textAlign: "right",
     writingDirection: "rtl",
   },
@@ -862,7 +863,7 @@ const styles = StyleSheet.create({
   bottomControls: {
     backgroundColor: "#FFF",
     borderTopWidth: 1,
-    borderTopColor: "#F0E8DA",
+    borderTopColor: Colors.cream2,
     padding: 12,
   },
   inputBar: {
@@ -874,7 +875,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -896,7 +897,7 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#F8F3EC",
+    backgroundColor: Colors.cream,
     borderRadius: 20,
     fontSize: 14,
   },
@@ -904,7 +905,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
     justifyContent: "center",
     alignItems: "center",
   },

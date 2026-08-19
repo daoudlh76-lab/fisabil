@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, View, ActivityIndicator } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/hooks/use-language";
+import { Colors } from "@/constants/colors";
 
 export default function EmailVerificationScreen() {
   const { t } = useLanguage();
@@ -98,7 +99,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 24,
-    backgroundColor: "#F8F3EC",
+    backgroundColor: Colors.cream,
     justifyContent: "center",
   },
   logo: {

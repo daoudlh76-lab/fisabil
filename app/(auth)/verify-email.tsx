@@ -1,6 +1,7 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLanguage } from "@/hooks/use-language";
+import { Colors } from "@/constants/colors";
 
 export default function VerifyEmailScreen() {
   const { t } = useLanguage();
@@ -47,7 +48,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 24,
-    backgroundColor: "#F8F3EC",
+    backgroundColor: Colors.cream,
     justifyContent: "center",
   },
   logo: {

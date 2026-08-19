@@ -3,6 +3,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { Colors } from "@/constants/colors";
 
 export default function ResetPasswordScreen() {
   const { t } = useLanguage();
@@ -180,7 +181,7 @@ export default function ResetPasswordScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#0D2318" />
+              <ActivityIndicator color={Colors.deep} />
             ) : (
               <Text style={styles.buttonText}>{t('auth.resetButton')}</Text>
             )}
@@ -201,7 +202,7 @@ export default function ResetPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
   },
   scrollContent: {
     flexGrow: 1,
@@ -219,7 +220,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
     marginBottom: 16,
-    color: "#F8F3EC",
+    color: Colors.cream,
   },
   description: {
     fontSize: 16,
@@ -239,7 +240,7 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingRight: 50,
     backgroundColor: "rgba(255,255,255,0.1)",
-    color: "#F8F3EC",
+    color: Colors.cream,
   },
   eyeButton: {
     position: "absolute",
@@ -251,14 +252,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   button: {
-    backgroundColor: "#C9A84C",
+    backgroundColor: Colors.accent,
     padding: 16,
     borderRadius: 16,
     alignItems: "center",
     marginTop: 8,
   },
   buttonText: {
-    color: "#0D2318",
+    color: Colors.deep,
     fontWeight: "800",
     fontSize: 16,
   },

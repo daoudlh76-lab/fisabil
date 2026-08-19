@@ -15,6 +15,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { Colors } from "@/constants/colors";
 
 const GREEN = '#2E7D32';
 
@@ -699,7 +700,7 @@ export default function PlaylistScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F3EC',
+    backgroundColor: Colors.cream,
   },
   header: {
     backgroundColor: 'transparent',

@@ -1,0 +1,16 @@
+export const Colors = {
+  deep: '#0D2318',
+  green: '#1A4A2E',
+  mid: '#2D6A45',
+  logoGreen: '#6ABF4B',
+  accent: '#C9A84C',
+  gold: '#E8C96A',
+  cream: '#F8F3EC',
+  cream2: '#F0E8DA',
+  text: '#1A1A1A',
+  muted: '#8A8A8A',
+  danger: '#C0392B',
+  dangerLight: '#FEF0EE',
+  white: '#FFFFFF',
+  black: '#000000',
+}

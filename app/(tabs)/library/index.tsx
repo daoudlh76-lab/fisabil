@@ -17,6 +17,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/hooks/use-language";
 import { useAudioPlaylistContext } from "@/contexts/audio-playlist-context";
 import { getLocalScans, saveLocalScans, getLocalFolders, saveLocalFolders, getLocalVocab } from "@/src/lib/local-cache";
+import { Colors } from "@/constants/colors";
 
 function formatRelativeDate(dateStr: string, t: (path: string, vars?: Record<string, string | number>) => string): string {
   const date = new Date(dateStr);
@@ -442,11 +443,11 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8F3EC" },
+  container: { flex: 1, backgroundColor: Colors.cream },
   scrollContainer: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 120 },
   header: {
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
     paddingTop: 12,
     paddingBottom: 16,
     paddingHorizontal: 16,
@@ -457,19 +458,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  title: { fontSize: 22, fontWeight: "900", color: "#F8F3EC" },
+  title: { fontSize: 22, fontWeight: "900", color: Colors.cream },
   addFolderCircle: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#C9A84C",
+    backgroundColor: Colors.accent,
     justifyContent: "center",
     alignItems: "center",
   },
   addFolderCircleIcon: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#0D2318",
+    color: Colors.deep,
     lineHeight: 24,
   },
   foldersScroll: { marginBottom: 12 },
@@ -496,7 +497,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    color: "#F8F3EC",
+    color: Colors.cream,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
   },
@@ -512,12 +513,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  cardTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 4, color: "#1a1a1a" },
+  cardTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 4, color: Colors.text },
   cardMetaRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
-  cardMetaText: { fontSize: 12, color: "#8A8A8A" },
-  cardMetaDot: { fontSize: 12, color: "#8A8A8A", marginHorizontal: 6 },
+  cardMetaText: { fontSize: 12, color: Colors.muted },
+  cardMetaDot: { fontSize: 12, color: Colors.muted, marginHorizontal: 6 },
   cardMetaBadge: { fontSize: 12, color: "#2E7D32", fontWeight: "700" },
-  preview: { color: "#8A8A8A", textAlign: "right", writingDirection: "rtl" },
+  preview: { color: Colors.muted, textAlign: "right", writingDirection: "rtl" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -610,7 +611,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#8A8A8A",
+    color: Colors.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -650,12 +651,12 @@ const styles = StyleSheet.create({
   },
   folderCount: {
     fontSize: 14,
-    color: "#8A8A8A",
+    color: Colors.muted,
     marginLeft: 8,
   },
   folderArrow: {
     fontSize: 20,
-    color: "#8A8A8A",
+    color: Colors.muted,
     marginLeft: "auto",
     paddingLeft: 8,
   },

@@ -14,6 +14,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useLanguage } from "@/hooks/use-language";
 import { useAudioPlaylistContext } from '@/contexts/audio-playlist-context';
 import { useTextToSpeech } from '@/hooks/use-text-to-speech';
+import { Colors } from "@/constants/colors";
 
 const GREEN = '#2E7D32';
 
@@ -233,7 +234,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#F8F3EC",
+    backgroundColor: Colors.cream,
   },
   header: {
     marginBottom: 12,

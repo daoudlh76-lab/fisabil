@@ -14,6 +14,7 @@ import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { LanguageProvider } from '@/hooks/use-language';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
+import { Colors } from "@/constants/colors";
 
 // Empêcher le splash screen de se cacher automatiquement
 SplashScreen.preventAutoHideAsync();
@@ -90,7 +91,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#F8F3EC',
+    backgroundColor: Colors.cream,
   },
   loadingContainer: {
     flex: 1,

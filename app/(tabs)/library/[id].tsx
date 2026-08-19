@@ -21,6 +21,7 @@ import { extractVocabularyFromText, VocabItem, VerbItem, ParticleItem } from "@/
 import { invokeEdge } from "@/src/lib/edge-ai";
 import { migrateExtractVocabResult, needsMigration } from "@/src/lib/migrate-vocab-data";
 import { updateLocalScan, deleteLocalScan, getLocalVocab, saveLocalVocab } from "@/src/lib/local-cache";
+import { Colors } from "@/constants/colors";
 
 type ScanRow = {
   id: string;
@@ -876,11 +877,11 @@ export default function LibraryItemScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#0D2318' }}
+      style={{ flex: 1, backgroundColor: Colors.deep }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScrollView style={{ backgroundColor: '#F8F3EC' }} contentContainerStyle={styles.pageContainer} keyboardShouldPersistTaps="handled">
+      <ScrollView style={{ backgroundColor: Colors.cream }} contentContainerStyle={styles.pageContainer} keyboardShouldPersistTaps="handled">
       <View style={[styles.zoneTop, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.titleOnDark}>{editing ? t('libraryDetail.edit') : t('libraryDetail.details')}</Text>
 
@@ -1453,16 +1454,16 @@ const styles = StyleSheet.create({
   },
   pageContainer: {
     paddingBottom: 40,
-    backgroundColor: '#F8F3EC',
+    backgroundColor: Colors.cream,
   },
   zoneTop: {
-    backgroundColor: '#0D2318',
+    backgroundColor: Colors.deep,
     padding: 16,
     paddingBottom: 20,
     gap: 12,
   },
   zoneBottom: {
-    backgroundColor: '#F8F3EC',
+    backgroundColor: Colors.cream,
     padding: 16,
     paddingBottom: 40,
     gap: 12,
@@ -1481,13 +1482,13 @@ const styles = StyleSheet.create({
   titleOnDark: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#F8F3EC",
+    color: Colors.cream,
     marginTop: 6,
   },
   labelOnDark: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#C9A84C",
+    color: Colors.accent,
     marginTop: 6,
   },
   input: {
@@ -1636,7 +1637,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 14,
@@ -1647,7 +1648,7 @@ const styles = StyleSheet.create({
   emptyVocabTitle: {
     fontSize: 17,
     fontWeight: "800",
-    color: "#0D2318",
+    color: Colors.deep,
     textAlign: "center",
   },
   emptyVocabSubtitle: {
@@ -1669,13 +1670,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 12,
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
     alignItems: "center",
   },
   extractButtonText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#C9A84C",
+    color: Colors.accent,
   },
   // Bouton régénérer vocabulaire
   regenerateButton: {
@@ -1683,7 +1684,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
-    backgroundColor: "#FEF0EE",
+    backgroundColor: Colors.dangerLight,
     borderWidth: 1,
     borderColor: "rgba(192,57,43,0.15)",
     alignSelf: "flex-start",
@@ -1691,7 +1692,7 @@ const styles = StyleSheet.create({
   regenerateButtonText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#C0392B",
+    color: Colors.danger,
   },
   // Styles pour les tableaux
   vocabSection: {
@@ -1700,7 +1701,7 @@ const styles = StyleSheet.create({
   vocabSectionTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#0D2318",
+    color: Colors.deep,
     paddingVertical: 10,
   },
   emptyList: {
@@ -1790,11 +1791,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: "#0D2318",
+    borderColor: Colors.deep,
     alignItems: "center",
   },
   addCardButtonText: {
-    color: "#0D2318",
+    color: Colors.deep,
     fontSize: 14,
     fontWeight: "700",
   },

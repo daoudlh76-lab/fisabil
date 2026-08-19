@@ -3,6 +3,7 @@ import { supabase } from "@/src/lib/supabase";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback } from "react-native";
+import { Colors } from "@/constants/colors";
 // Edge Function will handle OTP generation and email sending
 
 export default function ForgotPasswordScreen() {
@@ -89,7 +90,7 @@ export default function ForgotPasswordScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#0D2318" />
+              <ActivityIndicator color={Colors.deep} />
             ) : (
               <Text style={styles.buttonText}>{t('auth.sendResetLink')}</Text>
             )}
@@ -110,7 +111,7 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0D2318",
+    backgroundColor: Colors.deep,
   },
   scrollContent: {
     flexGrow: 1,
@@ -128,7 +129,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
     marginBottom: 16,
-    color: "#F8F3EC",
+    color: Colors.cream,
   },
   description: {
     fontSize: 16,
@@ -144,16 +145,16 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
     backgroundColor: "rgba(255,255,255,0.1)",
-    color: "#F8F3EC",
+    color: Colors.cream,
   },
   button: {
-    backgroundColor: "#C9A84C",
+    backgroundColor: Colors.accent,
     padding: 16,
     borderRadius: 16,
     alignItems: "center",
   },
   buttonText: {
-    color: "#0D2318",
+    color: Colors.deep,
     fontWeight: "800",
     fontSize: 16,
   },

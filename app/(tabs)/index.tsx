@@ -24,18 +24,18 @@ import { useSubscription } from "@/contexts/subscription-context";
 import { useDiacritics as useOldDiacritics } from "@/hooks/use-diacritics";
 import { useDiacritics } from "@/hooks/use-diacritics-local";
 import { useLanguage } from "@/hooks/use-language";
-import { useTextToSpeech } from "@/hooks/use-text-to-speech";
 
 import { supabase } from "@/src/lib/supabase";
 import { updateLocalScan, saveLocalVocab } from "@/src/lib/local-cache";
 import { processArabicImage } from "@/src/lib/process-arabic-text";
+import { Colors } from "@/constants/colors";
 
-const DARK = "#0D2318";
-const DARK_MEDIUM = "#1A4A2E";
+const DARK = Colors.deep;
+const DARK_MEDIUM = Colors.green;
 const ZONE_BG = "#060f0a";
-const GOLD = "#C9A84C";
-const CREAM = "#F8F3EC";
-const MUTED = "#8A8A8A";
+const GOLD = Colors.accent;
+const CREAM = Colors.cream;
+const MUTED = Colors.muted;
 
 const SCAN_ZONE_HEIGHT = 240;
 
@@ -57,7 +57,6 @@ function ScannerScreen() {
   const [multiPageMode, setMultiPageMode] = useState(false);
 
   const { addTrack, updateTrackScanId, updateTrackContent } = useAudioPlaylistContext();
-  const { speakText } = useTextToSpeech();
 
   const [ocrLoading, setOcrLoading] = useState(false);
 
@@ -258,12 +257,6 @@ function ScannerScreen() {
       setLastTrackId(newTrack.id);
     } catch (error) {
       __DEV__ && console.error("❌ Erreur ajout playlist:", error);
-    }
-  }
-
-  async function readTextAloud() {
-    if (reviewText.trim()) {
-      await speakText(reviewText, "ar-SA", { forceDevice: true });
     }
   }
 
@@ -815,7 +808,7 @@ const styles = StyleSheet.create({
   pageCardTitle: { fontSize: 14, fontWeight: "700", color: DARK, marginBottom: 4 },
   pageCardPreview: { fontSize: 12, color: MUTED },
   pageCardRemoveButton: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "#FEECEA", borderRadius: 8 },
-  pageCardRemoveText: { fontSize: 12, fontWeight: "700", color: "#C0392B" },
+  pageCardRemoveText: { fontSize: 12, fontWeight: "700", color: Colors.danger },
 
   secondaryDarkButton: {
     marginTop: 12,
@@ -884,9 +877,9 @@ const styles = StyleSheet.create({
   textCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   textCardTitle: { fontSize: 11, fontWeight: "800", color: MUTED, textTransform: "uppercase", letterSpacing: 0.5 },
   correctButton: { fontSize: 13, fontWeight: "700", color: DARK_MEDIUM },
-  textCardContent: { color: "#1a1a1a", lineHeight: 26, fontSize: 16, textAlign: "right", writingDirection: "rtl" },
+  textCardContent: { color: Colors.text, lineHeight: 26, fontSize: 16, textAlign: "right", writingDirection: "rtl" },
   textCardEditable: {
-    color: "#1a1a1a",
+    color: Colors.text,
     lineHeight: 26,
     fontSize: 16,
     textAlign: "right",

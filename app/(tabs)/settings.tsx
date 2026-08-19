@@ -19,6 +19,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { Colors } from "@/constants/colors";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -579,10 +580,10 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(tabs)/settings/delete-account')}
         >
           <View>
-            <Text style={[styles.accountLabel, { color: '#C0392B' }]}>{t('settings.deleteAccount')}</Text>
-            <Text style={[styles.accountValue, { color: '#C0392B' }]}>{t('settings.deleteAccountDescription')}</Text>
+            <Text style={[styles.accountLabel, { color: Colors.danger }]}>{t('settings.deleteAccount')}</Text>
+            <Text style={[styles.accountValue, { color: Colors.danger }]}>{t('settings.deleteAccountDescription')}</Text>
           </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#C0392B" />
+          <MaterialCommunityIcons name="chevron-right" size={24} color={Colors.danger} />
         </TouchableOpacity>
       </View>
 
@@ -599,7 +600,7 @@ export default function SettingsScreen() {
             <MaterialCommunityIcons
               name="refresh"
               size={24}
-              color="#C0392B"
+              color={Colors.danger}
             />
           </View>
           <View style={styles.resetInfo}>
@@ -883,10 +884,10 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F3EC',
+    backgroundColor: Colors.cream,
   },
   header: {
-    backgroundColor: '#0D2318',
+    backgroundColor: Colors.deep,
     paddingVertical: 20,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 56,
@@ -894,7 +895,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: '#F8F3EC',
+    color: Colors.cream,
   },
   section: {
     paddingHorizontal: 16,
@@ -903,7 +904,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#8A8A8A',
+    color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -1033,7 +1034,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0E8DA',
+    borderBottomColor: Colors.cream2,
   },
   comparisonLabel: {
     flex: 1,
@@ -1049,7 +1050,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#F0E8DA',
+    backgroundColor: Colors.cream2,
   },
   settingRow: {
     flexDirection: 'row',
@@ -1123,7 +1124,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   logoutButton: {
-    backgroundColor: '#C0392B',
+    backgroundColor: Colors.danger,
     marginHorizontal: 16,
     marginVertical: 20,
     paddingVertical: 14,
@@ -1215,7 +1216,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0E8DA',
+    borderBottomColor: Colors.cream2,
   },
   languageModalTitle: {
     fontSize: 18,
@@ -1259,13 +1260,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#C0392B',
+    borderLeftColor: Colors.danger,
   },
   resetIcon: {
     width: 45,
     height: 45,
     borderRadius: 12,
-    backgroundColor: '#FEF0EE',
+    backgroundColor: Colors.dangerLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1276,15 +1277,15 @@ const styles = StyleSheet.create({
   resetLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C0392B',
+    color: Colors.danger,
   },
   resetDescription: {
     fontSize: 12,
-    color: '#8A8A8A',
+    color: Colors.muted,
     marginTop: 2,
   },
   resetConfirmButton: {
-    backgroundColor: '#C0392B',
+    backgroundColor: Colors.danger,
   },
   // Styles pour les inputs des modals
   modalInput: {
