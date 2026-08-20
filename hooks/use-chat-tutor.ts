@@ -66,6 +66,7 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState('');
   const [userTranscript, setUserTranscript] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState('');
   const [conversationHistory, setConversationHistory] = useState<Array<{role: string, content: string}>>([]);
   const [questionCount, setQuestionCount] = useState(0);
   const [vocabSummary, setVocabSummary] = useState<string>('');
@@ -174,6 +175,7 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
     if (event && event.results && event.results[0]) {
       const transcription = event.results[0].transcript;
       currentTranscriptRef.current = transcription;
+      setLiveTranscript(transcription);
       __DEV__ && console.log('📝 Transcription partielle:', transcription);
     }
   });
@@ -186,6 +188,7 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
     if (!isConnectedRef.current) {
       isListeningRef.current = false;
       currentTranscriptRef.current = '';
+      setLiveTranscript('');
       return;
     }
 
@@ -194,6 +197,7 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
     if (finalTranscript && finalTranscript.trim()) {
       __DEV__ && console.log('✅ Transcription finale:', finalTranscript);
       setUserTranscript(finalTranscript);
+      setLiveTranscript('');
       setIsListening(false);
       isListeningRef.current = false;
 
@@ -217,6 +221,7 @@ export const useChatTutor = (uiLang: string, selectedTextId?: string) => {
       setIsListening(false);
       isListeningRef.current = false;
       setIsTranscribing(false);
+      setLiveTranscript('');
 
       // Redémarrer l'écoute si la session est active
       if (isConnectedRef.current && !isPausedRef.current) {
@@ -475,6 +480,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
       // Réinitialiser la transcription
       currentTranscriptRef.current = '';
       setTranscript('');
+      setLiveTranscript('');
       setError(null);
 
       // Démarrer la reconnaissance vocale en arabe
@@ -730,6 +736,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
     isPausedRef.current = false;
     currentQuestionRef.current = null;
     currentTranscriptRef.current = '';
+    setLiveTranscript('');
   }, []);
 
   useEffect(() => { return () => { disconnect(); }; }, [disconnect]);
@@ -772,6 +779,7 @@ ${vocabSummary ? `\n## مُفْرَدَاتُ الطَّالِبِ المَعْ�
     isPaused,
     transcript,
     userTranscript,
+    liveTranscript,
     messages,
     userTexts,
     error,

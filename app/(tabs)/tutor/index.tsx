@@ -6,8 +6,10 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useSubscription } from "@/contexts/subscription-context";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Animated,
     KeyboardAvoidingView,
@@ -21,25 +23,25 @@ import {
 } from "react-native";
 import { Colors } from "@/constants/colors";
 
-type Folder = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
-
 // Détection légère (rendu uniquement) pour distinguer les bulles de récitation arabe
 function isArabicMessage(text: string): boolean {
   return /[؀-ۿ]/.test(text);
+}
+
+// Une bulle "question" (générée par askPreparedQuestion) se distingue d'une bulle
+// "correction" (générée par evaluateAnswer) par son préfixe fixe "السؤال N/Total: ..."
+function isQuestionMessage(text: string): boolean {
+  const stripped = text.replace(/[ً-ٰٟ]/g, "").trim();
+  return stripped.startsWith("السؤال");
 }
 
 export default function TutorPage() {
   const { language, t } = useLanguage();
   const { isPremium, isLoaded } = useSubscription();
   const [selectedTextId, setSelectedTextId] = useState<string | undefined>(undefined);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
-  const [folders, setFolders] = useState<Folder[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  // Garde-fou : évite de déclencher prepareNow() deux fois pour le même texte
+  const preparedForRef = useRef<Set<string>>(new Set());
 
   const {
     isConnected,
@@ -49,9 +51,11 @@ export default function TutorPage() {
     isPaused,
     transcript,
     userTranscript,
+    liveTranscript,
     messages,
     error,
     userTexts,
+    questionCount,
     connect,
     disconnect,
     sendTextMessage,
@@ -83,70 +87,65 @@ export default function TutorPage() {
     return () => loop.stop();
   }, [pulseAnim]);
 
-  // Charger les dossiers
-  const loadFolders = useCallback(async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData.session?.user?.id;
-    if (!userId) return;
+  // Ondes dorées de l'indicateur "Oustaze lit la question…"
+  const waveAnim1 = useRef(new Animated.Value(0.4)).current;
+  const waveAnim2 = useRef(new Animated.Value(0.4)).current;
+  const waveAnim3 = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    if (!isSpeaking) return;
+    const makeLoop = (anim: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, { toValue: 1, duration: 350, useNativeDriver: false }),
+          Animated.timing(anim, { toValue: 0.4, duration: 350, useNativeDriver: false }),
+        ])
+      );
+    const loops = [makeLoop(waveAnim1, 0), makeLoop(waveAnim2, 120), makeLoop(waveAnim3, 240)];
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+  }, [isSpeaking, waveAnim1, waveAnim2, waveAnim3]);
 
-    const { data, error } = await supabase
-      .from("folders")
-      .select("id, name, color, icon")
-      .eq("user_id", userId)
-      .order("name", { ascending: true });
-
-    if (!error && data) {
-      setFolders(data as Folder[]);
+  // Pulsation verte du cercle micro pendant l'écoute
+  const micPulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!isListening) {
+      micPulseAnim.setValue(1);
+      return;
     }
-  }, []);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(micPulseAnim, { toValue: 1.15, duration: 500, useNativeDriver: true }),
+        Animated.timing(micPulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isListening, micPulseAnim]);
 
-  // Recharger les textes et dossiers à chaque fois que l'utilisateur revient sur cette page
+  // Recharger les textes à chaque fois que l'utilisateur revient sur cette page
   // + arrêter l'audio quand on quitte la page
   useFocusEffect(
     useCallback(() => {
       __DEV__ && console.log('📚 [PAGE] Rechargement des textes du tuteur...');
       loadUserTexts();
-      loadFolders();
 
       return () => {
         // Full disconnect when leaving the tutor page (stops TTS, speech recognition, and all async flows)
         disconnect();
       };
-    }, [loadUserTexts, loadFolders, disconnect])
+    }, [loadUserTexts, disconnect])
   );
 
-  // Filtrer les textes par recherche et dossier
+  // Filtrer les textes par recherche
   const filteredTexts = useMemo(() => {
-    let filtered = userTexts;
-
-    // Filtrer par dossier si un dossier est sélectionné
-    if (selectedFolderId === 'unclassified') {
-      filtered = filtered.filter(t => t.folder_id === null);
-    } else if (selectedFolderId) {
-      filtered = filtered.filter(t => t.folder_id === selectedFolderId);
-    }
-
-    // Filtrer par recherche
-    if (searchQuery.trim()) {
-      const query = searchQuery.trim().toLowerCase();
-      filtered = filtered.filter(t =>
-        t.title.toLowerCase().includes(query) ||
-        t.content.toLowerCase().includes(query)
-      );
-    }
-
-    return filtered;
-  }, [userTexts, selectedFolderId, searchQuery]);
-
-  // Obtenir les textes d'un dossier spécifique
-  const getFolderTexts = useCallback((folderId: string) => {
-    return userTexts.filter(t => t.folder_id === folderId);
-  }, [userTexts]);
-
-  // Textes non classés
-  const unclassifiedTexts = useMemo(() => {
-    return userTexts.filter(t => t.folder_id === null);
-  }, [userTexts]);
+    if (!searchQuery.trim()) return userTexts;
+    const query = searchQuery.trim().toLowerCase();
+    return userTexts.filter(t =>
+      t.title.toLowerCase().includes(query) ||
+      t.content.toLowerCase().includes(query)
+    );
+  }, [userTexts, searchQuery]);
 
   // Log userTexts à chaque changement
   useEffect(() => {
@@ -155,6 +154,23 @@ export default function TutorPage() {
       __DEV__ && console.log('📚 [PAGE] Premier texte:', userTexts[0]?.title);
     }
   }, [userTexts]);
+
+  // Prépare silencieusement les questions IA pour un texte, une seule fois par texte
+  const triggerPrepare = useCallback((textId: string) => {
+    if (preparedForRef.current.has(textId)) return;
+    preparedForRef.current.add(textId);
+    prepareNow(textId);
+  }, [prepareNow]);
+
+  // Sélectionne automatiquement le texte le plus récent tant qu'aucune sélection n'existe,
+  // et lance la préparation IA en arrière-plan dès qu'un texte est sélectionné
+  useEffect(() => {
+    if (!selectedTextId && userTexts.length > 0) {
+      setSelectedTextId(userTexts[0].id);
+      return;
+    }
+    if (selectedTextId) triggerPrepare(selectedTextId);
+  }, [selectedTextId, userTexts, triggerPrepare]);
 
   // Scroll auto
   useEffect(() => {
@@ -191,23 +207,61 @@ export default function TutorPage() {
     }
   };
 
+  const selectedText = userTexts.find((ut) => ut.id === selectedTextId);
+  const totalQuestions = questionCount + preparedCount(selectedTextId);
+  const dotColor = isSpeaking ? Colors.accent : "#4CAF50";
+  const subtitleColor = isSpeaking ? Colors.accent : isListening ? "#4CAF50" : "rgba(248,243,236,0.6)";
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: isConnected ? Colors.deep : Colors.cream }]}
     >
       {/* Header */}
       <View style={styles.header}>
-        <LinearGradient colors={[Colors.deep, Colors.green]} style={styles.headerAvatar}>
-          <Text style={styles.headerAvatarIcon}>🧠</Text>
-        </LinearGradient>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Oustaze</Text>
-          <View style={styles.headerSubtitleRow}>
-            <Animated.View style={[styles.onlineDot, { opacity: pulseAnim }]} />
-            <Text style={styles.headerSubtitle}>Tuteur IA · En ligne</Text>
+        <View style={styles.headerRow}>
+          <LinearGradient colors={[Colors.deep, Colors.green]} style={styles.headerAvatar}>
+            <Text style={styles.headerAvatarIcon}>🧠</Text>
+          </LinearGradient>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Oustaze</Text>
+            <View style={styles.headerSubtitleRow}>
+              {isConnected && (
+                <Animated.View style={[styles.onlineDot, { backgroundColor: dotColor, opacity: pulseAnim }]} />
+              )}
+              <Text style={[styles.headerSubtitle, { color: subtitleColor }]}>
+                {isSpeaking ? t("realtimeTutor.statusSpeaking") :
+                 isListening ? t("realtimeTutor.statusListening") :
+                 isTranscribing ? t("realtimeTutor.statusTranscribing") :
+                 isConnected ? t("realtimeTutor.statusReady") :
+                 t("realtimeTutor.statusOffline")}
+              </Text>
+            </View>
           </View>
         </View>
+
+        {!isConnected && messages.length === 0 && userTexts.length > 0 && (
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t('library.search')}
+            placeholderTextColor="rgba(248,243,236,0.5)"
+            style={styles.headerSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        )}
+
+        {isConnected && selectedText && (
+          <View style={styles.activeTextChip}>
+            <Text style={styles.activeTextChipTitle} numberOfLines={1}>{selectedText.title}</Text>
+            {totalQuestions > 0 && (
+              <Text style={styles.activeTextChipCount}>
+                {t('realtimeTutor.questionOf', { n: questionCount, total: totalQuestions })}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Bandeau abonnement requis */}
@@ -220,69 +274,21 @@ export default function TutorPage() {
         </View>
       )}
 
-      {/* Barre d'info avec contrôles */}
-      <View style={styles.infoBar}>
-        <Text style={styles.infoText}>
-          {"📚 "}{userTexts.length} {t("realtimeTutor.textsAvailable")}
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={[styles.infoText, { marginRight: 8 }]}>Préparées: {preparedCount()}</Text>
-          <Pressable style={[styles.controlButton, { backgroundColor: '#E0E0E0' }]} onPress={async () => {
-            const id = selectedTextId ?? userTexts[0]?.id;
-            if (!id) return;
-            await prepareNow(id);
-          }}>
-            <Text style={{ fontSize: 12, fontWeight: '600' }}>Préparer maintenant</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.controlButton, { marginLeft: 8, backgroundColor: preparedCount() > 0 ? '#2F6B3D' : '#BDBDBD' }]}
-            onPress={async () => {
-              const id = selectedTextId ?? userTexts[0]?.id;
-              if (!id) return;
-              __DEV__ && console.log('[UI] Start Dialogue pressed for', id);
-              await startDialogue(id);
-            }}
-            disabled={preparedCount() === 0}
-          >
-            <Text style={[styles.controlButtonText, { color: '#fff' }]}>Start Dialogue</Text>
-          </Pressable>
+      {isSpeaking && (
+        <View style={styles.speakingIndicator}>
+          <View style={styles.waveBars}>
+            <Animated.View style={[styles.waveBar, { height: waveAnim1.interpolate({ inputRange: [0, 1], outputRange: [6, 20] }) }]} />
+            <Animated.View style={[styles.waveBar, { height: waveAnim2.interpolate({ inputRange: [0, 1], outputRange: [6, 20] }) }]} />
+            <Animated.View style={[styles.waveBar, { height: waveAnim3.interpolate({ inputRange: [0, 1], outputRange: [6, 20] }) }]} />
+          </View>
+          <Text style={styles.speakingIndicatorText}>{t('realtimeTutor.readingQuestion')}</Text>
         </View>
-        <View style={styles.controlsRow}>
-          {isConnected && (
-            <Pressable
-              style={[styles.controlButton, isPaused ? styles.resumeButton : styles.pauseButton]}
-              onPress={togglePause}
-            >
-              <Text style={styles.controlButtonText}>
-                {isPaused ? "▶️ Reprendre" : "⏸️ Pause"}
-              </Text>
-            </Pressable>
-          )}
-          {isSpeaking && (
-            <Pressable style={styles.interruptButton} onPress={interrupt}>
-              <Text style={styles.interruptButtonText}>
-                ⏹️ {t("realtimeTutor.interrupt")}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
+      )}
 
-      {/* Indicateur d'état en haut */}
-      {isConnected && (
-        <View style={[
-          styles.statusBar,
-          isTranscribing ? styles.statusTranscribing :
-          isListening ? styles.statusListening :
-          isSpeaking ? styles.statusSpeaking :
-          isPaused ? styles.statusPaused : styles.statusReady
-        ]}>
-          <Text style={styles.statusText}>
-            {isPaused ? "⏸️ En pause" :
-             isTranscribing ? "📝 Transcription..." :
-             isListening ? "🎤 Parlez en arabe..." :
-             isSpeaking ? "🔊 Le tuteur parle..." :
-             "✅ Prêt à écouter"}
+      {isListening && (
+        <View style={styles.listeningTranscript}>
+          <Text style={styles.listeningTranscriptText}>
+            {liveTranscript || "…"}
           </Text>
         </View>
       )}
@@ -298,195 +304,74 @@ export default function TutorPage() {
       >
         {!isConnected && messages.length === 0 && (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateTitle}>
-              {t("realtimeTutor.welcomeTitle")}
-            </Text>
-            <Text style={styles.emptyStateText}>
-              {t("realtimeTutor.welcomeText")}
-            </Text>
-
-            {/* Sélection de texte avec dossiers et recherche */}
-            {userTexts.length > 0 && (
-              <View style={styles.textSelectionContainer}>
-                <Text style={styles.textSelectionLabel}>
-                  📖 {t("realtimeTutor.selectText") || "Choisir un texte :"}
-                </Text>
-
-                {/* Barre de recherche */}
-                <TextInput
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder={t('library.search') || "🔍 Rechercher..."}
-                  style={styles.searchInput}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-
+            {userTexts.length > 0 ? (
+              <>
                 <ScrollView
                   style={styles.textList}
                   contentContainerStyle={styles.textListContent}
                   nestedScrollEnabled={true}
                 >
-                  {/* Option pour tous les textes */}
-                  <Pressable
-                    style={[
-                      styles.textOption,
-                      !selectedTextId && !selectedFolderId && styles.textOptionSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedTextId(undefined);
-                      setSelectedFolderId(undefined);
-                      setSearchQuery("");
-                    }}
-                  >
-                    <Text style={[
-                      styles.textOptionTitle,
-                      !selectedTextId && !selectedFolderId && styles.textOptionTitleSelected,
-                    ]}>
-                      📚 {t("realtimeTutor.allTexts") || "Tous mes textes"}
-                    </Text>
-                    <Text style={styles.textOptionSubtitle}>
-                      {userTexts.length} {t("realtimeTutor.texts") || "textes"}
-                    </Text>
-                  </Pressable>
-
-                  {/* Dossiers */}
-                  {folders.length > 0 && (
-                    <View style={styles.foldersSection}>
-                      <Text style={styles.sectionTitle}>{t('library.myFolders') || "Mes dossiers"}</Text>
-                      {folders.map((folder) => {
-                        const folderTexts = getFolderTexts(folder.id);
-                        if (folderTexts.length === 0) return null;
-
-                        return (
-                          <Pressable
-                            key={folder.id}
-                            style={[
-                              styles.folderOption,
-                              selectedFolderId === folder.id && styles.textOptionSelected,
-                            ]}
-                            onPress={() => {
-                              if (selectedFolderId === folder.id) {
-                                setSelectedFolderId(undefined);
-                                setSelectedTextId(undefined);
-                              } else {
-                                setSelectedFolderId(folder.id);
-                                setSelectedTextId(undefined);
-                              }
-                            }}
-                          >
-                            <View style={styles.folderHeader}>
-                              <Text style={[
-                                styles.folderTitle,
-                                selectedFolderId === folder.id && styles.textOptionTitleSelected,
-                              ]}>
-                                {folder.icon} {folder.name}
-                              </Text>
-                              <Text style={styles.folderCount}>
-                                {folderTexts.length}
-                              </Text>
-                            </View>
-
-                            {/* Afficher les textes du dossier si sélectionné */}
-                            {selectedFolderId === folder.id && (
-                              <View style={styles.folderTexts}>
-                                {folderTexts.map((text) => (
-                                  <Pressable
-                                    key={text.id}
-                                    style={[
-                                      styles.textOptionNested,
-                                      selectedTextId === text.id && styles.textOptionNestedSelected,
-                                    ]}
-                                    onPress={() => setSelectedTextId(text.id)}
-                                  >
-                                    <Text style={[
-                                      styles.textOptionTitle,
-                                      selectedTextId === text.id && styles.textOptionTitleSelected,
-                                    ]}>
-                                      {text.title}
-                                    </Text>
-                                    <Text style={styles.textOptionSubtitle}>
-                                      {text.content?.slice(0, 40)}...
-                                    </Text>
-                                  </Pressable>
-                                ))}
-                              </View>
-                            )}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  )}
-
-                  {/* Textes non classés */}
-                  {unclassifiedTexts.length > 0 && (
-                    <View style={styles.foldersSection}>
-                      <Text style={styles.sectionTitle}>{t('library.unclassified') || "Textes non classés"}</Text>
+                  {filteredTexts.map((text) => {
+                    const selected = selectedTextId === text.id;
+                    const wordCount = text.content ? text.content.trim().split(/\s+/).filter(Boolean).length : 0;
+                    return (
                       <Pressable
-                        style={[
-                          styles.folderOption,
-                          selectedFolderId === 'unclassified' && styles.textOptionSelected,
-                        ]}
-                        onPress={() => {
-                          if (selectedFolderId === 'unclassified') {
-                            setSelectedFolderId(undefined);
-                            setSelectedTextId(undefined);
-                          } else {
-                            setSelectedFolderId('unclassified');
-                            setSelectedTextId(undefined);
-                          }
-                        }}
+                        key={text.id}
+                        style={[styles.textCard, selected && styles.textCardSelected]}
+                        onPress={() => setSelectedTextId(text.id)}
                       >
-                        <View style={styles.folderHeader}>
-                          <Text style={[
-                            styles.folderTitle,
-                            selectedFolderId === 'unclassified' && styles.textOptionTitleSelected,
-                          ]}>
-                            📄 {t('library.noFolder') || "Sans dossier"}
-                          </Text>
-                          <Text style={styles.folderCount}>
-                            {unclassifiedTexts.length}
+                        <LinearGradient colors={[Colors.deep, Colors.mid]} style={styles.textCardIcon}>
+                          <Ionicons name="document-text-outline" size={18} color={Colors.cream} />
+                        </LinearGradient>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.textCardTitle} numberOfLines={1}>{text.title}</Text>
+                          <Text style={styles.textCardSubtitle}>
+                            {t('realtimeTutor.wordsCount', { count: wordCount })}
                           </Text>
                         </View>
-
-                        {/* Afficher les textes non classés si sélectionné */}
-                        {selectedFolderId === 'unclassified' && (
-                          <View style={styles.folderTexts}>
-                            {unclassifiedTexts.map((text) => (
-                              <Pressable
-                                key={text.id}
-                                style={[
-                                  styles.textOptionNested,
-                                  selectedTextId === text.id && styles.textOptionNestedSelected,
-                                ]}
-                                onPress={() => setSelectedTextId(text.id)}
-                              >
-                                <Text style={[
-                                  styles.textOptionTitle,
-                                  selectedTextId === text.id && styles.textOptionTitleSelected,
-                                ]}>
-                                  {text.title}
-                                </Text>
-                                <Text style={styles.textOptionSubtitle}>
-                                  {text.content?.slice(0, 40)}...
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        )}
+                        <Text style={styles.textCardChevron}>›</Text>
                       </Pressable>
-                    </View>
-                  )}
+                    );
+                  })}
                 </ScrollView>
-              </View>
-            )}
 
+                <Pressable
+                  style={[styles.startWithTextButton, (!selectedTextId || connecting) && { opacity: 0.6 }]}
+                  disabled={!selectedTextId || connecting}
+                  onPress={async () => {
+                    if (selectedTextId) triggerPrepare(selectedTextId);
+                    await handleConnect();
+                  }}
+                >
+                  {connecting ? (
+                    <ActivityIndicator color={Colors.accent} />
+                  ) : (
+                    <Text style={styles.startWithTextButtonText} numberOfLines={1}>
+                      {t('realtimeTutor.startWithText', {
+                        title: userTexts.find(ut => ut.id === selectedTextId)?.title ?? '',
+                      })}
+                    </Text>
+                  )}
+                </Pressable>
+                <Text style={styles.startHint}>{t('realtimeTutor.autoStartHint')}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyStateTitle}>
+                  {t("realtimeTutor.welcomeTitle")}
+                </Text>
+                <Text style={styles.emptyStateText}>
+                  {t("realtimeTutor.welcomeText")}
+                </Text>
+              </>
+            )}
           </View>
         )}
 
         {messages.map((message) => {
           const isUser = message.role === "user";
           const isArabic = !isUser && isArabicMessage(message.text);
+          const isQuestion = isArabic && isQuestionMessage(message.text);
           return (
             <View
               key={message.id}
@@ -495,13 +380,17 @@ export default function TutorPage() {
                 isUser ? styles.userMessageWrapper : styles.tutorMessageWrapper,
               ]}
             >
-              {isArabic ? (
+              {isQuestion ? (
                 <LinearGradient
                   colors={[Colors.deep, Colors.green]}
                   style={[styles.messageBubble, styles.arabicMessage]}
                 >
                   <Text style={styles.arabicMessageText}>{message.text}</Text>
                 </LinearGradient>
+              ) : isArabic ? (
+                <View style={[styles.messageBubble, styles.correctionMessage]}>
+                  <Text style={styles.correctionMessageText}>{message.text}</Text>
+                </View>
               ) : (
                 <View
                   style={[
@@ -555,41 +444,46 @@ export default function TutorPage() {
       </ScrollView>
 
       {/* Barre de saisie — toujours visible, se connecte automatiquement au premier usage */}
-      <View style={styles.bottomControls}>
+      <View style={[styles.bottomControls, isConnected && styles.bottomControlsDark]}>
         <View style={styles.inputBar}>
-          <Pressable
-            style={[
-              styles.micCircle,
-              isListening && styles.micCircleActive,
-              isTranscribing && styles.micCircleTranscribing,
-              isPaused && styles.micCirclePaused,
-            ]}
-            onPress={async () => {
-              if (!isConnected) {
-                setConnecting(true);
-                await handleConnect();
-                setConnecting(false);
-                return;
-              }
-              if (isPaused) {
-                togglePause();
-              } else if (isListening) {
-                stopListening();
-              } else if (!isSpeaking && !isTranscribing) {
-                startListening();
-              }
-            }}
-            disabled={connecting || isSpeaking || isTranscribing}
-          >
-            <Text style={styles.micCircleIcon}>
-              {isListening ? "⏹️" : isPaused ? "▶️" : "🎤"}
-            </Text>
-          </Pressable>
+          <Animated.View style={{ transform: [{ scale: micPulseAnim }] }}>
+            <Pressable
+              style={[
+                styles.micCircle,
+                isListening && styles.micCircleActive,
+                isTranscribing && styles.micCircleTranscribing,
+                isPaused && styles.micCirclePaused,
+                isSpeaking && styles.micCircleDisabled,
+              ]}
+              onPress={async () => {
+                if (!isConnected) {
+                  setConnecting(true);
+                  await handleConnect();
+                  setConnecting(false);
+                  return;
+                }
+                if (isPaused) {
+                  togglePause();
+                } else if (isListening) {
+                  stopListening();
+                } else if (!isSpeaking && !isTranscribing) {
+                  startListening();
+                }
+              }}
+              disabled={connecting || isSpeaking || isTranscribing}
+            >
+              <Ionicons
+                name={isListening ? "stop" : isPaused ? "play" : "mic"}
+                size={18}
+                color={Colors.cream}
+              />
+            </Pressable>
+          </Animated.View>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, isConnected && styles.inputDark]}
             placeholder={t("realtimeTutor.inputPlaceholder") || "Ou tapez votre message..."}
-            placeholderTextColor={Colors.muted}
+            placeholderTextColor={isConnected ? "rgba(248,243,236,0.4)" : Colors.muted}
             value={inputText}
             onChangeText={setInputText}
             multiline
@@ -607,7 +501,7 @@ export default function TutorPage() {
             }}
             disabled={!inputText.trim()}
           >
-            <Text style={styles.sendButtonText}>{"📤"}</Text>
+            <Ionicons name="send" size={18} color={Colors.accent} />
           </Pressable>
         </View>
       </View>
@@ -616,7 +510,7 @@ export default function TutorPage() {
       <View style={styles.actionBar}>
         {isConnected && (
           <Pressable style={styles.disconnectButton} onPress={disconnect}>
-            <Text style={styles.disconnectButtonText}>🔴 Déconnecter</Text>
+            <Text style={styles.disconnectButtonText}>Déconnecter</Text>
           </Pressable>
         )}
         {messages.length > 0 && (
@@ -635,13 +529,24 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cream,
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
     backgroundColor: Colors.deep,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === "android" ? 24 : 56,
     paddingBottom: 16,
+    gap: 12,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerSearch: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: Colors.cream,
+    fontSize: 14,
   },
   headerAvatar: {
     width: 44,
@@ -686,73 +591,83 @@ const styles = StyleSheet.create({
   },
   trialExpiredText: { fontSize: 14, fontWeight: "700", color: "#D32F2F", textAlign: "center" },
   upgradeBtn: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: "#2E7D32", borderRadius: 6 },
-  upgradeBtnText: { fontSize: 13, fontWeight: "600", color: "white" },
-  infoBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
+  upgradeBtnText: { fontSize: 13, fontWeight: "600", color: Colors.white },
+  activeTextChip: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(201,168,76,0.12)",
+    borderRadius: 20,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: "transparent",
-  },
-  infoText: {
-    fontSize: 12,
-    color: "#2E7D32",
-  },
-  controlsRow: {
     flexDirection: "row",
-    gap: 8,
-  },
-  controlButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  pauseButton: {
-    backgroundColor: "#FF9800",
-  },
-  resumeButton: {
-    backgroundColor: "#4CAF50",
-  },
-  controlButtonText: {
-    fontSize: 12,
-    color: "#FFF",
-    fontWeight: "600",
-  },
-  interruptButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#D32F2F",
-    borderRadius: 16,
-  },
-  interruptButtonText: {
-    fontSize: 12,
-    color: "#FFF",
-    fontWeight: "600",
-  },
-  statusBar: {
-    paddingVertical: 10,
     alignItems: "center",
+    gap: 8,
+    maxWidth: "100%",
   },
-  statusListening: {
-    backgroundColor: "#E3F2FD",
+  activeTextChipTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.accent,
+    flexShrink: 1,
   },
-  statusTranscribing: {
-    backgroundColor: "#F3E5F5",
-  },
-  statusSpeaking: {
-    backgroundColor: "#FFF3E0",
-  },
-  statusPaused: {
-    backgroundColor: "#FFEBEE",
-  },
-  statusReady: {
-    backgroundColor: "#E8F5E9",
-  },
-  statusText: {
-    fontSize: 14,
+  activeTextChipCount: {
+    fontSize: 12,
     fontWeight: "600",
-    color: "#333",
+    color: "rgba(201,168,76,0.7)",
+  },
+  speakingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 10,
+  },
+  waveBars: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    height: 20,
+  },
+  waveBar: {
+    width: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.accent,
+  },
+  speakingIndicatorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.accent,
+  },
+  listeningTranscript: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+    backgroundColor: "rgba(106,191,75,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(106,191,75,0.2)",
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 50,
+    justifyContent: "center",
+  },
+  listeningTranscriptText: {
+    fontSize: 16,
+    fontStyle: "italic",
+    color: "rgba(248,243,236,0.5)",
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  correctionMessage: {
+    backgroundColor: "rgba(106,191,75,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(106,191,75,0.3)",
+  },
+  correctionMessageText: {
+    fontSize: 16,
+    lineHeight: 26,
+    color: Colors.cream,
+    textAlign: "right",
+    writingDirection: "rtl",
   },
   messagesContainer: {
     flex: 1,
@@ -763,12 +678,7 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyStateEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
+    paddingTop: 20,
   },
   emptyStateTitle: {
     fontSize: 20,
@@ -800,11 +710,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   userMessage: {
-    backgroundColor: Colors.deep,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
   },
   tutorMessage: {
-    backgroundColor: "#FFF",
-    shadowColor: "#000",
+    backgroundColor: Colors.white,
+    shadowColor: Colors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -831,7 +743,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   userMessageText: {
-    color: "#FFF",
+    color: Colors.white,
   },
   tutorMessageText: {
     color: "#333",
@@ -843,7 +755,7 @@ const styles = StyleSheet.create({
   },
   userTranscriptText: {
     fontSize: 16,
-    color: "#FFF",
+    color: Colors.white,
     fontStyle: "italic",
   },
   typingIndicator: {
@@ -861,10 +773,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   bottomControls: {
-    backgroundColor: "#FFF",
+    backgroundColor: Colors.white,
     borderTopWidth: 1,
     borderTopColor: Colors.cream2,
     padding: 12,
+  },
+  bottomControlsDark: {
+    backgroundColor: Colors.deep,
+    borderTopColor: "rgba(255,255,255,0.1)",
   },
   inputBar: {
     flexDirection: "row",
@@ -880,13 +796,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   micCircleActive: {
-    backgroundColor: "#1976D2",
+    backgroundColor: "#4CAF50",
   },
   micCircleTranscribing: {
     backgroundColor: "#9C27B0",
   },
   micCirclePaused: {
     backgroundColor: "#9E9E9E",
+  },
+  micCircleDisabled: {
+    opacity: 0.35,
   },
   micCircleIcon: {
     fontSize: 18,
@@ -900,6 +819,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cream,
     borderRadius: 20,
     fontSize: 14,
+  },
+  inputDark: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    color: Colors.cream,
   },
   sendButton: {
     width: 44,
@@ -947,140 +870,72 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  startButton: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: "#4CAF50",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 30,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  startButtonConnecting: {
-    backgroundColor: "#FF9800",
-  },
-  startButtonIcon: {
-    fontSize: 48,
-    marginBottom: 8,
-  },
-  startButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFF",
-    textAlign: "center",
-  },
-  textSelectionContainer: {
-    width: "100%",
-    maxWidth: 400,
-    marginVertical: 20,
-    paddingHorizontal: 16,
-  },
-  textSelectionLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-    textAlign: "center",
-  },
   textList: {
-    maxHeight: 300,
+    maxHeight: 360,
+    width: "100%",
   },
   textListContent: {
     gap: 10,
+    paddingHorizontal: 16,
   },
-  textOption: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 2,
-    borderColor: "#E0E0E0",
-  },
-  textOptionSelected: {
-    borderColor: "#2E7D32",
-    backgroundColor: "#E8F5E9",
-  },
-  textOptionTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 4,
-  },
-  textOptionTitleSelected: {
-    color: "#2E7D32",
-  },
-  textOptionSubtitle: {
-    fontSize: 12,
-    color: "#666",
-  },
-  searchInput: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-  foldersSection: {
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  folderOption: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 2,
-    borderColor: "#E0E0E0",
-    marginBottom: 8,
-  },
-  folderHeader: {
+  textCard: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    shadowColor: Colors.black,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  textCardSelected: {
+    borderColor: Colors.green,
+    backgroundColor: "#f0f7f2",
+  },
+  textCardIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textCardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  textCardSubtitle: {
+    fontSize: 12,
+    color: Colors.muted,
+  },
+  textCardChevron: {
+    fontSize: 20,
+    color: Colors.muted,
+  },
+  startWithTextButton: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    backgroundColor: Colors.deep,
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: "center",
   },
-  folderTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
-    flex: 1,
+  startWithTextButtonText: {
+    color: Colors.accent,
+    fontSize: 16,
+    fontWeight: "800",
   },
-  folderCount: {
+  startHint: {
+    marginTop: 10,
+    marginHorizontal: 24,
     fontSize: 12,
-    fontWeight: "600",
-    color: "#666",
-    backgroundColor: "#F5F5F5",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  folderTexts: {
-    marginTop: 8,
-    paddingLeft: 8,
-    borderLeftWidth: 2,
-    borderLeftColor: "#E0E0E0",
-  },
-  textOptionNested: {
-    backgroundColor: "#F9F9F9",
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    marginBottom: 6,
-  },
-  textOptionNestedSelected: {
-    borderColor: "#2E7D32",
-    backgroundColor: "#E8F5E9",
+    color: Colors.muted,
+    textAlign: "center",
   },
 });
