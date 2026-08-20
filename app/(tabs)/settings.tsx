@@ -4,6 +4,8 @@ import { supabase } from '@/src/lib/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
 import React, { useState, useEffect } from 'react';
 import {
     Alert,
@@ -23,10 +25,24 @@ import { Colors } from "@/constants/colors";
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { subscription, getFeatures, getCurrentPlanInfo } = useSubscription();
+  const { subscription, isPremium, monthlyPackage, annualPackage } = useSubscription();
   const { language, setLanguage, availableLanguages, getLanguageName, t } = useLanguage();
-  const currentPlan = getCurrentPlanInfo();
-  const features = getFeatures();
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
+
+  // ─── Prix & essai gratuit (même logique que app/(tabs)/subscription.tsx) ───
+  const monthlyPrice = monthlyPackage?.product.priceString ?? '';
+  const annualPrice = annualPackage?.product.priceString ?? '';
+  const monthlyCost = monthlyPackage?.product.price ?? 0;
+  const annualCost = annualPackage?.product.price ?? 0;
+  const savingsPercent = monthlyCost > 0 ? Math.round((1 - annualCost / (monthlyCost * 12)) * 100) : 0;
+  const trialDays = (() => {
+    const intro = monthlyPackage?.product?.introPrice ?? annualPackage?.product?.introPrice;
+    if (!intro || intro.price !== 0) return 7;
+    if (intro.periodUnit === 'DAY') return intro.periodNumberOfUnits;
+    if (intro.periodUnit === 'WEEK') return intro.periodNumberOfUnits * 7;
+    if (intro.periodUnit === 'MONTH') return intro.periodNumberOfUnits * 30;
+    return intro.periodNumberOfUnits;
+  })();
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   const [resetModalVisible, setResetModalVisible] = useState(false);
@@ -225,187 +241,79 @@ export default function SettingsScreen() {
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.title}>{t('settings.title')}</Text>
-      </View>
 
-      {/* LANGUE */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
-        <TouchableOpacity 
-          style={styles.settingRow}
-          onPress={() => setLanguageModalVisible(true)}
-        >
-          <View>
-            <Text style={styles.settingLabel}>{getLanguageName(language)}</Text>
-            <Text style={styles.settingDescription}>
-              {t('settings.selectLanguage')}
-            </Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
-      </View>
-
-      {/* ABONNEMENT ACTUEL */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📋 {t('settings.subscription')}</Text>
-
-        <View
-          style={[
-            styles.subscriptionCard,
-            (subscription.plan === 'premium_monthly' || subscription.plan === 'premium_annual') && styles.premiumCard,
-          ]}
-        >
-          <View style={styles.planHeader}>
-            <Text style={styles.planName}>
-              {subscription.plan === 'free'
-                ? `🆓 ${t('settings.free')}`
-                : subscription.plan === 'premium_monthly'
-                ? `💎 ${t('settings.premium')} (${t('subscription.monthly')})`
-                : `👑 ${t('settings.premium')} (${t('subscription.annual')})`}
-            </Text>
-            {currentPlan && currentPlan.price > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {currentPlan.price.toFixed(2)}{currentPlan.currency}/{currentPlan.period === 'month' ? t('subscription.mo') : t('subscription.yr')}
-                </Text>
-              </View>
+        <View style={styles.profileCard}>
+          <LinearGradient colors={[Colors.mid, Colors.logoGreen]} style={styles.profileAvatar}>
+            {userName ? (
+              <Text style={styles.profileAvatarInitial}>{userName.charAt(0).toUpperCase()}</Text>
+            ) : (
+              <MaterialCommunityIcons name="account" size={22} color={Colors.cream} />
             )}
+          </LinearGradient>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.profileName} numberOfLines={1}>{userName || t('settings.arabicLearner')}</Text>
+            <Text style={styles.profileEmail} numberOfLines={1}>{userEmail}</Text>
           </View>
-
-          {subscription.plan === 'free' && (
-            <>
-              <Text style={styles.planDescription}>
-                {t('settings.freeDescription')}
-              </Text>
-              <TouchableOpacity
-                style={styles.upgradeButton}
-                onPress={handleUpgrade}
-              >
-                <Text style={styles.upgradeButtonText}>
-                  {t('settings.upgradeToPremium')}
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {(subscription.plan === 'premium_monthly' || subscription.plan === 'premium_annual') && (
-            <>
-              <Text style={styles.planDescription}>
-                {t('settings.unlimitedAccess')}
-              </Text>
-              <View style={styles.premiumBadge}>
-                <MaterialCommunityIcons
-                  name="check-circle"
-                  size={20}
-                  color="#4CAF50"
-                />
-                <Text style={styles.premiumText}>
-                  {subscription.plan === 'premium_annual' ? t('settings.activeForever') : t('settings.activeSubscription')}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.upgradeButton, { backgroundColor: '#666' }]}
-                onPress={handleUpgrade}
-              >
-                <Text style={styles.upgradeButtonText}>
-                  {t('subscription.managePlan')}
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
+          <TouchableOpacity onPress={handleEditProfile}>
+            <Text style={styles.profileEditButton}>{t('settings.editProfileButton')} ›</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* COMPARAISON DES FONCTIONNALITÉS */}
+      {/* ABONNEMENT */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🎯 {t('settings.features')}</Text>
+        <Text style={styles.sectionTitle}>{t('settings.subscription')}</Text>
 
-        {features.map((feature) => {
-          const hasAccess =
-            subscription.plan === 'premium_monthly' || subscription.plan === 'premium_annual'
-              ? feature.premiumAllowed
-              : feature.freeAllowed;
-
-          return (
-            <View key={feature.name} style={styles.featureRow}>
-              <View style={styles.featureInfo}>
-                <Text style={styles.featureName}>{t(feature.labelKey)}</Text>
-                {!feature.freeAllowed && subscription.plan === 'free' && (
-                  <Text style={styles.featureLimit}>
-                    {t('settings.locked')}
-                  </Text>
-                )}
-              </View>
-              <View
-                style={[
-                  styles.featureStatus,
-                  hasAccess ? styles.statusActive : styles.statusInactive,
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={hasAccess ? 'check-circle' : 'lock'}
-                  size={20}
-                  color={hasAccess ? '#4CAF50' : '#999'}
-                />
+        {isPremium ? (
+          <LinearGradient colors={[Colors.deep, Colors.green]} style={styles.subCardPremium}>
+            <View style={styles.subCardPremiumHeader}>
+              <Text style={styles.subCardPremiumPlan}>
+                {t('settings.premium')} · {subscription.plan === 'premium_monthly' ? t('subscription.monthly') : t('subscription.annual')}
+              </Text>
+              <View style={styles.subActiveBadge}>
+                <Text style={styles.subActiveBadgeText}>{t('settings.active')}</Text>
               </View>
             </View>
-          );
-        })}
-      </View>
-
-      {/* TABLEAU COMPARATIF */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📊 {t('settings.comparison')}</Text>
-
-        <View style={styles.comparisonTable}>
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{t('settings.feature')}</Text>
-            <Text style={[styles.comparisonCell, { fontWeight: '700' }]}>{t('settings.free')}</Text>
-            <Text style={[styles.comparisonCell, { fontWeight: '700' }]}>{t('settings.premium')}</Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{t('settings.duration')}</Text>
-            <Text style={styles.comparisonCell}>7 {t('settings.days')}</Text>
-            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.unlimited')}</Text>
-          </View>
-
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{t('settings.scannerFeature')}</Text>
-            <Text style={styles.comparisonCell}>1{t('settings.perDay')}</Text>
-            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.unlimited')}</Text>
-          </View>
-
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{t('settings.aiTutor')}</Text>
-            <Text style={styles.comparisonCell}>5{t('settings.perDay')}</Text>
-            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.unlimited')}</Text>
-          </View>
-
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{t('settings.dictations')}</Text>
-            <Text style={styles.comparisonCell}>2{t('settings.perDay')}</Text>
-            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.unlimited')}</Text>
-          </View>
-
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{t('settings.vocabCards')}</Text>
-            <Text style={styles.comparisonCell}>✅</Text>
-            <Text style={styles.comparisonCell}>✅</Text>
-          </View>
-
-          <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{t('settings.support')}</Text>
-            <Text style={styles.comparisonCell}>{t('settings.byEmail')}</Text>
-            <Text style={[styles.comparisonCell, { color: '#4CAF50' }]}>{t('settings.priority')}</Text>
-          </View>
-        </View>
+            {subscription.expiryDate && (
+              <Text style={styles.subCardPremiumExpiry}>
+                {t('subscription.expiresOn')} {subscription.expiryDate.toLocaleDateString()}
+              </Text>
+            )}
+            <TouchableOpacity style={styles.subManageButton} onPress={handleUpgrade}>
+              <Text style={styles.subManageButtonText}>{t('subscription.managePlan')} →</Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        ) : (
+          <LinearGradient colors={['#1a1a1a', '#2a2a2a']} style={styles.subCardFree}>
+            <View style={styles.subPriceRow}>
+              <View style={styles.subPriceBox}>
+                <Text style={styles.subPriceLabel}>{t('subscription.monthly')}</Text>
+                <Text style={styles.subPriceValue}>{monthlyPrice || '—'}</Text>
+              </View>
+              <View style={[styles.subPriceBox, styles.subPriceBoxAnnual]}>
+                {savingsPercent > 0 && (
+                  <View style={styles.subStarBadge}>
+                    <Text style={styles.subStarBadgeText}>
+                      ⭐ {t('subscription.saveAnnually', { amount: String(savingsPercent) })}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.subPriceLabel}>{t('subscription.annual')}</Text>
+                <Text style={styles.subPriceValue}>{annualPrice || '—'}</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.subTrialButton} onPress={handleUpgrade}>
+              <Text style={styles.subTrialButtonText}>
+                {t('settings.startFreeTrial', { days: String(trialDays) })}
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        )}
       </View>
 
       {/* STATISTIQUES */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📊 {t('settings.statistics')}</Text>
+        <Text style={styles.sectionTitle}>{t('settings.statistics')}</Text>
 
         <TouchableOpacity
           style={styles.supportRow}
@@ -426,189 +334,102 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* AUTRES PARAMÈTRES */}
+      {/* PRÉFÉRENCES */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🔧 {t('settings.other')}</Text>
+        <Text style={styles.sectionTitle}>{t('settings.preferences')}</Text>
+        <View style={styles.groupCard}>
+          <TouchableOpacity style={styles.groupRow} onPress={() => setLanguageModalVisible(true)}>
+            <View>
+              <Text style={styles.groupRowLabel}>{t('settings.language')}</Text>
+              <Text style={styles.groupRowDescription}>{getLanguageName(language)}</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.muted} />
+          </TouchableOpacity>
 
-        <View style={styles.settingRow}>
-          <View>
-            <Text style={styles.settingLabel}>{t('settings.notifications')}</Text>
-            <Text style={styles.settingDescription}>
-              {t('settings.learningReminders')}
-            </Text>
+          <View style={styles.groupDivider} />
+
+          <View style={styles.groupRow}>
+            <View>
+              <Text style={styles.groupRowLabel}>{t('settings.notifications')}</Text>
+              <Text style={styles.groupRowDescription}>{t('settings.learningReminders')}</Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleToggleNotifications}
+              trackColor={{ true: Colors.mid }}
+            />
           </View>
-          <Switch
-            value={notificationsEnabled}
-            onValueChange={handleToggleNotifications}
-          />
         </View>
-
-        <TouchableOpacity
-          style={styles.settingRow}
-          onPress={() => router.push('/(tabs)/settings/about')}
-        >
-          <View>
-            <Text style={styles.settingLabel}>{t('settings.about')}</Text>
-            <Text style={styles.settingDescription}>v1.0.0</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingRow}
-          onPress={() => router.push('/(tabs)/settings/privacy')}
-        >
-          <View>
-            <Text style={styles.settingLabel}>{t('settings.privacyPolicy')}</Text>
-            <Text style={styles.settingDescription}>{t('settings.readMore')}</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
       </View>
 
-      {/* SECTION AIDE */}
+      {/* AIDE */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>❓ {t('settings.helpSupport')}</Text>
+        <Text style={styles.sectionTitle}>{t('settings.helpSupport')}</Text>
+        <View style={styles.groupCard}>
+          <TouchableOpacity style={styles.groupRow} onPress={() => router.push('/(tabs)/settings/faq')}>
+            <Text style={styles.groupRowLabel}>{t('settings.faq')}</Text>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.muted} />
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.supportRow}
-          onPress={handleContactSupport}
-        >
-          <View style={styles.supportIcon}>
-            <MaterialCommunityIcons
-              name="email-outline"
-              size={24}
-              color="#1976d2"
-            />
-          </View>
-          <View style={styles.supportInfo}>
-            <Text style={styles.supportLabel}>{t('settings.contactUs')}</Text>
-            <Text style={styles.supportEmail}>contact@fisabil.fr</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
+          <View style={styles.groupDivider} />
 
-        <TouchableOpacity
-          style={styles.supportRow}
-          onPress={() =>
-            Alert.alert(
-              t('settings.faq'),
-              t('settings.faqContent')
-            )
-          }
-        >
-          <View style={styles.supportIcon}>
-            <MaterialCommunityIcons
-              name="help-circle-outline"
-              size={24}
-              color="#FF9800"
-            />
-          </View>
-          <View style={styles.supportInfo}>
-            <Text style={styles.supportLabel}>{t('settings.faq')}</Text>
-            <Text style={styles.supportEmail}>{t('settings.faqFull')}</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.groupRow} onPress={handleContactSupport}>
+            <Text style={styles.groupRowLabel}>{t('settings.contactUs')}</Text>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.muted} />
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.supportRow}
-          onPress={() =>
-            Alert.alert(
-              `📱 ${t('settings.followUsTitle')}`,
-              t('settings.followUsContent')
-            )
-          }
-        >
-          <View style={styles.supportIcon}>
-            <MaterialCommunityIcons
-              name="share"
-              size={24}
-              color="#4CAF50"
-            />
-          </View>
-          <View style={styles.supportInfo}>
-            <Text style={styles.supportLabel}>{t('settings.socialMedia')}</Text>
-            <Text style={styles.supportEmail}>{t('settings.followUs')}</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
+          <View style={styles.groupDivider} />
+
+          <TouchableOpacity style={styles.groupRow} onPress={() => router.push('/(tabs)/settings/about')}>
+            <View>
+              <Text style={styles.groupRowLabel}>{t('settings.about')}</Text>
+              <Text style={styles.groupRowDescription}>{appVersion}</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.muted} />
+          </TouchableOpacity>
+
+          <View style={styles.groupDivider} />
+
+          <TouchableOpacity style={styles.groupRow} onPress={() => router.push('/(tabs)/settings/privacy')}>
+            <Text style={styles.groupRowLabel}>{t('settings.privacyPolicy')}</Text>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.muted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* SECTION COMPTE */}
+      {/* COMPTE */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
-
-        <TouchableOpacity style={styles.accountRow}>
-          <View>
-            <Text style={styles.accountLabel}>{t('settings.username')}</Text>
-            <Text style={styles.accountValue}>{userName || t('settings.arabicLearner')}</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.accountRow}>
-          <View>
-            <Text style={styles.accountLabel}>{t('settings.email')}</Text>
-            <Text style={styles.accountValue}>{userEmail || 'user@example.com'}</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.accountRow}
-          onPress={handleEditProfile}
-        >
-          <View>
-            <Text style={styles.accountLabel}>{t('settings.editProfile')}</Text>
-            <Text style={styles.accountValue}>{t('settings.changeInfo')}</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.accountRow}
-          onPress={handleChangePassword}
-        >
-          <View>
-            <Text style={styles.accountLabel}>{t('settings.changePassword')}</Text>
-            <Text style={styles.accountValue}>{t('settings.secureAccount')}</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.accountRow}
-          onPress={() => router.push('/(tabs)/settings/delete-account')}
-        >
-          <View>
-            <Text style={[styles.accountLabel, { color: Colors.danger }]}>{t('settings.deleteAccount')}</Text>
-            <Text style={[styles.accountValue, { color: Colors.danger }]}>{t('settings.deleteAccountDescription')}</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color={Colors.danger} />
-        </TouchableOpacity>
+        <View style={styles.groupCard}>
+          <TouchableOpacity style={styles.groupRow} onPress={handleChangePassword}>
+            <Text style={styles.groupRowLabel}>{t('settings.changePassword')}</Text>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.muted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* SECTION RÉINITIALISATION */}
+      {/* ZONE DANGEREUSE */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🔄 {t('settings.reset')}</Text>
+        <Text style={styles.sectionTitle}>{t('settings.dangerZone')}</Text>
+        <View style={styles.groupCard}>
+          <TouchableOpacity style={styles.groupRow} onPress={handleReset} disabled={isResetting}>
+            <View>
+              <Text style={[styles.groupRowLabel, { color: Colors.danger }]}>{t('settings.resetAll')}</Text>
+              <Text style={styles.groupRowDescription}>{t('settings.resetDescription')}</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.muted} />
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.resetRow}
-          onPress={handleReset}
-          disabled={isResetting}
-        >
-          <View style={styles.resetIcon}>
-            <MaterialCommunityIcons
-              name="refresh"
-              size={24}
-              color={Colors.danger}
-            />
-          </View>
-          <View style={styles.resetInfo}>
-            <Text style={styles.resetLabel}>{t('settings.resetAll')}</Text>
-            <Text style={styles.resetDescription}>{t('settings.resetDescription')}</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#999" />
-        </TouchableOpacity>
+          <View style={styles.groupDivider} />
+
+          <TouchableOpacity style={styles.groupRow} onPress={() => router.push('/(tabs)/settings/delete-account')}>
+            <View>
+              <Text style={[styles.groupRowLabel, { color: Colors.danger }]}>{t('settings.deleteAccount')}</Text>
+              <Text style={[styles.groupRowDescription, { color: Colors.danger }]}>{t('settings.deleteAccountDescription')}</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.danger} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* BOUTON DÉCONNEXION */}
@@ -616,7 +437,7 @@ export default function SettingsScreen() {
         style={styles.logoutButton}
         onPress={handleLogout}
       >
-        <MaterialCommunityIcons name="logout" size={20} color="white" />
+        <MaterialCommunityIcons name="logout" size={20} color={Colors.danger} />
         <Text style={styles.logoutButtonText}>{t('settings.logout')}</Text>
       </TouchableOpacity>
 
@@ -897,6 +718,44 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: Colors.cream,
   },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 14,
+    padding: 12,
+  },
+  profileAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileAvatarInitial: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.cream,
+  },
+  profileName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.cream,
+  },
+  profileEmail: {
+    fontSize: 12,
+    color: 'rgba(248,243,236,0.6)',
+    marginTop: 2,
+  },
+  profileEditButton: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.accent,
+  },
   section: {
     paddingHorizontal: 16,
     marginVertical: 16,
@@ -909,173 +768,129 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 12,
   },
-  subscriptionCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+  subCardFree: {
+    borderRadius: 16,
     padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9800',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  premiumCard: {
-    borderLeftColor: '#FFD700',
-    backgroundColor: '#fffbf0',
+  subPriceRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
   },
-  planHeader: {
+  subPriceBox: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  subPriceBoxAnnual: {
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.4)',
+  },
+  subStarBadge: {
+    marginBottom: 6,
+  },
+  subStarBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.accent,
+  },
+  subPriceLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 4,
+  },
+  subPriceValue: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: Colors.cream,
+  },
+  subTrialButton: {
+    backgroundColor: Colors.accent,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  subTrialButtonText: {
+    color: Colors.deep,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  subCardPremium: {
+    borderRadius: 16,
+    padding: 16,
+  },
+  subCardPremiumHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  planName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+  subCardPremiumPlan: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.cream,
   },
-  badge: {
-    backgroundColor: '#FF9800',
+  subActiveBadge: {
+    backgroundColor: Colors.accent,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 10,
   },
-  badgeText: {
-    color: 'white',
+  subActiveBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.deep,
+  },
+  subCardPremiumExpiry: {
     fontSize: 12,
-    fontWeight: '600',
+    color: 'rgba(248,243,236,0.6)',
+    marginTop: 6,
   },
-  planDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
-  },
-  timerBox: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF3E0',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  timerText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FF9800',
-    marginLeft: 8,
-  },
-  upgradeButton: {
-    backgroundColor: '#1976d2',
+  subManageButton: {
+    marginTop: 14,
+    backgroundColor: 'rgba(255,255,255,0.1)',
     paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  upgradeButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  premiumBadge: {
-    flexDirection: 'row',
-    backgroundColor: '#E8F5E9',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  premiumText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4CAF50',
-    marginLeft: 8,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
     borderRadius: 12,
-    marginBottom: 8,
+    alignItems: 'center',
   },
-  featureInfo: {
-    flex: 1,
-  },
-  featureName: {
+  subManageButtonText: {
+    color: Colors.cream,
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '700',
   },
-  featureLimit: {
-    fontSize: 12,
-    color: '#FF9800',
-    marginTop: 2,
-  },
-  featureStatus: {
-    padding: 8,
-  },
-  statusActive: {
-    backgroundColor: '#E8F5E9',
-    borderRadius: 8,
-  },
-  statusInactive: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-  },
-  comparisonTable: {
-    backgroundColor: 'white',
+  groupCard: {
+    backgroundColor: Colors.white,
     borderRadius: 12,
     overflow: 'hidden',
   },
-  comparisonRow: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.cream2,
-  },
-  comparisonLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#333',
-  },
-  comparisonCell: {
-    flex: 1,
-    fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.cream2,
-  },
-  settingRow: {
+  groupRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'white',
     paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingHorizontal: 14,
   },
-  settingLabel: {
+  groupRowLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
   },
-  settingDescription: {
+  groupRowDescription: {
     fontSize: 12,
-    color: '#999',
+    color: Colors.muted,
     marginTop: 2,
+  },
+  groupDivider: {
+    height: 1,
+    backgroundColor: Colors.cream2,
+    marginLeft: 14,
   },
   supportRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: Colors.white,
     paddingVertical: 14,
     paddingHorizontal: 12,
     borderRadius: 12,
@@ -1103,39 +918,21 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 2,
   },
-  accountRow: {
-    backgroundColor: 'white',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  accountLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-  },
-  accountValue: {
-    fontSize: 13,
-    color: '#1976d2',
-    marginTop: 4,
-  },
   logoutButton: {
-    backgroundColor: Colors.danger,
+    backgroundColor: Colors.white,
     marginHorizontal: 16,
     marginVertical: 20,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    borderWidth: 1,
+    borderColor: Colors.cream2,
   },
   logoutButtonText: {
-    color: 'white',
+    color: Colors.danger,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1149,7 +946,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: 'white',
+    backgroundColor: Colors.white,
     borderRadius: 16,
     paddingVertical: 24,
     paddingHorizontal: 20,
@@ -1196,12 +993,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalConfirmText: {
-    color: 'white',
+    color: Colors.white,
     fontSize: 14,
     fontWeight: '600',
   },
   languageModalContent: {
-    backgroundColor: 'white',
+    backgroundColor: Colors.white,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     marginTop: 'auto',
@@ -1251,39 +1048,6 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
   },
   // Reset styles
-  resetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: Colors.danger,
-  },
-  resetIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 12,
-    backgroundColor: Colors.dangerLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  resetInfo: {
-    flex: 1,
-  },
-  resetLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.danger,
-  },
-  resetDescription: {
-    fontSize: 12,
-    color: Colors.muted,
-    marginTop: 2,
-  },
   resetConfirmButton: {
     backgroundColor: Colors.danger,
   },

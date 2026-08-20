@@ -68,6 +68,10 @@ export const translations = {
       arabicLearner: "Apprenant Arabe",
       email: "Email",
       editProfile: "Modifier le Profil",
+      editProfileButton: "Modifier",
+      preferences: "Préférences",
+      dangerZone: "Zone dangereuse",
+      startFreeTrial: "Commencer l'essai gratuit {{days}} jours",
       changeInfo: "Changer vos informations",
       changePassword: "Changer le Mot de Passe",
       secureAccount: "Sécuriser votre compte",
@@ -156,6 +160,22 @@ export const translations = {
       locked: "Verrouillé",
       freeDescription: "Abonnez-vous pour débloquer toutes les fonctionnalités",
     },
+
+    // FAQ
+    faq: {
+      title: "Comment ça marche",
+      q1: "Comment scanner un texte arabe ?",
+      a1: "Depuis l'onglet Scanner, choisissez Appareil, Galerie ou PDF, puis le mode Page unique ou Plusieurs pages. Appuyez sur \"Analyser le texte\" : l'IA lit le texte, ajoute automatiquement les voyelles et extrait le vocabulaire. Vous pouvez corriger le texte détecté avant de l'enregistrer dans votre Bibliothèque.",
+      q2: "Comment fonctionne le Tuteur Oustaze ?",
+      a2: "Choisissez un texte puis appuyez sur \"Démarrer avec…\". Oustaze vous accueille, résume le texte, puis pose une série de questions à l'oral en arabe classique. Répondez au micro ou par écrit : Oustaze corrige selon le sens de votre réponse, pas la formulation exacte, puis enchaîne automatiquement sur la question suivante.",
+      q3: "Comment faire une dictée ?",
+      a3: "Dans l'onglet Révision, sous-onglet Dictées, choisissez un texte. Oustaze lit un segment à voix haute : écrivez ce que vous entendez sur une feuille, puis appuyez sur \"Voir la correction\" pour comparer avec le texte original voyellé avant de passer au segment suivant.",
+      q4: "Quelle est la différence entre les plans ?",
+      a4: "Le plan gratuit inclut 1 scan par jour et les cartes de vocabulaire illimitées. Premium débloque le scan illimité, le Tuteur IA, les Dictées et les playlists audio en voix native, sans limite quotidienne.",
+      q5: "Comment annuler mon abonnement ?",
+      a5: "Sur iPhone : Réglages → votre nom → Abonnements → Fisabil → Annuler l'abonnement. Sur Android : Play Store → Abonnements → Fisabil → Annuler. Votre accès Premium reste actif jusqu'à la fin de la période déjà payée.",
+    },
+
     // Statistics
     statistics: {
       myDictionary: "Mon Dictionnaire",
@@ -773,6 +793,10 @@ export const translations = {
       arabicLearner: "Arabic Learner",
       email: "Email",
       editProfile: "Edit Profile",
+      editProfileButton: "Edit",
+      preferences: "Preferences",
+      dangerZone: "Danger zone",
+      startFreeTrial: "Start {{days}}-day free trial",
       changeInfo: "Change your information",
       changePassword: "Change Password",
       secureAccount: "Secure your account",
@@ -860,6 +884,21 @@ export const translations = {
       deletionError: "Deletion error",
       locked: "Locked",
       freeDescription: "Subscribe to unlock all features",
+    },
+
+    // FAQ
+    faq: {
+      title: "How it works",
+      q1: "How do I scan an Arabic text?",
+      a1: "From the Scanner tab, choose Device, Gallery or PDF, then Single page or Multiple pages mode. Tap \"Analyze text\": the AI reads the text, automatically adds vowels and extracts vocabulary. You can correct the detected text before saving it to your Library.",
+      q2: "How does the Oustaze Tutor work?",
+      a2: "Pick a text, then tap \"Start with…\". Oustaze greets you, summarizes the text, then asks a series of questions out loud in Classical Arabic. Answer by voice or in writing: Oustaze corrects based on the meaning of your answer, not the exact wording, then automatically moves on to the next question.",
+      q3: "How do I do a dictation?",
+      a3: "In the Revision tab, Dictations sub-tab, choose a text. Oustaze reads a segment aloud: write down what you hear on paper, then tap \"Show correction\" to compare with the original vowelled text before moving to the next segment.",
+      q4: "What's the difference between plans?",
+      a4: "The free plan includes 1 scan per day and unlimited vocabulary cards. Premium unlocks unlimited scanning, the AI Tutor, Dictations and native-voice audio playlists, with no daily limit.",
+      q5: "How do I cancel my subscription?",
+      a5: "On iPhone: Settings → your name → Subscriptions → Fisabil → Cancel Subscription. On Android: Play Store → Subscriptions → Fisabil → Cancel. Your Premium access stays active until the end of the period already paid for.",
     },
     // Statistics
     statistics: {
@@ -1471,6 +1510,10 @@ export const translations = {
       arabicLearner: "Arabisch-Lerner",
       email: "E-Mail",
       editProfile: "Profil bearbeiten",
+      editProfileButton: "Bearbeiten",
+      preferences: "Einstellungen",
+      dangerZone: "Gefahrenzone",
+      startFreeTrial: "{{days}}-tägige kostenlose Testversion starten",
       changeInfo: "Ihre Informationen ändern",
       changePassword: "Passwort ändern",
       secureAccount: "Ihr Konto sichern",
@@ -1514,6 +1557,21 @@ export const translations = {
       statistics: "Statistiken",
       locked: "Gesperrt",
       freeDescription: "Abonnieren Sie, um alle Funktionen freizuschalten",
+    },
+
+    // FAQ
+    faq: {
+      title: "So funktioniert's",
+      q1: "Wie scanne ich einen arabischen Text?",
+      a1: "Wählen Sie im Scanner-Tab Gerät, Galerie oder PDF, dann den Modus Einzelseite oder Mehrere Seiten. Tippen Sie auf „Text analysieren“: Die KI liest den Text, fügt automatisch die Vokale hinzu und extrahiert den Wortschatz. Sie können den erkannten Text vor dem Speichern in Ihrer Bibliothek korrigieren.",
+      q2: "Wie funktioniert der Tutor Oustaze?",
+      a2: "Wählen Sie einen Text und tippen Sie auf „Starten mit …“. Oustaze begrüßt Sie, fasst den Text zusammen und stellt dann mündlich eine Reihe von Fragen auf Hocharabisch. Antworten Sie per Mikrofon oder schriftlich: Oustaze korrigiert nach dem Sinn Ihrer Antwort, nicht nach dem genauen Wortlaut, und fährt dann automatisch mit der nächsten Frage fort.",
+      q3: "Wie mache ich ein Diktat?",
+      a3: "Wählen Sie im Tab Wiederholung, Unterreiter Diktate, einen Text. Oustaze liest ein Segment laut vor: Schreiben Sie auf, was Sie hören, und tippen Sie dann auf „Korrektur anzeigen“, um mit dem vokalisierten Originaltext zu vergleichen, bevor Sie zum nächsten Segment übergehen.",
+      q4: "Was ist der Unterschied zwischen den Plänen?",
+      a4: "Der kostenlose Plan umfasst 1 Scan pro Tag und unbegrenzte Vokabelkarten. Premium schaltet unbegrenztes Scannen, den KI-Tutor, Diktate und Audio-Playlists mit nativer Stimme frei, ohne Tageslimit.",
+      q5: "Wie kündige ich mein Abonnement?",
+      a5: "Auf dem iPhone: Einstellungen → Ihr Name → Abonnements → Fisabil → Abonnement kündigen. Auf Android: Play Store → Abonnements → Fisabil → Kündigen. Ihr Premium-Zugang bleibt bis zum Ende des bereits bezahlten Zeitraums aktiv.",
     },
     // Statistics
     statistics: {
@@ -2068,6 +2126,10 @@ export const translations = {
       arabicLearner: "Estudiante de Árabe",
       email: "Correo electrónico",
       editProfile: "Editar Perfil",
+      editProfileButton: "Editar",
+      preferences: "Preferencias",
+      dangerZone: "Zona de peligro",
+      startFreeTrial: "Comenzar prueba gratuita de {{days}} días",
       changeInfo: "Cambiar tu información",
       changePassword: "Cambiar Contraseña",
       secureAccount: "Asegurar tu cuenta",
@@ -2111,6 +2173,21 @@ export const translations = {
       statistics: "Estadísticas",
       locked: "Bloqueado",
       freeDescription: "Suscríbase para desbloquear todas las funciones",
+    },
+
+    // FAQ
+    faq: {
+      title: "Cómo funciona",
+      q1: "¿Cómo escaneo un texto árabe?",
+      a1: "Desde la pestaña Escáner, elige Dispositivo, Galería o PDF, luego el modo Página única o Varias páginas. Toca \"Analizar texto\": la IA lee el texto, añade automáticamente las vocales y extrae el vocabulario. Puedes corregir el texto detectado antes de guardarlo en tu Biblioteca.",
+      q2: "¿Cómo funciona el Tutor Oustaze?",
+      a2: "Elige un texto y toca \"Empezar con…\". Oustaze te saluda, resume el texto y luego hace una serie de preguntas en voz alta en árabe clásico. Responde por micrófono o por escrito: Oustaze corrige según el significado de tu respuesta, no la formulación exacta, y pasa automáticamente a la siguiente pregunta.",
+      q3: "¿Cómo hago un dictado?",
+      a3: "En la pestaña Repaso, subpestaña Dictados, elige un texto. Oustaze lee un segmento en voz alta: escribe lo que oigas en papel y toca \"Ver corrección\" para comparar con el texto original vocalizado antes de pasar al siguiente segmento.",
+      q4: "¿Cuál es la diferencia entre los planes?",
+      a4: "El plan gratuito incluye 1 escaneo al día y tarjetas de vocabulario ilimitadas. Premium desbloquea escaneo ilimitado, el Tutor IA, Dictados y listas de audio con voz nativa, sin límite diario.",
+      q5: "¿Cómo cancelo mi suscripción?",
+      a5: "En iPhone: Ajustes → tu nombre → Suscripciones → Fisabil → Cancelar suscripción. En Android: Play Store → Suscripciones → Fisabil → Cancelar. Tu acceso Premium sigue activo hasta el final del período ya pagado.",
     },
     // Statistics
     statistics: {
@@ -2665,6 +2742,10 @@ export const translations = {
       arabicLearner: "Изучающий арабский",
       email: "Email",
       editProfile: "Редактировать профиль",
+      editProfileButton: "Изменить",
+      preferences: "Настройки",
+      dangerZone: "Опасная зона",
+      startFreeTrial: "Начать {{days}}-дневную бесплатную пробную версию",
       changeInfo: "Изменить информацию",
       changePassword: "Изменить пароль",
       secureAccount: "Защитить аккаунт",
@@ -2708,6 +2789,21 @@ export const translations = {
       statistics: "Статистика",
       locked: "Заблокировано",
       freeDescription: "Подпишитесь, чтобы разблокировать все функции",
+    },
+
+    // FAQ
+    faq: {
+      title: "Как это работает",
+      q1: "Как отсканировать арабский текст?",
+      a1: "На вкладке «Сканер» выберите Устройство, Галерею или PDF, затем режим «Одна страница» или «Несколько страниц». Нажмите «Анализировать текст»: ИИ прочитает текст, автоматически добавит гласные и извлечёт словарь. Перед сохранением в Библиотеку вы можете исправить распознанный текст.",
+      q2: "Как работает репетитор Устаз?",
+      a2: "Выберите текст и нажмите «Начать с…». Устаз поприветствует вас, кратко перескажет текст, а затем устно задаст серию вопросов на литературном арабском. Отвечайте голосом или письменно: Устаз оценивает смысл ответа, а не точную формулировку, и автоматически переходит к следующему вопросу.",
+      q3: "Как выполнить диктант?",
+      a3: "На вкладке «Повторение», подвкладка «Диктанты», выберите текст. Устаз читает сегмент вслух: запишите услышанное на бумаге, затем нажмите «Показать исправление», чтобы сравнить с оригинальным озвученным текстом, прежде чем перейти к следующему сегменту.",
+      q4: "В чём разница между планами?",
+      a4: "Бесплатный план включает 1 скан в день и неограниченные карточки словаря. Premium открывает неограниченное сканирование, ИИ-репетитора, диктанты и аудиоплейлисты с естественным голосом без дневного лимита.",
+      q5: "Как отменить подписку?",
+      a5: "На iPhone: Настройки → ваше имя → Подписки → Fisabil → Отменить подписку. На Android: Play Store → Подписки → Fisabil → Отменить. Доступ Premium останется активным до конца уже оплаченного периода.",
     },
     // Statistics
     statistics: {
@@ -3262,6 +3358,10 @@ export const translations = {
       arabicLearner: "Pelajar Bahasa Arab",
       email: "E-mel",
       editProfile: "Edit Profil",
+      editProfileButton: "Edit",
+      preferences: "Keutamaan",
+      dangerZone: "Zon bahaya",
+      startFreeTrial: "Mula percubaan percuma {{days}} hari",
       changeInfo: "Tukar maklumat anda",
       changePassword: "Tukar Kata Laluan",
       secureAccount: "Lindungi akaun anda",
@@ -3305,6 +3405,21 @@ export const translations = {
       statistics: "Statistik",
       locked: "Dikunci",
       freeDescription: "Langgan untuk membuka semua ciri",
+    },
+
+    // FAQ
+    faq: {
+      title: "Cara ia berfungsi",
+      q1: "Bagaimana cara mengimbas teks Arab?",
+      a1: "Dari tab Pengimbas, pilih Peranti, Galeri atau PDF, kemudian mod Halaman tunggal atau Berbilang halaman. Ketik \"Analisis teks\": AI membaca teks, menambah baris secara automatik dan mengekstrak kosa kata. Anda boleh betulkan teks yang dikesan sebelum menyimpannya ke Perpustakaan anda.",
+      q2: "Bagaimana Tutor Oustaze berfungsi?",
+      a2: "Pilih teks kemudian ketik \"Mula dengan…\". Oustaze mengalu-alukan anda, meringkaskan teks, kemudian mengajukan beberapa soalan secara lisan dalam bahasa Arab klasik. Jawab menggunakan mikrofon atau secara bertulis: Oustaze membetulkan berdasarkan makna jawapan anda, bukan susunan kata tepat, kemudian meneruskan secara automatik ke soalan seterusnya.",
+      q3: "Bagaimana cara membuat latihan imla?",
+      a3: "Dalam tab Ulangkaji, sub-tab Imla, pilih teks. Oustaze membaca satu segmen dengan kuat: tulis apa yang anda dengar di atas kertas, kemudian ketik \"Lihat pembetulan\" untuk membandingkan dengan teks asal yang berbaris sebelum beralih ke segmen seterusnya.",
+      q4: "Apakah perbezaan antara pelan?",
+      a4: "Pelan percuma termasuk 1 imbasan sehari dan kad kosa kata tanpa had. Premium membuka kunci imbasan tanpa had, Tutor AI, Imla dan senarai main audio suara asli, tanpa had harian.",
+      q5: "Bagaimana cara membatalkan langganan saya?",
+      a5: "Di iPhone: Tetapan → nama anda → Langganan → Fisabil → Batalkan Langganan. Di Android: Play Store → Langganan → Fisabil → Batal. Akses Premium anda kekal aktif sehingga tamat tempoh yang telah dibayar.",
     },
     // Statistics
     statistics: {
@@ -3861,6 +3976,10 @@ export const translations = {
       arabicLearner: "متعلم العربية",
       email: "البريد الإلكتروني",
       editProfile: "تعديل الملف الشخصي",
+      editProfileButton: "تعديل",
+      preferences: "التفضيلات",
+      dangerZone: "منطقة الخطر",
+      startFreeTrial: "ابدأ التجربة المجانية لمدة {{days}} أيام",
       changeInfo: "تغيير معلوماتك",
       changePassword: "تغيير كلمة المرور",
       secureAccount: "تأمين حسابك",
@@ -3948,6 +4067,21 @@ export const translations = {
       deletionError: "خطأ في الحذف",
       locked: "مقفل",
       freeDescription: "اشترك لفتح جميع الميزات",
+    },
+
+    // FAQ
+    faq: {
+      title: "كيف يعمل التطبيق",
+      q1: "كيف أمسح نصًا عربيًا؟",
+      a1: "من تبويب الماسح، اختر الجهاز أو المعرض أو PDF، ثم وضع صفحة واحدة أو عدة صفحات. اضغط \"تحليل النص\": يقرأ الذكاء الاصطناعي النص ويضيف التشكيل تلقائيًا ويستخرج المفردات. يمكنك تصحيح النص المكتشف قبل حفظه في مكتبتك.",
+      q2: "كيف يعمل المعلم أوستاذ؟",
+      a2: "اختر نصًا ثم اضغط \"ابدأ مع…\". يرحب بك أوستاذ، يلخص النص، ثم يطرح سلسلة من الأسئلة شفهيًا بالعربية الفصحى. أجب بالميكروفون أو كتابةً: يصحح أوستاذ بناءً على معنى إجابتك، لا الصياغة الحرفية، ثم ينتقل تلقائيًا إلى السؤال التالي.",
+      q3: "كيف أقوم بإملاء؟",
+      a3: "في تبويب المراجعة، تبويب الإملاءات الفرعي، اختر نصًا. يقرأ أوستاذ مقطعًا بصوت عالٍ: اكتب ما تسمعه على ورقة، ثم اضغط \"عرض التصحيح\" لمقارنته بالنص الأصلي المشكّل قبل الانتقال إلى المقطع التالي.",
+      q4: "ما الفرق بين الخطط؟",
+      a4: "تشمل الخطة المجانية مسحًا واحدًا يوميًا وبطاقات مفردات غير محدودة. تفتح خطة Premium المسح غير المحدود، والمعلم الذكي، والإملاءات، وقوائم الصوت بصوت طبيعي، دون حد يومي.",
+      q5: "كيف ألغي اشتراكي؟",
+      a5: "على آيفون: الإعدادات ← اسمك ← الاشتراكات ← Fisabil ← إلغاء الاشتراك. على أندرويد: Play Store ← الاشتراكات ← Fisabil ← إلغاء. يبقى وصولك إلى Premium نشطًا حتى نهاية الفترة المدفوعة بالفعل.",
     },
     // Statistics
     statistics: {

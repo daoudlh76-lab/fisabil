@@ -181,6 +181,14 @@ export default function TabsLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="settings/faq"
+        options={{
+          title: t("faq.title"),
+          headerShown: false,
+          href: null,
+        }}
+      />
 
       {/* Statistiques - cachée de la barre */}
       <Tabs.Screen
