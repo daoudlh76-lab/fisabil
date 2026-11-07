@@ -50,7 +50,7 @@ export async function extractVocabularyFromText(
   scanId: string,
   uiLang: string = 'fr',
   words?: string[]
-): Promise<ExtractVocabResult | null> {
+): Promise<ExtractVocabResult> {
   try {
     __DEV__ && console.log(`📚 Extracting vocabulary via Edge Function (scan: ${scanId}, lang: ${uiLang})...`);
 
@@ -66,8 +66,8 @@ export async function extractVocabularyFromText(
   } catch (err) {
     __DEV__ && console.error('❌ Vocabulary extraction failed:', err);
 
-    // Try to get more detailed error info by making a direct fetch call
-    try {
+    // Debug uniquement en dev : refaire l'appel en prod doublerait le coût Gemini à chaque échec
+    if (__DEV__) try {
       const { supabase } = await import('./supabase');
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
@@ -104,7 +104,8 @@ export async function extractVocabularyFromText(
       __DEV__ && console.error('🔍 Debug fetch also failed:', debugErr);
     }
 
-    return null;
+    // L'erreur remonte à l'écran (le message contient "status=422" si texte trop long)
+    throw err;
   }
 }
 

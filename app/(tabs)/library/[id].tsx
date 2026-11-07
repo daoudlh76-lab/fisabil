@@ -426,129 +426,37 @@ export default function LibraryItemScreen() {
   // ✅ IA: Générer vocabulaire
   // =============================
   
-  // Traductions mock par langue
-  const mockTranslations: Record<string, {
-    vocab: { book: string; school: string; student: string; mascSingular: string; femSingular: string };
-    verbs: { write: string; read: string; regularVerb: string };
-    particles: { preposition: string; inAt: string; from: string };
-  }> = {
-    fr: {
-      vocab: { book: "livre", school: "école", student: "étudiant", mascSingular: "Nom masculin singulier", femSingular: "Nom féminin singulier" },
-      verbs: { write: "écrire", read: "lire", regularVerb: "Verbe régulier" },
-      particles: { preposition: "préposition", inAt: "dans", from: "de" },
-    },
-    en: {
-      vocab: { book: "book", school: "school", student: "student", mascSingular: "Masculine singular noun", femSingular: "Feminine singular noun" },
-      verbs: { write: "to write", read: "to read", regularVerb: "Regular verb" },
-      particles: { preposition: "preposition", inAt: "in", from: "from" },
-    },
-    de: {
-      vocab: { book: "Buch", school: "Schule", student: "Student", mascSingular: "Männliches Singularnomen", femSingular: "Weibliches Singularnomen" },
-      verbs: { write: "schreiben", read: "lesen", regularVerb: "Regelmäßiges Verb" },
-      particles: { preposition: "Präposition", inAt: "in", from: "von" },
-    },
-    es: {
-      vocab: { book: "libro", school: "escuela", student: "estudiante", mascSingular: "Sustantivo masculino singular", femSingular: "Sustantivo femenino singular" },
-      verbs: { write: "escribir", read: "leer", regularVerb: "Verbo regular" },
-      particles: { preposition: "preposición", inAt: "en", from: "de" },
-    },
-    ru: {
-      vocab: { book: "книга", school: "школа", student: "студент", mascSingular: "Мужской род единственного числа", femSingular: "Женский род единственного числа" },
-      verbs: { write: "писать", read: "читать", regularVerb: "Правильный глагол" },
-      particles: { preposition: "предлог", inAt: "в", from: "из" },
-    },
-  };
-
-  // Mock data (utilisé si Edge Function n'est pas disponible)
-  function getMockVocabData(): ExtractResponse {
-    const tr = mockTranslations[uiLang] || mockTranslations.fr;
-    return {
-      meta: {
-        ui_lang: uiLang,
-        title: scan?.title ?? "Texte",
-        source: "mock-extraction",
-        model: "mock",
-      },
-      vocabulaire: [
-        {
-          traduction: tr.vocab.book,
-          singulier: "كِتَابٌ",
-          pluriel: "كُتُبٌ",
-          contraire: null,
-          remarque: tr.vocab.mascSingular,
-        },
-        {
-          traduction: tr.vocab.school,
-          singulier: "مَدْرَسَةٌ",
-          pluriel: "مَدَارِسُ",
-          contraire: null,
-          remarque: tr.vocab.femSingular,
-        },
-        {
-          traduction: tr.vocab.student,
-          singulier: "طَالِبٌ",
-          pluriel: "طُلَّابٌ",
-          contraire: null,
-          remarque: tr.vocab.mascSingular,
-        },
-      ],
-      verbes: [
-        {
-          traduction: tr.verbs.write,
-          passe_3ms: "كَتَبَ",
-          present_3ms: "يَكْتُبُ",
-          imperatif: "اُكْتُبْ",
-          remarque: tr.verbs.regularVerb,
-        },
-        {
-          traduction: tr.verbs.read,
-          passe_3ms: "قَرَأَ",
-          present_3ms: "يَقْرَأُ",
-          imperatif: "اِقْرَأْ",
-          remarque: tr.verbs.regularVerb,
-        },
-      ],
-      particules: [
-        {
-          particule_ar: "فِي",
-          type: tr.particles.preposition,
-          traduction: tr.particles.inAt,
-          exemple: "فِي الْبَيْتِ",
-        },
-        {
-          particule_ar: "مِنْ",
-          type: tr.particles.preposition,
-          traduction: tr.particles.from,
-          exemple: "مِنَ الْمَدْرَسَةِ",
-        },
-      ],
-    };
+  // TODO i18n : messages d'erreur en dur en français, à déplacer dans constants/translations.ts (7 langues)
+  function showVocabError(e: any) {
+    const tooLong = String(e?.message ?? '').includes('status=422');
+    Alert.alert(
+      tooLong ? 'Texte trop long pour une seule génération' : 'Impossible de générer le vocabulaire',
+      tooLong
+        ? 'Le texte est trop long pour être analysé en une fois. Essayez avec un texte plus court.'
+        : 'Une erreur est survenue. Vérifiez votre connexion et réessayez.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Réessayer', onPress: () => { generateVocab(); } },
+      ]
+    );
   }
 
-  async function generateVocab() {
+  async function generateVocab(): Promise<boolean> {
     try {
-      if (!scan) return;
+      if (!scan) return false;
 
       setAiLoading(true);
 
       // Utiliser l'extraction via Edge Function (sécurisée)
-      let payload: ExtractResponse;
-
       __DEV__ && console.log('📡 Extraction du vocabulaire via Edge Function...');
       const result = await extractVocabularyFromText(scan.id, uiLang);
 
-      if (!result) {
-        __DEV__ && console.warn('⚠️ Edge Function extraction failed');
-        __DEV__ && console.log('📋 Utilisant mock data...');
-        payload = getMockVocabData();
-      } else {
-        payload = result;
-        __DEV__ && console.log('✅ Vocabulaire extrait:', {
-          vocab: result.vocabulaire.length,
-          verbes: result.verbes.length,
-          particules: result.particules.length,
-        });
-      }
+      const payload: ExtractResponse = result;
+      __DEV__ && console.log('✅ Vocabulaire extrait:', {
+        vocab: result.vocabulaire.length,
+        verbes: result.verbes.length,
+        particules: result.particules.length,
+      });
 
       // Ajouter la version du prompt au meta
       if (payload.meta) {
@@ -578,10 +486,12 @@ export default function LibraryItemScreen() {
       }
       // Sauvegarder aussi en local
       saveLocalVocab(scan.id, uiLang, payload);
+      return true;
     } catch (e: any) {
       __DEV__ && console.error("Erreur génération vocabulaire:", e?.message);
-      // En cas d'erreur, utiliser mock data
-      setAiData(getMockVocabData());
+      // Pas de mock : rien n'est affiché ni mis en cache, l'utilisateur peut réessayer
+      showVocabError(e);
+      return false;
     } finally {
       setAiLoading(false);
     }
@@ -618,9 +528,8 @@ export default function LibraryItemScreen() {
                 setAiData(null);
 
                 // Régénérer
-                await generateVocab();
-
-                Alert.alert('✅', t('libraryDetail.regenerateSuccess'));
+                const ok = await generateVocab();
+                if (ok) Alert.alert('✅', t('libraryDetail.regenerateSuccess'));
               } catch (e: any) {
                 __DEV__ && console.error('Erreur régénération:', e);
                 Alert.alert(t('libraryDetail.error'), e?.message || 'Unknown error');

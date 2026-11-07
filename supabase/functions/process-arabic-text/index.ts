@@ -1,7 +1,10 @@
 // supabase/functions/process-arabic-text/index.ts
-// Edge Function Supabase (Deno) — Gemini 1.5 Flash
+// Edge Function Supabase (Deno) — Gemini 3.6 Flash
 //
 // Pipeline complet : Image base64 → Gemini (OCR + vocalization + extraction) → Bescherelle correction → JSON
+
+// Modèle Gemini utilisé (2.5-flash déprécié, redirigé par Google le 1er déc. 2026)
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 type RequestBody = {
   image_base64: string;
@@ -46,7 +49,7 @@ async function callGemini(
   mimeType: string,
   targetLang: string,
   uiLang: string,
-): Promise<string> {
+): Promise<{ text: string; finishReason: string }> {
   const systemPrompt = buildSystemPrompt(targetLang);
   const userPrompt = buildUserPrompt(targetLang, uiLang);
 
@@ -71,10 +74,12 @@ async function callGemini(
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 16384,
+      // Thinking au minimum : il consomme le budget maxOutputTokens et tronquait la réponse
+      thinkingConfig: { thinkingLevel: "MINIMAL" },
     },
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -90,12 +95,9 @@ async function callGemini(
 
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const finishReason = data?.candidates?.[0]?.finishReason ?? "UNKNOWN";
 
-  if (!text) {
-    throw new Error("Empty response from Gemini");
-  }
-
-  return text;
+  return { text, finishReason };
 }
 
 // ── Prompts ──
@@ -383,11 +385,28 @@ Deno.serve(async (req) => {
     console.log(`[process-arabic-text] Processing image (${(base64.length / 1024).toFixed(0)} KB base64), mime=${mimeType}, lang=${uiLang}`);
 
     // ── Step 1: Gemini OCR + extraction ──
-    const rawJson = await callGemini(GEMINI_API_KEY, base64, mimeType, targetLang, uiLang);
+    const { text: rawJson, finishReason } = await callGemini(GEMINI_API_KEY, base64, mimeType, targetLang, uiLang);
 
-    console.log("[process-arabic-text] Gemini response length:", rawJson.length);
+    console.log(`[process-arabic-text] Gemini finishReason=${finishReason}, response length=${rawJson.length}`);
+
+    if (!rawJson) {
+      throw new Error(`Empty response from Gemini (finishReason=${finishReason})`);
+    }
 
     const parsed = parseMarkerResponse(rawJson);
+    const truncated = finishReason === "MAX_TOKENS";
+
+    // Tronqué sans texte OCR exploitable → erreur explicite ; sinon on garde le résultat partiel
+    if (truncated && !parsed.full_text_vocalized) {
+      return json({
+        error: "Réponse tronquée par limite tokens",
+        finishReason,
+        contentLength: rawJson.length,
+      }, 422);
+    }
+    if (truncated) {
+      console.warn("[process-arabic-text] ⚠️ MAX_TOKENS : texte OK, listes de vocabulaire possiblement incomplètes");
+    }
 
     if (!parsed.full_text_vocalized) {
       console.error("[process-arabic-text] No vocalized text found, raw preview:", rawJson.slice(0, 500));
@@ -402,11 +421,12 @@ Deno.serve(async (req) => {
       vocabulaire: parsed.vocabulaire,
       verbes,
       particules: parsed.particules,
+      truncated,
     };
 
     console.log(
-      `[process-arabic-text] Done: text=${result.full_text_vocalized.length}ch, ` +
-      `vocab=${result.vocabulaire.length}, verbs=${result.verbes.length}, particles=${result.particules.length}`
+      `[process-arabic-text] Done: text=${result.full_text_vocalized.length}ch ` +
+      `vocab=${result.vocabulaire.length} verbs=${result.verbes.length} particles=${result.particules.length}`
     );
 
     return json(result);

@@ -1,5 +1,8 @@
 // supabase/functions/complete-word/index.ts
-// Edge Function — Gemini 2.0 Flash: analyse un mot et remplit toutes ses propriétés
+// Edge Function — Gemini 3.6 Flash: analyse un mot et remplit toutes ses propriétés
+
+// Modèle Gemini utilisé (2.0-flash arrêté par Google)
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 type RequestBody = {
   word: string;
@@ -26,7 +29,7 @@ async function callGemini(
   apiKey: string,
   word: string,
   targetLang: string,
-): Promise<string> {
+): Promise<{ text: string; finishReason: string }> {
   const systemPrompt = `You are an expert Arabic linguist. You receive a SINGLE word (in Arabic OR in ${targetLang}).
 
 Your job: identify the word type, provide the Arabic form with full tashkeel, and fill ALL fields.
@@ -96,12 +99,14 @@ RETURN ONLY THE JSON.`;
     },
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 512,
+      maxOutputTokens: 2048,
       responseMimeType: "application/json",
+      // Thinking au minimum : il consomme le budget maxOutputTokens
+      thinkingConfig: { thinkingLevel: "MINIMAL" },
     },
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -117,12 +122,9 @@ RETURN ONLY THE JSON.`;
 
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const finishReason = data?.candidates?.[0]?.finishReason ?? "UNKNOWN";
 
-  if (!text) {
-    throw new Error("Empty response from Gemini");
-  }
-
-  return text;
+  return { text, finishReason };
 }
 
 // ── Main handler ──
@@ -180,7 +182,21 @@ Deno.serve(async (req) => {
 
     console.log(`[complete-word] word="${body.word}", lang=${uiLang}, user=${userData.user.id}`);
 
-    const rawJson = await callGemini(GEMINI_API_KEY, body.word.trim(), targetLang);
+    const { text: rawJson, finishReason } = await callGemini(GEMINI_API_KEY, body.word.trim(), targetLang);
+
+    console.log(`[complete-word] Gemini finishReason=${finishReason}, response length=${rawJson.length}`);
+
+    if (finishReason === "MAX_TOKENS") {
+      return json({
+        error: "JSON tronqué par limite tokens",
+        finishReason,
+        contentLength: rawJson.length,
+      }, 422);
+    }
+
+    if (!rawJson) {
+      throw new Error(`Empty response from Gemini (finishReason=${finishReason})`);
+    }
 
     let parsed;
     try {

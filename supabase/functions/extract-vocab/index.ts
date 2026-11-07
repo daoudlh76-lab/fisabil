@@ -1,5 +1,8 @@
 // supabase/functions/extract-vocab/index.ts
-// Edge Function Supabase (Deno) — Gemini 2.0 Flash (text-based vocab extraction)
+// Edge Function Supabase (Deno) — Gemini 3.6 Flash (text-based vocab extraction)
+
+// Modèle Gemini utilisé (2.5-flash déprécié, redirigé par Google le 1er déc. 2026)
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 type RequestBody = {
   scan_id: string;
@@ -40,7 +43,7 @@ async function callGemini(
   title: string,
   targetLang: string,
   uiLang: string,
-): Promise<string> {
+): Promise<{ text: string; finishReason: string }> {
   const systemPrompt = `You are an expert Arabic linguist specialized in exhaustive vocabulary extraction for language learners.
 
 You receive an Arabic text. Your job is to extract ALL unique vocabulary items, verbs, and particles.
@@ -143,10 +146,12 @@ RETURN ONLY THE JSON. No markdown, no comments.`;
       temperature: 0.1,
       maxOutputTokens: 16384,
       responseMimeType: "application/json",
+      // Thinking au minimum : il consomme le budget maxOutputTokens et tronquait le JSON
+      thinkingConfig: { thinkingLevel: "MINIMAL" },
     },
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -162,12 +167,9 @@ RETURN ONLY THE JSON. No markdown, no comments.`;
 
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const finishReason = data?.candidates?.[0]?.finishReason ?? "UNKNOWN";
 
-  if (!text) {
-    throw new Error("Empty response from Gemini");
-  }
-
-  return text;
+  return { text, finishReason };
 }
 
 // ── Bescherelle correction ──
@@ -316,9 +318,21 @@ Deno.serve(async (req) => {
     console.log(`[extract-vocab] Extracting vocab for scan ${scan.id}, lang=${uiLang}, text=${scan.content.length}ch`);
 
     // ── Step 1: Gemini extraction ──
-    const rawJson = await callGemini(GEMINI_API_KEY, scan.content, scan.title, targetLang, uiLang);
+    const { text: rawJson, finishReason } = await callGemini(GEMINI_API_KEY, scan.content, scan.title, targetLang, uiLang);
 
-    console.log("[extract-vocab] Gemini response length:", rawJson.length);
+    console.log(`[extract-vocab] Gemini finishReason=${finishReason}, response length=${rawJson.length}`);
+
+    if (finishReason === "MAX_TOKENS") {
+      return json({
+        error: "JSON tronqué par limite tokens",
+        finishReason,
+        contentLength: rawJson.length,
+      }, 422);
+    }
+
+    if (!rawJson) {
+      throw new Error(`Empty response from Gemini (finishReason=${finishReason})`);
+    }
 
     let parsed;
     try {
@@ -341,7 +355,7 @@ Deno.serve(async (req) => {
         ui_lang: uiLang,
         title: scan.title,
         source: "gemini",
-        model: "gemini-2.5-flash",
+        model: GEMINI_MODEL,
       },
       vocabulaire: parsed.vocabulaire || [],
       verbes,
@@ -349,7 +363,7 @@ Deno.serve(async (req) => {
     };
 
     console.log(
-      `[extract-vocab] Done: vocab=${result.vocabulaire.length}, verbs=${result.verbes.length}, particles=${result.particules.length}`
+      `[extract-vocab] Done: vocab=${result.vocabulaire.length} verbs=${result.verbes.length} particles=${result.particules.length}`
     );
 
     return json(result);
